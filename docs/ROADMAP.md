@@ -33,8 +33,15 @@
    section A below). Verify: fly at altitude, ground sparkle and silhouette
    crawl visibly reduced; fps same or better.
 4. **A2 + A3 — specular softening + shoreline band** (small, do together).
-5. **C2 — port the Node test harnesses into test/** (do opportunistically
-   while touching flight/rings/aliens).
+5. **C2 — CONTINUE the suite** (started 6 Sept 2026; `node test/run_tests.js`
+   is green with 19 assertions). Already covered: the alien bomb economy and
+   hull states, the tuning-panel invariants, README/CLAUDE.md drift, and the
+   cross-module reference check. **Still to port: GLSL parse via
+   @shaderfrog/glsl-parser** (function-like #define macros produce ignorable
+   warnings) **and a jsdom module-graph smoke load** (matchMedia needs a
+   stub; do NOT override Node's `performance`). Both need dev dependencies,
+   which is why they were left — `.gitignore` already covers node_modules.
+   Keep adding opportunistically while touching flight/rings/aliens.
 6. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT
    attribution in README), then **B1 — multifractal octaves**.
 7. Push the branch, update the PR to julaub — it's been a long volley.
