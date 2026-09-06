@@ -145,6 +145,7 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
+  gl.uniform1f(U.uDetailFade, TUNE.detailFade.v);   // A1 footprint-aware detail fade
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();

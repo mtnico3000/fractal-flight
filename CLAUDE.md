@@ -39,8 +39,12 @@ what `build.js` produces — that is what makes "never edit it" enforceable.
 - `main.js` — boot (async shader compile w/ KHR_parallel_shader_compile,
   start page, pilot name/livery), the rAF loop, ALL uniform uploads, the
   probe readback, fx canvas draw calls.
-- `shaders.js` — vsSrc/fsSrc template strings. The fragment shader IS the
-  game world: terrainShape (2× mandelDE + domain-warped ridged fbm + lakes),
+- `shaders.js` — vsSrc/fsSrc template strings. **A backtick anywhere in
+  here ends the JS template early** — `build.js` parses the bundle to catch
+  it. Footprint-aware LOD (A1): `octW/noiseLOD/fbmLOD/fbmRLOD/ridgedLOD`
+  fade an octave out as it crosses Nyquist for the pixel footprint, and
+  `terrainShapeLOD(p, px)` is the ONE terrain body — see the collision note
+  below. The fragment shader IS the game world: terrainShape (2× mandelDE + domain-warped ridged fbm + lakes),
   plantEval (tree-fern SDF, Julia-carved fronds), clouds, water, craft SDF,
   rings (mat 5), alien fleet (mat 6: box-cropped rectangular mandelbox ships;
   relay = power-8 mandelbulb), shadow pack, laser sheets, sky/fog/dusk.
@@ -76,6 +80,15 @@ renders: px 0-1 craft ground/plant · 2-17 bullets · 18-81 blast cells ·
 82-84 bomb grounds · 85-132 fx occlusion visibility. main.js reads it back
 with ONE readPixels per frame. Collision agrees with pixels bit-for-bit.
 The JS terrain mirror only bridges the first frame.
+
+⚠️ **A1 split "the terrain" in two, and the split is load-bearing.**
+`terrainShapeLOD(p, px)` is what the camera marches, with detail faded to the
+pixel footprint; `terrainShape(p)` is `terrainShapeLOD(p, 0.0)` and is the
+COLLISION AUTHORITY — the probe row and `terrain.js` both answer with it, and
+it is bit-identical to pre-A1 (`mix(mean, n, 1.0)` returns `n` exactly, and
+`smoothstep` below its low edge returns exactly 0). Point `terrainShape` at
+the marching footprint and the world you hit stops being the world you see,
+silently and only at distance. `test/test_shader.js` guards it.
 
 ## Shader material IDs
 
@@ -194,6 +207,12 @@ node test/run_tests.js        # everything
   reference nothing external (it has to run from a double-clicked `file://`
   page, where every fetch fails silently). Verified to go red both ways —
   editing a module without rebuilding, and hand-editing the artifact.
+- `test/test_shader.js` — shader-source invariants Node cannot get any other
+  way until the GLSL parser lands: `terrainShape` is still the px=0 wrapper,
+  the probe row never calls the LOD variant, faded octaves decay toward the
+  measured octave MEAN (toward zero and distant ground sinks as you fly at
+  it), and no stray backtick closes the GLSL template. All three mutations
+  verified red.
 - `test/test_docs.js` — README and CLAUDE.md must list every js/ module and
   no ghost, the module count must be right, and the Running command block
   must invoke serve.py. The README listed the v5 module set until 6 Sept

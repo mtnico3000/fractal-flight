@@ -33,14 +33,36 @@
      (`content-box`, default heading margins, panels overflowing). Removed;
      the modular HUD layout changed visibly for the better.
 
-3. **A1 — footprint-aware detail fade** (the shimmer killer, details in
-   section A below). Verify: fly at altitude, ground sparkle and silhouette
-   crawl visibly reduced; fps same or better.
-4. **A2 + A3 — specular softening + shoreline band** (small, do together).
+3. ✅ **A1 — footprint-aware detail fade. DONE 6 Sept 2026.** Terrain and
+   colour octaves now fade out as they cross Nyquist for the pixel's ground
+   footprint, under a `detail fade` knob (0 = pre-A1 look, 1 = default,
+   2 = aggressive). Measured on a locked camera by shifting `uJitter` half a
+   pixel (method + numbers in docs/RESEARCH.md §3):
+   * ground-filling view, near field: shimmer **−41% mean, −70% median**.
+     That is the "ground sparkles" complaint, and it is fixed.
+   * far field: only −3%. **59% of the energy out there is silhouette
+     edges** — 10% of pixels flipping hit/miss — which A1 cannot touch by
+     construction.
+   * GPU throughput **+3%** (fade 1) / **+6%** (fade 2), cold shader compile
+     unchanged. Compare Mpix/s, not fps: the adaptive render scaler reacts to
+     fps and hides the effect.
+   * fade 2 measures the same as fade 1 in the near/mid field — everything
+     sub-pixel is already gone at 1 — so **1.0 is the right default** and 2 is
+     only a knob for weak GPUs.
+   * `terrainShape()` is unchanged (it is `terrainShapeLOD(p, 0.0)`), so the
+     probe row and the terrain.js mirror still agree: CPU/GPU divergence
+     measured at 0.04–0.31 m, the same fp32-vs-fp64 band as before A1.
+     `test/test_shader.js` locks that invariant.
+4. **A4 — silhouette stabilization. PROMOTED above A2/A3** by A1's
+   measurements: it is now where essentially all the remaining shimmer lives
+   (a few bisection refine steps at the hit, slower-growing hit tolerance).
+   Then **A2 + A3 — specular softening + shoreline band** (small, do
+   together, but not where the energy is).
 5. **C2 — CONTINUE the suite** (started 6 Sept 2026; `node test/run_tests.js`
-   is green with 25 assertions). Already covered: the alien bomb economy and
+   is green with 29 assertions). Already covered: the alien bomb economy and
    hull states, the tuning-panel invariants, README/CLAUDE.md drift, the
-   cross-module reference check, and the single-file build's freshness. **Still to port: GLSL parse via
+   cross-module reference check, the single-file build's freshness, and the
+   shader-source invariants that keep collision full-detail. **Still to port: GLSL parse via
    @shaderfrog/glsl-parser** (function-like #define macros produce ignorable
    warnings) **and a jsdom module-graph smoke load** (matchMedia needs a
    stub; do NOT override Node's `performance`). Both need dev dependencies,

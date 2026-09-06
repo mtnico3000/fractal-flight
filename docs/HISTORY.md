@@ -351,6 +351,65 @@ modules, and the modular repo is the single source of truth.
   The artifact was also checked to reference nothing external at all, since
   a double-clicked `file://` page fails every fetch silently.
 
+## A1 — footprint-aware detail fade, 6 September 2026
+
+The shimmer fix, and the first time the shimmer was actually MEASURED rather
+than reasoned about.
+
+- **What it does.** Every noise octave now carries its world-space frequency,
+  and fades out as it crosses Nyquist for that pixel's ground footprint
+  (`px = march distance x uPixScale x detailFade`). Detail that cannot be
+  resolved is removed *before* it is sampled instead of being sampled and
+  flickering. Colour lattices got the same treatment — the vegetation mottle
+  runs at 0.6 cycles/m, a 1.7 m wavelength, so it was already ~4x past Nyquist
+  barely 200 m out. That is why the ground sparkled even where the mountains
+  sat still.
+- **Faded octaves decay toward the octave MEAN, not toward zero.** Toward
+  zero, removing detail also lowers the average height, so distant ground
+  would sink as you flew at it — a systematic sub-pixel shift across a whole
+  silhouette, which reads as the terrain breathing. The two constants are
+  measured, not guessed: 400k samples of the real `noise()` gave
+  E[noise] = 0.4991 and E[ridged octave] = 0.4475, and E[n*prev] came out at
+  0.2006 = 0.4475^2, i.e. successive ridged octaves are independent — so
+  fading `n` toward E[n] gets the product right for free.
+- **The old fbm/fbmR/ridged are now thin wrappers** passing freq 0, which
+  makes every weight exactly 1 and `mix(mean, n, 1.0)` return `n` exactly.
+  One loop body each, no second copy to drift — the same reasoning that made
+  `terrainShape(p)` simply `terrainShapeLOD(p, 0.0)`.
+- ⚠️ **terrainShape stayed full detail on purpose.** It is the collision
+  authority: the GPU probe row and the terrain.js mirror both answer with it.
+  Verified rather than asserted — the CPU/GPU divergence measured 0.04–0.31 m
+  with A1 against 0.02–0.45 m on the pre-A1 shader swapped back in, i.e. the
+  same pre-existing fp32-vs-fp64 band and nothing new.
+- **How it was measured.** Hover the camera in observation mode (drift under
+  0.2 m), patch `gl.readPixels` on the live context to grab a band from inside
+  the frame, and patch the `uJitter` uniform — which main.js pins to 0 — to
+  shift the sampling grid half a pixel. Shimmer is the mean |delta luma|
+  between unshifted and shifted. Two unshifted frames differ by 0.004, so the
+  floor is ~0.1% of the signal.
+- **The result, and the surprise.** Near field, ground-filling view:
+  **−41% mean, −70% median**. Far field: **−3%**. The distribution said why —
+  10% of distant pixels carry 59% of the energy, and those are silhouette
+  edges flipping hit/miss, which A1 cannot touch by construction. The first
+  test view was a high-altitude massif, almost all silhouette, and it read as
+  "1%, barely does anything"; the honest answer only appeared after testing
+  the scene the complaint was actually about. **A4 is promoted above A2/A3**
+  as a result: it is where essentially all the remaining shimmer lives.
+- Throughput **+3%** at fade 1 (+6% at fade 2) — detail fading pays for
+  itself, as the research predicted. Measure Mpix/s, never fps: the adaptive
+  render scaler reacts to fps and hides the effect entirely.
+- Cold shader compile is **unchanged** (83.6 s vs 82.9 s). The first
+  impression was that A1 had doubled it; that was the driver's program cache,
+  which turns the same shader into a 9 s warm reload. Busting the cache key
+  with a throwaway comment is how to compare honestly.
+- 💥 **A backtick in a GLSL comment cost a debugging round.** Writing
+  "the `detail fade` knob" inside shaders.js closed the JS template literal
+  early and turned the rest of the shader into stray JS tokens — a blank page
+  and `Unexpected identifier 'detail'` in the console. Nothing in the suite
+  read the modules as CODE, so it sailed through. `build.js` now parses the
+  bundle with `new Function` and refuses to build; verified against the real
+  bug before being called green.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

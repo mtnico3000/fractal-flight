@@ -162,6 +162,49 @@ the sea surface shimmer/crawl in motion; the world doesn't feel "solid".
 7. **Adaptive renderScale stepping.** When fps hovers at a threshold the
    buffer resolution changes in 0.05 steps → whole-image resampling shift.
 
+### MEASURED, 6 Sept 2026 (after A1 shipped)
+
+The diagnosis above was reasoned, not measured. It is now measured, and the
+ordering it implies has changed.
+
+**Method.** Hover the camera (observation mode, drift < 0.2 m), patch
+`gl.readPixels` on the live context to grab a band inside the frame, and
+patch the `uJitter` uniform (main.js pins it to 0) to shift the whole
+sampling grid by half a pixel. Shimmer = mean |delta luma| between the
+unshifted and shifted frame. Two unshifted frames differ by 0.004, so the
+measurement floor is ~0.1% of the signal. `test/` cannot do this; it needs a
+live GPU.
+
+**Result.** Shimmer energy splits into two populations with completely
+different cures:
+
+| view | band | edge pixels (|d| > 20) | share of energy |
+|---|---|---|---|
+| ground-filling, 488 m | near | 21% | edges 21%, detail 70% |
+| ground-filling, 488 m | far | -- | edges 56%, detail 42% |
+| high-altitude massif | far | 10% of pixels | edges 59%, detail 39% |
+
+- **Detail shimmer** (small per-pixel deltas, broad) is what A1 removes, and
+  it is the majority of the energy in the near field -- the "ground sparkles"
+  complaint. A1 cut it by **41% mean / 70% median** there.
+- **Edge shimmer** (10% of pixels carrying ~60% of the energy at range) is
+  the hit/miss flip at a silhouette. A1 cannot touch it *by construction*:
+  no amount of detail fading changes whether a ray hits the mountain. It
+  dominates every distant view, which is why A1 only moves the far field 3%.
+
+**Consequences for the ladder.** A1 is done and did its job; the remaining
+shimmer is now overwhelmingly A4's (silhouette stabilization: bisection
+refine, slower-growing hit tolerance) and then A5/A6. A2 (specular) and A3
+(shoreline) stay cheap and worth doing but are not where the energy is.
+**A4 should be promoted above A2/A3.**
+
+Also measured: fading detail is a small net WIN on GPU time, as predicted --
++3% throughput at fade 1, +6% at fade 2, with the adaptive render scale held
+fixed (compare Mpix/s, never fps: the scaler reacts to fps and hides the
+effect). Cold shader compile is unchanged, 83.6 s with A1 vs 82.9 s without
+-- measure this by busting the driver's program cache, or a warm reload
+reports 9 s and a cold one 80 s for the same code.
+
 ### Fixes, in order of value-per-effort (= ROADMAP A items)
 
 1. **Footprint-aware detail fade (A1)** — analytic mipmapping: scale fbm

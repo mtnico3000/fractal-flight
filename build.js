@@ -250,7 +250,24 @@ function buildBundle() {
     return '// ==================== js/' + file + ' ====================\n' + out + '\n';
   });
 
-  return { text: parts.join('\n'), order };
+  const text = parts.join('\n');
+
+  // The bundle must at least PARSE. Nothing else here reads the modules as
+  // code -- they are concatenated as text -- so without this a JS syntax
+  // error sails through the build and the whole test suite, and first shows
+  // up as a blank page. It is not hypothetical: writing `detail fade` in a
+  // comment inside shaders.js closed the GLSL template literal early and
+  // turned the rest of the shader into stray JS tokens. new Function()
+  // compiles without running, so nothing in the game executes here.
+  try {
+    new Function(text);   // eslint-disable-line no-new-func
+  } catch (e) {
+    die('the bundle is not valid JavaScript: ' + e.message +
+        '\n        A module has a syntax error. Watch for backticks in a comment\n' +
+        '        inside shaders.js -- they end the GLSL template early.');
+  }
+
+  return { text, order };
 }
 
 // ---------------------------------------------------------------- the page

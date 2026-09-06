@@ -484,6 +484,7 @@ uniform vec3 uSunDir;
 uniform float uFov;
 uniform vec2 uJitter;
 uniform float uPixScale;
+uniform float uDetailFade;    // A1 knob: multiplies the LOD footprint. 0 = full detail everywhere (pre-A1 look), 1 = Nyquist-matched, 2 = aggressive
 uniform vec3 uCraftPos;
 uniform vec3 uBulletPos[8];   // live tracer rounds; unused slots parked at y = -9999
 uniform vec3 uBombPos[3];     // falling bombs; unused slots parked at y = -9999
@@ -561,41 +562,93 @@ float noise(vec2 p) {
 // rotation (0.8/0.6) — fp32-friendly.
 const mat2 OCT_ROT   = mat2(0.8,  0.6, -0.6, 0.8);
 const mat2 DECOR_ROT = mat2(0.8, -0.6,  0.6, 0.8);
-float fbm(vec2 p, int oct) {
+// ---------- footprint-aware detail (ROADMAP A1) ----------
+// ANALYTIC MIPMAPPING. A raymarcher takes ONE sample per pixel, so any detail
+// whose wavelength is under ~2 pixel footprints is below Nyquist: it cannot be
+// resolved, and as the camera moves each frame's sample lands somewhere else
+// on it and flips. That is the ground sparkle and the silhouette crawl
+// (docs/RESEARCH.md §3, causes 1 and 3). The cure is not to sample it harder
+// but to REMOVE it before sampling — smoothly, exactly where it stops being
+// resolvable — which also makes distant pixels CHEAPER.
+//
+//   px   = the pixel's ground footprint in metres (march distance x uPixScale,
+//          scaled by the 'detail fade' knob).
+//   freq = this octave's world-space frequency in cycles/metre, so it spans
+//          1/freq metres and hits Nyquist at px * freq == 0.5.
+//
+// px == 0 gives weight 1 for EVERY octave and mix(mean, n, 1.0) returns n
+// exactly, so the plain fbm/fbmR/ridged wrappers below — and therefore
+// terrainShape() — stay bit-identical to what they always computed. That
+// matters: terrainShape is the collision authority the GPU probe row and the
+// terrain.js mirror both depend on, and it must not move.
+float octW(float freq, float px) {
+  return 1.0 - smoothstep(0.25, 0.70, px * freq);
+}
+// Faded octaves must decay toward the octave's MEAN, never toward zero.
+// Toward zero, dropping detail also lowers the average height, so distant
+// mountains would sink as you flew at them — a systematic sub-pixel shift
+// across a whole silhouette, which reads as LOD breathing. Both constants are
+// measured, not guessed: 400k samples of the real noise() (see git history).
+// E[n*prev] came out at 0.2006 == 0.4475^2, i.e. successive ridged octaves are
+// independent, so fading n toward E[n] gets the product right for free.
+const float NOISE_MEAN = 0.4991;   // E[noise()]
+const float RIDGE_MEAN = 0.4475;   // E[(1 - |2*noise()-1|)^2], the ridged octave term
+float noiseLOD(vec2 p, float freq, float px) {
+  float w = octW(freq, px);
+  return (w <= 0.0) ? NOISE_MEAN : mix(NOISE_MEAN, noise(p), w);
+}
+float fbmLOD(vec2 p, float freq, int oct, float px) {
   float v = 0.0, a = 0.5;
   for (int i = 0; i < 8; i++) {
     if (i >= oct) break;
-    v += a * noise(p);
+    float w = octW(freq, px);
+    // skipping the noise() call — 4 hashes — is where the GPU time comes back
+    v += a * ((w <= 0.0) ? NOISE_MEAN : mix(NOISE_MEAN, noise(p), w));
     p = p * 2.0 + vec2(13.7, 7.3);
     a *= 0.5;
+    freq *= 2.0;
   }
   return v;
 }
-// rotated-octave fbm — DECORATIVE USE ONLY (clouds, color detail). Never for
-// terrainShape or its mirrors: rotating shape octaves would move the world.
-float fbmR(vec2 p, int oct) {
+float fbmRLOD(vec2 p, float freq, int oct, float px) {
   float v = 0.0, a = 0.5;
   for (int i = 0; i < 8; i++) {
     if (i >= oct) break;
-    v += a * noise(p);
+    float w = octW(freq, px);
+    v += a * ((w <= 0.0) ? NOISE_MEAN : mix(NOISE_MEAN, noise(p), w));
     p = OCT_ROT * p * 2.0 + vec2(13.7, 7.3);
     a *= 0.5;
+    freq *= 2.0;
   }
   return v;
 }
-float ridged(vec2 p, int oct) {
+float ridgedLOD(vec2 p, float freq, int oct, float px) {
   float v = 0.0, a = 0.5, prev = 1.0;
   for (int i = 0; i < 8; i++) {
     if (i >= oct) break;
-    float n = 1.0 - abs(noise(p) * 2.0 - 1.0);
-    n = n * n;
-    v += a * n * prev;
-    prev = n;
-    p = p * 2.0 + vec2(7.3, 13.7);
-    a *= 0.5;
+    float w = octW(freq, px);
+    float nm;
+    if (w <= 0.0) {
+      nm = RIDGE_MEAN;
+    } else {
+      float n = 1.0 - abs(noise(p) * 2.0 - 1.0);
+      nm = mix(RIDGE_MEAN, n * n, w);
+    }
+    v += a * nm * prev;
+    prev = nm;              // feed the faded value forward, or the coupling
+    p = p * 2.0 + vec2(7.3, 13.7);   // would keep re-injecting the octave we
+    a *= 0.5;                        // just removed
+    freq *= 2.0;
   }
   return v;
 }
+// Full-detail wrappers. freq 0 makes px * freq 0 at every octave, so these are
+// the exact loops they were before A1 — one body each, no second copy to drift.
+float fbm(vec2 p, int oct)    { return fbmLOD(p, 0.0, oct, 0.0); }
+// rotated-octave fbm — DECORATIVE USE ONLY (clouds, color detail). Never for
+// terrainShape or its mirrors: rotating shape octaves would move the world.
+float fbmR(vec2 p, int oct)   { return fbmRLOD(p, 0.0, oct, 0.0); }
+float ridged(vec2 p, int oct) { return ridgedLOD(p, 0.0, oct, 0.0); }
 float smin(float a, float b, float k) {
   float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
   return mix(b, a, h) - k * h * (1.0 - h);
@@ -651,28 +704,34 @@ float worldDE(vec2 p, int it) {                  // distance-to-land in WORLD me
   return min(w1, w2);
 }
 
-float terrainShape(vec2 p) {
+// terrainShapeLOD is the ONE body. px is the pixel's ground footprint in
+// metres; 0 means full detail. The Mandelbrot iteration count is deliberately
+// NOT faded — worldDE sets where the coastlines are, and dropping iterations
+// would move a silhouette by far more than a pixel, which is the opposite of
+// what A1 is for. Only the noise octaves, whose amplitude is proportional to
+// their wavelength, fade out sub-pixel.
+float terrainShapeLOD(vec2 p, float px) {
   float wde  = worldDE(p, 26);
   float mass = exp(-wde * uMassDecay);           // mountain mass hugs the coastlines
 
   // Land near the sets, ocean floor sloping away from them
-  float baseElev = fbm(p * 0.0004, 3) * 70.0 + 4.0 - clamp(wde * uOceanSlope, 0.0, uOceanMax);
+  float baseElev = fbmLOD(p * 0.0004, 0.0004, 3, px) * 70.0 + 4.0 - clamp(wde * uOceanSlope, 0.0, uOceanMax);
 
   // Local alpine relief: light domain warp + FIXED 5 ridged octaves
-  vec2 q  = vec2(fbm(p * 0.0009, 3), fbm(p * 0.0009 + vec2(5.2, 1.3), 3));
+  vec2 q  = vec2(fbmLOD(p * 0.0009, 0.0009, 3, px), fbmLOD(p * 0.0009 + vec2(5.2, 1.3), 0.0009, 3, px));
   vec2 pw = p + q * 60.0;
 
   // Per-massif height variability: a slow (~5 km) selector field decides which
   // ranges are TALL (reach the snow line) vs modest. uSnowFrac slides the
   // threshold so roughly that fraction of mountain area goes snowy.
-  float rangeSel = fbm(p * 0.00018, 2);
+  float rangeSel = fbmLOD(p * 0.00018, 0.00018, 2, px);
   // Calibrated so P(selector > threshold) ~= uSnowFrac (empirical quantile fit
   // of this fbm's value distribution): frac 0.2 -> th 0.28, 0.5 -> 0.17, 1 -> 0.
   float tallTh   = 17.3 / (uSnowFrac + 6.44) - 2.32;
   float tall     = smoothstep(tallTh - 0.05, tallTh + 0.05, rangeSel);
   float ampScale = mix(0.42, 1.1, tall);   // modest ranges stay below the snow line; tall ones clear it
 
-  float mountain = (80.0 + uMountAmp * ridged(pw * 0.0016, 5)) * mass * ampScale;
+  float mountain = (80.0 + uMountAmp * ridgedLOD(pw * 0.0016, 0.0016, 5, px)) * mass * ampScale;
 
   // Rounded summits: smooth tanh saturation → domed peaks, no razor tips
   mountain = 460.0 * tanh(mountain / 460.0);
@@ -681,13 +740,18 @@ float terrainShape(vec2 p) {
   float h = smax(baseElev, mountain, 45.0);
 
   // Interior lakes: only on high ground (mass) and away from the peaks
-  float valley = fbm(p * 0.0003 + 200.0, 3);
+  float valley = fbmLOD(p * 0.0003 + 200.0, 0.0003, 3, px);
   float lake = smoothstep(0.58, 0.72, valley)
              * smoothstep(0.4, 0.9, mass)
              * (1.0 - smoothstep(30.0, 80.0, mountain));
   h = mix(h, -15.0, lake * 0.65);
   return h;
 }
+
+// The canonical, full-detail terrain. COLLISION AUTHORITY: the GPU probe row
+// and the terrain.js CPU mirror both answer with this, so it must stay exactly
+// what it was before A1 — hence px = 0 and not the marching footprint.
+float terrainShape(vec2 p) { return terrainShapeLOD(p, 0.0); }
 
 // Cheap variant for shadow rays: fewer iterations, 2 noise octaves.
 float terrainCheapH(vec2 p) {
@@ -785,6 +849,12 @@ float alienFlora(vec2 p) {
 
 vec3 terrainColor(vec3 pos, vec3 normal, float h, float pixelSize) {
   float slope = 1.0 - normal.y;
+  // A1: these decorative lattices are the WORST offenders in the whole frame.
+  // The vegetation mottle runs at 0.6 cycles/m — a 1.7 m wavelength — so it is
+  // already ~4x past Nyquist for a 3.5 m footprint, which is only 2 km out.
+  // Geometry octaves alias in the far distance; these alias almost everywhere,
+  // which is why the ground sparkled even where the mountains sat still.
+  float px = pixelSize * uDetailFade;
 
   // ---- strict altitude bands: sand → vegetation → rock → snow ----
   float sandAmt = 1.0 - smoothstep(3.0, 12.0, h);                         // shoreline
@@ -794,12 +864,12 @@ vec3 terrainColor(vec3 pos, vec3 normal, float h, float pixelSize) {
   // slope corrections: cliffs are bare rock at any altitude; snow clings to flatter tops
   float cliff = smoothstep(0.5, 0.78, slope);
   snowAmt *= 1.0 - smoothstep(0.32, 0.58, slope);
-  snowAmt *= 0.75 + 0.25 * noise(DECOR_ROT * pos.xz * 0.08);              // fractal snow edge
+  snowAmt *= 0.75 + 0.25 * noiseLOD(DECOR_ROT * pos.xz * 0.08, 0.08, px);  // fractal snow edge
 
-  vec3 sandCol = mix(vec3(0.62, 0.55, 0.40), vec3(0.70, 0.64, 0.48), noise(DECOR_ROT * pos.xz * 0.15));
+  vec3 sandCol = mix(vec3(0.62, 0.55, 0.40), vec3(0.70, 0.64, 0.48), noiseLOD(DECOR_ROT * pos.xz * 0.15, 0.15, px));
 
   // vegetation: lush greens + alien Julia flora
-  vec3 vegCol = mix(vec3(0.12, 0.28, 0.09), vec3(0.18, 0.36, 0.12), noise(DECOR_ROT * pos.xz * 0.6));
+  vec3 vegCol = mix(vec3(0.12, 0.28, 0.09), vec3(0.18, 0.36, 0.12), noiseLOD(DECOR_ROT * pos.xz * 0.6, 0.6, px));
   if (pixelSize < 5.0) {
     float fl = alienFlora(pos.xz);
     vec3 alien = mix(vec3(0.04, 0.20, 0.10), vec3(0.10, 0.46, 0.30), fl);
@@ -807,8 +877,8 @@ vec3 terrainColor(vec3 pos, vec3 normal, float h, float pixelSize) {
     vegCol = mix(vegCol, alien, smoothstep(0.30, 0.85, fl) * (1.0 - smoothstep(3.0, 5.0, pixelSize)));
   }
 
-  vec3 rockCol = mix(vec3(0.33, 0.25, 0.18), vec3(0.48, 0.40, 0.32), noise(DECOR_ROT * pos.xz * 0.03));
-  rockCol = mix(rockCol, vec3(0.40, 0.34, 0.28), fbmR(pos.xz * 0.15, 3) * 0.6); // strata
+  vec3 rockCol = mix(vec3(0.33, 0.25, 0.18), vec3(0.48, 0.40, 0.32), noiseLOD(DECOR_ROT * pos.xz * 0.03, 0.03, px));
+  rockCol = mix(rockCol, vec3(0.40, 0.34, 0.28), fbmRLOD(pos.xz * 0.15, 0.15, 3, px) * 0.6); // strata
 
   // assemble by altitude, then slope overrides, then snow on top
   vec3 col = sandCol;
@@ -822,10 +892,14 @@ vec3 terrainColor(vec3 pos, vec3 normal, float h, float pixelSize) {
 // ---------- terrain normal (footprint-matched epsilon = stable shading) ----------
 vec3 terrainNormal(vec2 p, float pixelSize) {
   float e = max(0.4 * pixelSize, 0.15);
-  float hL = terrainShape(p - vec2(e, 0.0));
-  float hR = terrainShape(p + vec2(e, 0.0));
-  float hD = terrainShape(p - vec2(0.0, e));
-  float hU = terrainShape(p + vec2(0.0, e));
+  // the normal must describe the surface actually being DRAWN, so it samples
+  // the same faded terrain the march hit — otherwise shading would keep
+  // lighting detail the geometry no longer has
+  float px = pixelSize * uDetailFade;
+  float hL = terrainShapeLOD(p - vec2(e, 0.0), px);
+  float hR = terrainShapeLOD(p + vec2(e, 0.0), px);
+  float hD = terrainShapeLOD(p - vec2(0.0, e), px);
+  float hU = terrainShapeLOD(p + vec2(0.0, e), px);
   return normalize(vec3(hL - hR, 2.0 * e, hD - hU));
 }
 
@@ -837,7 +911,10 @@ vec2 marchTerrain(vec3 ro, vec3 rd) {
   for (int i = 0; i < 150; i++) {
     vec3 p = ro + rd * t;
     if (p.y > 560.0 && rd.y > 0.0) return vec2(-1.0, 0.0); // above the tallest peak, heading up
-    float dT = p.y - terrainShape(p.xz);
+    // A1: sample the terrain at THIS step's footprint. Detail thins with
+    // distance along the ray, which is both the shimmer fix and the reason
+    // long rays got cheaper rather than more expensive.
+    float dT = p.y - terrainShapeLOD(p.xz, t * uPixScale * uDetailFade);
     // 3D flora: only evaluated when the ray is close AND skimming near the
     // ground — cruising altitude pays a single compare per step.
     float dP = 1e5;
@@ -1431,7 +1508,7 @@ void main() {
 
   } else if (mat == 2) {
     vec3 pos = ro + rd * t;
-    float bed = terrainShape(pos.xz);
+    float bed = terrainShapeLOD(pos.xz, t * uPixScale * uDetailFade);
     float depth = clamp((WATER_LEVEL - bed) / 8.0, 0.0, 1.0);
     // small animated ripples (rotated domain: wavelets off the world axes)
     vec2 wp = DECOR_ROT * pos.xz * 0.12;
@@ -1452,7 +1529,9 @@ void main() {
 
   } else if (mat == 4) {
     vec3 pos = ro + rd * t;
-    float dT = pos.y - terrainShape(pos.xz);
+    // the same faded terrain the march used to find this plant, or the trunk
+    // would be anchored to a surface a step or two away from the one drawn
+    float dT = pos.y - terrainShapeLOD(pos.xz, t * uPixScale * uDetailFade);
     vec3 pe = plantEval(pos, dT, t);
     float rnd = pe.y, yn = pe.z;
     // ALIEN BLUES (v4.4): color keys off the tree's actual size — the same
@@ -1691,7 +1770,7 @@ async function initRenderer(status, lock) {
   gl.enableVertexAttribArray(locPos);
   gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
 
-  ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
+  ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
    'uRingsPos','uRingMats','uLivery','uCockpit','uShadows','uFxPos',
    'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
     .forEach(n => U[n] = gl.getUniformLocation(prog, n));
@@ -1720,6 +1799,7 @@ const TUNEA = {
 
 const TUNE = {
   shadows:    { label: 'shadows',     v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'on' : 'off' },
+  detailFade: { label: 'detail fade',v: 1,      d: 1,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
   cursorA:    { label: 'cursor',      v: 15,      d: 15,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
   oceanSlope: { label: 'ocean slope', v: 0.016,   d: 0.016,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },
   oceanMax:   { label: 'ocean depth', v: 107,     d: 107,      min: 20,     max: 140,    step: 1,       fmt: x => x.toFixed(0) },
@@ -4131,6 +4211,7 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
+  gl.uniform1f(U.uDetailFade, TUNE.detailFade.v);   // A1 footprint-aware detail fade
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();
