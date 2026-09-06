@@ -8,35 +8,39 @@
    before touching sections A or B** — it holds the full shimmer diagnosis
    (7 causes), the reasoning behind each fix, the paper analyses, the
    TerraForge findings, and the Mandelbox parameter guide.
-2. **C1 — single-file build script. NOW THE MOST URGENT ITEM.** Generate the
-   single-file build from the modules (inline css, concat js in dependency
-   order, strip import/export, reconcile the few divergent identifiers — see
-   CLAUDE.md Gotchas). Verify by diffing behavior against
-   `fractal-flight-v9_1b.html` (the last hand-maintained single build).
-   From then on the single file is a build ARTIFACT — never edit it.
-   * ⚠️ **The single file is STALE as of 6 Sept 2026 and Nico accepted that
-     knowingly** ("yes accept the difference, C1 will regenerate it"). It is
-     missing: the tuning-panel overflow fix + COPY JSON export
-     (`css/style.css`, `js/tune.js`), the tuned world/fleet defaults and
-     raised ceilings (`js/tune.js`), the bomb-count constants and
-     `hullAlive` (`js/aliens.js`), and the `camPos` → `viewPos` freeze fix
-     (`js/fx.js`). Do NOT hand-patch those in — regenerate.
-   * Concatenation order, derived from the imports and verified acyclic:
-     config · math · state · tune · shaders · renderer · audio · terrain ·
-     fx · spores · weapons · clouds · rings · hud · aliens · input · flight ·
-     main.
-   * ⛔ The v9.1b single file has `camPos` as a real global in 20 places. The
-     generator must NOT simply concatenate and hope — `test/
-     check_module_refs.py` passing on the modules is what makes the concat
-     safe, so run it as part of the build.
+2. ✅ **C1 — single-file build script. DONE 6 Sept 2026.** `node build.js`
+   generates `fractal-flight-v9_1.html` from the modules. **The single file is
+   now a build ARTIFACT — never edit it.** `node test/run_tests.js` fails if
+   the committed artifact is not byte-identical to what the current source
+   produces, so it cannot drift again.
+   * The concatenation order is DERIVED from the import graph (depth-first
+     post-order = the browser's own module evaluation order), not the list
+     that used to sit here — a hard-coded list works until someone adds an
+     import. It comes out as: config · state · shaders · renderer · tune ·
+     audio · terrain · fx · spores · weapons · hud · input · math · rings ·
+     clouds · aliens · flight · main.
+   * The bundle is wrapped in an IIFE with `'use strict'`, so the artifact no
+     longer publishes ~200 globals the way the hand-built one did (`camPos`
+     was a real global in 20 places there). `check_module_refs.py` runs as
+     part of the build, which is what makes the concatenation safe.
+   * All four gaps the stale v9.1b had are closed and were verified against
+     it: the tuning-panel overflow fix + COPY JSON, the tuned world/fleet
+     defaults and raised ceilings, the bomb constants + `hullAlive`, and the
+     `camPos`→`viewPos` freeze fix.
+   * Found on the way: `css/style.css` started with a literal `<style>` line,
+     which CSS parses as an invalid rule that also eats the rule after it —
+     **the universal reset had been dead in the modular build all along**
+     (`content-box`, default heading margins, panels overflowing). Removed;
+     the modular HUD layout changed visibly for the better.
+
 3. **A1 — footprint-aware detail fade** (the shimmer killer, details in
    section A below). Verify: fly at altitude, ground sparkle and silhouette
    crawl visibly reduced; fps same or better.
 4. **A2 + A3 — specular softening + shoreline band** (small, do together).
 5. **C2 — CONTINUE the suite** (started 6 Sept 2026; `node test/run_tests.js`
-   is green with 19 assertions). Already covered: the alien bomb economy and
-   hull states, the tuning-panel invariants, README/CLAUDE.md drift, and the
-   cross-module reference check. **Still to port: GLSL parse via
+   is green with 25 assertions). Already covered: the alien bomb economy and
+   hull states, the tuning-panel invariants, README/CLAUDE.md drift, the
+   cross-module reference check, and the single-file build's freshness. **Still to port: GLSL parse via
    @shaderfrog/glsl-parser** (function-like #define macros produce ignorable
    warnings) **and a jsdom module-graph smoke load** (matchMedia needs a
    stub; do NOT override Node's `performance`). Both need dev dependencies,
@@ -51,8 +55,10 @@
 
 Working conventions: run `python serve.py 8734` for live testing (it sends
 no-store — the bare http.server lets a refresh replay cached modules);
-every flight/ring/alien change gets a Node harness check before commit;
-keep the GLSL↔terrain.js mirror in sync (CLAUDE.md).
+**run `node build.js` and commit the artifact with any change to js/, css/ or
+index.html** (the suite fails otherwise); every flight/ring/alien change gets
+a Node harness check before commit; keep the GLSL↔terrain.js mirror in sync
+(CLAUDE.md).
 
 ### Reference materials
 

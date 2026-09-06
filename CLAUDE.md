@@ -7,18 +7,32 @@ volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.1.
 
 ## Builds — IMPORTANT
 
-Two parallel builds exist and must stay in sync:
+The modular repo is the SINGLE SOURCE OF TRUTH. Dual maintenance ended with
+ROADMAP C1 on 6 Sept 2026.
+
 - **Modular** (this repo): index.html + css/style.css + 18 js/ modules. ES
-  modules → MUST be served over HTTP (`python3 serve.py 8734` — the bare
+  modules → MUST be served over HTTP (`python serve.py 8734` — the bare
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
   message instead of loading.
-- **Single-file** (`fractal-flight-vX_Y.html`): everything inlined, works by
-  double-click. Same code with small naming differences (see Gotchas).
+- **Single-file** (`fractal-flight-v9_1.html`): a GENERATED ARTIFACT. **Never
+  edit it.** It is the double-click build jul and everyone else actually
+  plays, so it ships in the repo even though it is generated.
 
-Recommended first task in Claude Code: make the modular repo the single
-source of truth and generate the single file with a build script, ending the
-dual-maintenance. Until then, every change lands in BOTH builds.
+```sh
+node build.js          # regenerate the artifact after ANY change to js/, css/ or index.html
+node build.js --check   # is the committed artifact current?
+```
+
+`build.js` resolves the import graph from `js/main.js`, emits the modules in
+the browser's own evaluation order (depth-first post-order — derived, never
+hard-coded), strips imports/exports, inlines the CSS, flips the index.html
+`__ffModular` watchdog flag and wraps everything in an IIFE with `'use
+strict'` so the artifact keeps module semantics instead of publishing 200
+globals. It refuses to build on a top-level name collision or an unimported
+cross-module reference (it runs `check_module_refs.py` itself).
+`test/test_build.js` fails if the committed artifact is not byte-identical to
+what `build.js` produces — that is what makes "never edit it" enforceable.
 
 ## Architecture map (js/)
 
@@ -87,9 +101,11 @@ Key chips in the HUD glow green when a toggle is active.
   rewrite version strings inside code comments, silently breaking exact-match
   patch anchors later. In Claude Code, use git diffs instead of string
   patching and this class of bug disappears.
-- **Single vs modular naming**: single file uses `gpuGround/gpuPlantD` and
-  module-scope drawTrail(camB, now); modular uses `probe.ground/probe.plantD`
-  and drawTrail(..., bullets, bombs, impacts).
+- **Single vs modular naming — GONE as of C1.** The hand-built single file
+  used `gpuGround/gpuPlantD` and `drawTrail(camB, now)` where the modules use
+  `probe.ground/probe.plantD` and `drawTrail(..., bullets, bombs, impacts)`.
+  The artifact is now generated FROM the modules, so there is exactly one set
+  of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
 - **uniform budget**: ~260 vec4 slots used. Desktop fine; weakest mobile
@@ -131,6 +147,22 @@ Key chips in the HUD glow green when a toggle is active.
   and no ALIEN HULL crash while falling, melting or gone. Without it the ship
   you just bombed kills you on its way down (you are by definition beside it)
   and its melting wreck is an invisible killbox at ground level for 8 s.
+- 🏷️ **`css/style.css` began with a literal `<style>` line** — a leftover
+  from when the CSS was lifted out of the single file. CSS is not HTML: the
+  parser reads `<style> * { … }` as ONE invalid qualified rule and discards
+  the prelude AND the block, so **the universal reset was silently dead in
+  the modular build** for its whole life — `box-sizing: content-box`, default
+  `h1`/`h2` margins, panels overflowing their own width. It only surfaced
+  when C1 inlined the file and produced a nested `<style>`. Removed 6 Sept
+  2026; the modular HUD layout visibly changed for the better. Lesson: an
+  invalid rule at the top of a stylesheet eats the rule after it.
+- 🔁 **`core.autocrlf` is true on Windows, so a fresh clone is all CRLF.**
+  `build.js` normalizes every source it reads to LF (`read()`), or the
+  artifact would come out CRLF-flavoured on one machine and LF on another and
+  `--check` would call it stale forever. Found the hard way: a single
+  `git checkout js/config.js` re-materialized ONE 29-line file as CRLF and
+  put 28 stray `
+` into an otherwise byte-stable artifact.
 - 📏 Measured 6 Sept 2026: at the current fleet tuning a **harvester never
   visibly falls**. It hovers 45..60 m up while `shHei/2` is 60 m, so
   `fallAndMelt` lands it in the very frame it dies and it melts in place. The
@@ -156,6 +188,12 @@ node test/run_tests.js        # everything
   in pairs across 33 knobs, and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
+- `test/test_build.js` — the single file must be byte-identical to what
+  `build.js` generates from the current modules, every module must reach the
+  bundle, no `import`/`export` may survive the strip, and the artifact must
+  reference nothing external (it has to run from a double-clicked `file://`
+  page, where every fetch fails silently). Verified to go red both ways —
+  editing a module without rebuilding, and hand-editing the artifact.
 - `test/test_docs.js` — README and CLAUDE.md must list every js/ module and
   no ghost, the module count must be right, and the Running command block
   must invoke serve.py. The README listed the v5 module set until 6 Sept
@@ -186,4 +224,5 @@ One-line summary:
 v2→v4.6 built the world/weapons/probe; v5 merged jul's rings + went
 modular; v5-v6 restored arcade feel + start page; v7 camera suite +
 shadows + fx occlusion; v8 view toggles with exact memory; v9 alien
-invasion + observation mode. Current: v9.1.
+invasion + observation mode; C1 ended the dual-maintenance (`build.js`).
+Current: v9.1.

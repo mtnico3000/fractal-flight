@@ -292,12 +292,71 @@ byte-identical file by file before committing, on a new branch `v9.1`.
 - ⬅ Deliberately NOT done: the single-file build was left stale. Nico's call —
   "yes accept the difference, C1 will regenerate it".
 
+## Second Claude Code session — 6 September 2026 (ROADMAP C1)
+
+The dual-maintenance ended. `build.js` generates the single file from the
+modules, and the modular repo is the single source of truth.
+
+- **Why a generator and not a tidier hand-merge.** Every dud release in this
+  project's history (v6_1, v6_2, v8_4, v9_1) came from patching two parallel
+  builds by exact string match, and the v9.1b single file shipped missing
+  four separate fixes — the tuning-panel overflow fix + COPY JSON, the tuned
+  world/fleet defaults and raised ceilings, the bomb constants and
+  `hullAlive`, and the `camPos`→`viewPos` freeze fix. All four were verified
+  closed in the generated artifact by diffing it against v9.1b.
+- **The order is derived, not written down.** The ROADMAP carried a
+  hand-verified concatenation order. `build.js` ignores it and walks the
+  import graph from `js/main.js` in depth-first post-order, which IS the
+  browser's module evaluation order — so the concatenation runs top-level
+  code in exactly the sequence the modular build already runs it, and adding
+  an import can never silently invalidate a list. (The derived order differs
+  from the written one; both are valid topological sorts.)
+- **The artifact is an IIFE under `'use strict'`.** The hand-built single
+  file was one true global scope — `camPos` was a real global in 20 places,
+  which is precisely why the missing `import` in `fx.js` was invisible there
+  and froze the modular build. Wrapping the bundle keeps module semantics.
+  The leak hazard inside that shared scope is unchanged, so `build.js` runs
+  `check_module_refs.py` itself and refuses to build on a leak or on a
+  top-level name collision between two modules.
+- **`test/test_build.js` is what makes "never edit the artifact" real.** It
+  rebuilds in memory and fails unless the committed file is byte-identical.
+  Verified red in both directions before being called green: editing a module
+  without rebuilding, and hand-editing the artifact.
+- 🏷️ **`css/style.css` began with a literal `<style>` line** — a leftover
+  from when the CSS was lifted out of the single file, and the discovery of
+  the session. CSS is not HTML: the parser reads `<style> * { … }` as one
+  invalid qualified rule and discards the prelude *and the block after it*,
+  so `* { margin:0; padding:0; box-sizing:border-box }` had been silently
+  dead in the modular build for its entire life. Confirmed in the browser
+  before touching it (`box-sizing: content-box`, `h1` margin `7.37px 0 10px`,
+  85 rules parsed instead of 86), and the start page showed it: PILOT
+  overlapping the R-DRAG row, the TUNING panel over the HUD, the ALIENS panel
+  clipped off the right edge. It surfaced only because C1 inlined the file
+  and produced a visibly nested `<style>`. Removing the line restored
+  `border-box` and the intended layout. Worth remembering that the
+  tuning-panel overflow hunted the day before was fighting the same missing
+  reset from the other end.
+- 🔁 **CRLF nearly made the freshness check useless.** `core.autocrlf` is
+  true on Windows, so a fresh clone materializes every file as CRLF. One
+  `git checkout js/config.js` during testing restored that single 29-line
+  file as CRLF and put 28 stray `
+` into an otherwise byte-stable
+  artifact, so `--check` called a just-written file stale. `build.js` now
+  normalizes every source it reads to LF, which also means the artifact is
+  identical whatever the working tree holds.
+- Both builds were flown to confirm it: the generated single file boots,
+  renders, flies, fires and detonates bombs on the ground — the exact
+  `kind === 3` branch that froze the modular build — with no console error
+  and steady fps; the modular build still flies with the reset restored.
+  The artifact was also checked to reference nothing external at all, since
+  a double-clicked `file://` page fails every fetch silently.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-
   COMMENT DRIFT (bumps rewrote strings inside anchors) → several dud
   releases (v6_1, v6_2, v8_4, v9_1). Claude Code + git diffs is the cure;
-  also: make the single file a build artifact (ROADMAP C1).
+  also: make the single file a build artifact — done 6 Sept 2026, `build.js`.
 - Every mechanic got a Node harness evaluating the REAL module with stubbed
   imports; they caught ~6 would-be shipped bugs. Port to test/ (ROADMAP C2).
 - `bash pipefail`: piping tests through `tail` masked failures once and a

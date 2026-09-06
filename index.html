@@ -93,13 +93,16 @@
 // which case main.js never runs and the start page would spin forever.
 // This inline classic script always runs — if the game hasn't booted
 // shortly, say what is wrong instead.
+// build.js flips the flag below to false for the single-file build, which has
+// no modules and so no file:// problem: there, any failure is a real error.
+var __ffModular = true;
 setTimeout(function () {
   if (window.__ffBooted) return;
   var el = document.getElementById('loadStatus');
   var sp = document.getElementById('spinner');
   if (sp) sp.style.display = 'none';
   if (!el) return;
-  if (location.protocol === 'file:') {
+  if (__ffModular && location.protocol === 'file:') {
     el.innerHTML = 'this split-file build uses ES modules, which browsers refuse to load from a double-clicked file://' +
       '<br><br>start a tiny local server in this folder, then open the address it serves:' +
       '<br><code style="color:#ffd9a0">python3 -m http.server 8734</code>' +
