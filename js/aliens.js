@@ -118,6 +118,12 @@ function alienBombHits(bombs) {
   }
 }
 
+// Is this hull still a real object? Once hp runs out it is falling, then
+// melting into the terrain, then gone — and through all of that it must be
+// inert to bombs AND to the player's airframe. Ships carry no `gone` flag
+// (they are spliced out of alien.ships instead), which `!o.gone` handles.
+const hullAlive = o => !o.gone && !o.falling && !(o.melt > 0);
+
 function fallAndMelt(o, halfH, groundAt, dt) {
   // shared down-fall + terrain-melt state machine; returns true when gone
   if (o.falling) {
@@ -226,11 +232,17 @@ export function updateAliens(dt, now) {
     }
   }
 
-  // flying into a hull ends the flight
+  // flying into a LIVE hull ends the flight. A downed one is inert — the same
+  // rule alienBombHits already applies, and it has to hold here too: you are
+  // by definition right next to the ship you just killed, so a lethal falling
+  // wreck is an unavoidable death, and a melting one leaves an invisible
+  // killbox at ground level for the 8 s it takes to sink. Reported as "the
+  // game freezes when a ship goes down"; it was really an instant ALIEN HULL.
   const cp = craft.pos;
-  if (!m.gone && Math.abs(cp[0] - m.x) < TUNEA.moWid.v / 2 && Math.abs(cp[1] - m.y) < TUNEA.moHei.v / 2 && Math.abs(cp[2] - m.z) < TUNEA.moLen.v / 2) doCrash('ALIEN HULL');
-  if (!r.gone && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
+  if (hullAlive(m) && Math.abs(cp[0] - m.x) < TUNEA.moWid.v / 2 && Math.abs(cp[1] - m.y) < TUNEA.moHei.v / 2 && Math.abs(cp[2] - m.z) < TUNEA.moLen.v / 2) doCrash('ALIEN HULL');
+  if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
   for (const s of alien.ships) {
+    if (!hullAlive(s)) continue;
     const ca = Math.cos(s.a), sa = Math.sin(s.a);
     const ox = cp[0] - s.x, oz = cp[2] - s.z;
     const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;

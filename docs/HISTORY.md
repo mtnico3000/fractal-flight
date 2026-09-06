@@ -218,6 +218,80 @@ harnesses (rings spawn 8/8 over land, ≥100 m clearance).
   leak audit of the branch. v9_1b is the good pair (v9_1 shipped
   pre-fix — delete).
 
+## First Claude Code session — 6 September 2026
+
+The move off Cowork. The repo was opened in Claude Code with the v9.1b modular
+files pasted in, and the first act was archaeology: everything after the v8.0
+commit — the whole v8.1-v8.5 camera line AND the entire v9 alien invasion —
+had never been committed anywhere. It existed as loose files with the zip as
+its only backup. That is now `d3b1556`, landed as the zip arrived and verified
+byte-identical file by file before committing, on a new branch `v9.1`.
+`v7.0` was left pointing exactly at `origin/v7.0` so nothing jul has seen moved.
+
+- **Tuning panels.** The ALIENS panel's numbers were off-screen, so a tuned
+  world could not be read off to hand over. Cause, measured not guessed: a
+  range input is a flex item with the default `min-width:auto`, which resolves
+  to the control's intrinsic ~129px and refuses to shrink, so each row measured
+  273px inside a 244px panel. The left-anchored TUNING panel had the same
+  overflow all along — it just spilled into the screen instead of off it.
+  `min-width: 0` fixed both. Added **COPY JSON** beside RESET on both panels
+  (clipboard with an execCommand fallback, since `navigator.clipboard` needs a
+  secure context and `http://<lan-ip>` and `file://` are not), so tuning is now
+  exchanged verbatim instead of read off sliders by eye. Both buttons `blur()`
+  after the click or the button keeps focus and SPACE — free flight — re-clicks
+  it.
+- **Nico's world and fleet baked in** as both `v` and `d`: 107 m ocean, 460 m
+  peaks, 245 m snow line, 20% flora; a 3000x2000x310 m mothership at 2200 m
+  and 780x330x120 m harvesters. Three defaults had been pinned at their slider
+  maximum, which is the tell that the range ran out before the taste did —
+  mother len/wid and ship speed ceilings raised to 5000 m / 3500 m / 60 m/s.
+- **Bomb counts** became named constants (they were written twice each, at the
+  spawn site and in the initAliens reset, where two copies drift the moment one
+  is edited alone). Mothership 10000 -> 40, harvester 100 -> 20, relay 6.
+  10000 was never a difficulty setting, it was "unkillable" written as a
+  number; 100 was set when hulls were 200 m long rather than 780.
+- ⚠️ **A downed hull used to kill you.** `alienBombHits` skipped falling and
+  melting hulls; the three player-collision checks right below it only tested
+  `.gone`. So the wreck you had just bombed was still lethal all the way down —
+  and you are by definition right beside it — while the melting one left an
+  invisible killbox at ground level for the 8 s it took to sink. A falling
+  mothership, 3000x2000 m sweeping down from 2200 m, made it a certainty. One
+  predicate, `hullAlive()`, now guards all three.
+- 🧊 **THE FREEZE — and how not to debug one.** Nico reported the game
+  freezing when a ship went down: plane stopped, world stopped, *audio kept
+  playing*, and no crash overlay. The first diagnosis was wrong: reproducing
+  "a wreck crashes you" produced an ALIEN HULL overlay, which is a crash, not
+  a freeze, and Nico said so. Audio continuing was the clue that was there all
+  along — WebAudio runs off its own thread, so a frozen world with live sound
+  means the rAF loop died, not that the flight ended.
+  The console from his still-frozen tab gave the answer in one line:
+  `Uncaught ReferenceError: camPos is not defined at drawTrail (fx.js:162)`.
+  `js/fx.js` used `camPos` without importing it, inside the `kind === 3`
+  bomb-detonation-ring branch. In the single-file build `camPos` is a global
+  and it works; in the modular build it throws. And `frame()` reschedules
+  itself on its LAST line with no try/catch, so one throw meant no next frame,
+  ever. **Broken since at least v8.0** (same line, `fx.js:132` there) and
+  invisible because the single file is the one people double-click and play.
+  Fixed to `viewPos`, which is also what the v7.1 invariant requires: the GPU
+  and the 2D overlay must consume the same rotated view. A *hit* on a ship
+  consumes the bomb without detonating, so it was the MISSES that froze it.
+  Lesson, bluntly: **ask for the console before theorising.** Two wrong
+  hypotheses (an expensive melting hull; a crash) were investigated at length
+  before the one free piece of evidence was requested.
+- **`serve.py`**, and the docs now point at it instead of `python -m
+  http.server`. The bare module sends no `Cache-Control` at all, so a refresh
+  replays the `js/*.js` already in cache and an edited module looks like it
+  changed nothing — which is exactly how the lowered bomb counts appeared not
+  to work, and cost a confused test round. It also pins the `.js` MIME type,
+  since on Windows `mimetypes` reads the registry where `HKCR\.js` can be
+  `text/plain`, and a module served as `text/plain` is refused outright.
+- **`test/` exists — ROADMAP C2 started.** `node test/run_tests.js`. The
+  module-reference check was written specifically because the `camPos` class
+  of bug is invisible in the build people play, and it was **verified to go
+  red on the real bug** before being called green.
+- ⬅ Deliberately NOT done: the single-file build was left stale. Nico's call —
+  "yes accept the difference, C1 will regenerate it".
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

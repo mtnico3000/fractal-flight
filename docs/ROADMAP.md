@@ -2,17 +2,33 @@
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
+0. **Run `node test/run_tests.js` first.** It should print "all suites
+   passed". Then `python serve.py 8734` and fly it once.
 1. Read docs/HISTORY.md once (the WHY archive) and **docs/RESEARCH.md
    before touching sections A or B** — it holds the full shimmer diagnosis
    (7 causes), the reasoning behind each fix, the paper analyses, the
-   TerraForge findings, and the Mandelbox parameter guide. Commit these
-   docs if not yet committed.
-2. **C1 — single-file build script.** Generate the single-file build from
-   the modules (inline css, concat js in dependency order, strip
-   import/export, reconcile the few divergent identifiers — see CLAUDE.md
-   Gotchas). Verify by diffing behavior against
+   TerraForge findings, and the Mandelbox parameter guide.
+2. **C1 — single-file build script. NOW THE MOST URGENT ITEM.** Generate the
+   single-file build from the modules (inline css, concat js in dependency
+   order, strip import/export, reconcile the few divergent identifiers — see
+   CLAUDE.md Gotchas). Verify by diffing behavior against
    `fractal-flight-v9_1b.html` (the last hand-maintained single build).
    From then on the single file is a build ARTIFACT — never edit it.
+   * ⚠️ **The single file is STALE as of 6 Sept 2026 and Nico accepted that
+     knowingly** ("yes accept the difference, C1 will regenerate it"). It is
+     missing: the tuning-panel overflow fix + COPY JSON export
+     (`css/style.css`, `js/tune.js`), the tuned world/fleet defaults and
+     raised ceilings (`js/tune.js`), the bomb-count constants and
+     `hullAlive` (`js/aliens.js`), and the `camPos` → `viewPos` freeze fix
+     (`js/fx.js`). Do NOT hand-patch those in — regenerate.
+   * Concatenation order, derived from the imports and verified acyclic:
+     config · math · state · tune · shaders · renderer · audio · terrain ·
+     fx · spores · weapons · clouds · rings · hud · aliens · input · flight ·
+     main.
+   * ⛔ The v9.1b single file has `camPos` as a real global in 20 places. The
+     generator must NOT simply concatenate and hope — `test/
+     check_module_refs.py` passing on the modules is what makes the concat
+     safe, so run it as part of the build.
 3. **A1 — footprint-aware detail fade** (the shimmer killer, details in
    section A below). Verify: fly at altitude, ground sparkle and silhouette
    crawl visibly reduced; fps same or better.
@@ -22,6 +38,9 @@
 6. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT
    attribution in README), then **B1 — multifractal octaves**.
 7. Push the branch, update the PR to julaub — it's been a long volley.
+   Nothing has been pushed since v8.0: branch `v9.1` holds the whole
+   v8.1→v9.1b line plus this session's work, and `v7.0` still points exactly
+   at `origin/v7.0` so nothing jul has seen has moved.
 
 Working conventions: run `python serve.py 8734` for live testing (it sends
 no-store — the bare http.server lets a refresh replay cached modules);

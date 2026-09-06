@@ -159,7 +159,13 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
     if (vv < 0.02) continue;
     if (p.kind === 3) {
       const frac = Math.min(1, k * 2.2);            // expands to full radius fast
-      const dx = p.x - camPos[0], dy = p.y - camPos[1], dz = p.z - camPos[2];
+      // viewPos, NOT camPos: the orbit rotates the render view only, and the
+      // v7.1 invariant is that the GPU and this 2D overlay consume the SAME
+      // view or the two drift apart. camPos here was a leftover from the
+      // single-file build, where it happens to be a global — in the modular
+      // build fx.js never imported it, so this line threw ReferenceError and
+      // killed the frame loop on the first bomb that reached the ground.
+      const dx = p.x - viewPos[0], dy = p.y - viewPos[1], dz = p.z - viewPos[2];
       const dist = Math.max(20, Math.hypot(dx, dy, dz));
       const pxPerM = H / (2 * dist * TAN_HALF_FOV); // world→screen at blast depth
       const traceRing = (fr) => {

@@ -12,8 +12,14 @@ rather than inventing activity.
 
 ## 1. Prove it still runs
 
-There is no automated suite yet (that is ROADMAP **C2**), so the gate is a
-real load, not a hope:
+Two gates. First the suite (ROADMAP **C2**, started 6 Sept 2026):
+
+```bash
+node test/run_tests.js
+```
+
+It must print "all suites passed". Then a real load, because most of this
+game is not unit-testable:
 
 ```bash
 python serve.py 8734

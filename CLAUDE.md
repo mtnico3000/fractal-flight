@@ -100,13 +100,68 @@ Key chips in the HUD glow green when a toggle is active.
   march-distance 0 = full size; rendering shrinks with distance ≥550m).
 - The tune sliders ARE gameplay-affecting (terrain mirror reads them), so
   rings/aliens/camera adapt live.
+- 🧊 **ONE exception freezes the game FOREVER, silently.** `frame()` in
+  main.js reschedules itself on its LAST line (`if (running)
+  requestAnimationFrame(frame)`) with no try/catch around the body. Any throw
+  means no next frame: the world stops dead while the WebAudio thread plays
+  on, so it presents as "frozen but I still hear the engine" and NOT as a
+  crash overlay. The `#err` overlay is wired only to shader compile errors in
+  renderer.js, so a runtime throw shows nothing at all. **When a freeze is
+  reported, the browser console is the first thing to read** — it names the
+  file and line for free. Found 6 Sept 2026 (see docs/HISTORY.md).
+- ⚠️ **A name another module exports can be used with NO import and still
+  work in the single-file build** — it is one global scope there — while
+  throwing ReferenceError in the modular one. `js/fx.js` referenced `camPos`
+  (never imported) inside the `kind === 3` bomb-ring branch; the single file
+  was fine, the modular build froze on the first bomb that reached the
+  ground, and it survived from at least v8.0 because the single file is the
+  one people actually play. `python test/check_module_refs.py` now guards the
+  whole class — run it after ANY cross-module edit.
+- **The fx 2D overlay must project from `viewPos`, never `camPos`** — the
+  v7.1 invariant is that the GPU and the overlay consume the SAME rotated
+  view, or they drift apart the moment the mouse orbit is used.
+- 🎚️ **A range input inside a flex row will not shrink.** Flex items default
+  to `min-width:auto`, which for a range control resolves to its intrinsic
+  ~129px, so `flex:1` cannot shrink it: the tuning rows measured 273px inside
+  a 244px panel and pushed the value readout out of the panel. Invisible on
+  the left-anchored TUNING panel (overflow spills into the screen), fatal on
+  the right-anchored ALIENS one (spills off-screen). `min-width: 0` on the
+  input is the fix.
+- **A downed hull is inert**, via `hullAlive()` in aliens.js — no bomb hits
+  and no ALIEN HULL crash while falling, melting or gone. Without it the ship
+  you just bombed kills you on its way down (you are by definition beside it)
+  and its melting wreck is an invisible killbox at ground level for 8 s.
+- 📏 Measured 6 Sept 2026: at the current fleet tuning a **harvester never
+  visibly falls**. It hovers 45..60 m up while `shHei/2` is 60 m, so
+  `fallAndMelt` lands it in the very frame it dies and it melts in place. The
+  mothership (2200 m) and relay do fall. Cost a red test before it was
+  understood.
 
-## Testing conventions (from the Cowork sessions)
+## Tests — `node test/run_tests.js`
 
-Every mechanic was verified with Node harnesses that eval the real module
-source with stubbed imports (see the pattern: strip `^import` lines, strip
-`export `, `new Function(...stubNames, src + 'return {...}')`). Worth
-porting into a `test/` folder with npm scripts. GLSL is checked with
+**ROADMAP C2 has started.** `test/` exists and runs with no npm, no framework
+and no browser — same no-bundler reasoning as the game itself:
+
+```sh
+node test/run_tests.js        # everything
+```
+
+- `test/harness.js` — loads a REAL `js/` module with stubbed imports (strip
+  `^import` lines, strip `export `, `new Function(...stubNames, src +
+  'return {...}')`), plus an `extra` list so private names (`HP_MOTHER`,
+  `hullAlive`) can be asserted. Tests the shipped source, not a copy.
+- `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
+  live hull is lethal while a falling/melting one is inert.
+- `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
+  in pairs across 33 knobs, and a missed `d` only shows when someone presses
+  RESET), defaults inside their own range, knob shape, and an informational
+  list of defaults pinned at a slider end.
+- `test/check_module_refs.py` — the modular/single-file divergence guard
+  above. Verified to go RED on the real `camPos` bug before being called
+  green.
+
+Still to port: GLSL parse via @shaderfrog/glsl-parser, and a jsdom
+module-graph smoke load. GLSL is checked with
 @shaderfrog/glsl-parser (function-like #define macros produce ignorable
 warnings). jsdom smoke-loads the whole module graph (matchMedia needs a
 stub; don't override Node's `performance`).
