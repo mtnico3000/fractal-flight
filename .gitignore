@@ -1,0 +1,22 @@
+# Python bytecode from serve.py / test/*.py
+__pycache__/
+*.py[cod]
+
+# C2 may bring dev dependencies (glsl parser, jsdom); the game itself has none
+node_modules/
+package-lock.json
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# NOTE: .claude/ is deliberately TRACKED -- launch.json and the wrap-session
+# skill are part of the project, not personal settings.
+#
+# NOTE: the generated single-file build (ROADMAP C1) is deliberately NOT
+# ignored. It is the double-click-friendly artifact jul and anyone else
+# actually plays, so it ships in the repo even though it is generated.

@@ -156,6 +156,11 @@ node test/run_tests.js        # everything
   in pairs across 33 knobs, and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
+- `test/test_docs.js` — README and CLAUDE.md must list every js/ module and
+  no ghost, the module count must be right, and the Running command block
+  must invoke serve.py. The README listed the v5 module set until 6 Sept
+  2026 (aliens.js and tune.js absent) — nobody notices a file that is not
+  there, so it is checked rather than remembered.
 - `test/check_module_refs.py` — the modular/single-file divergence guard
   above. Verified to go RED on the real `camPos` bug before being called
   green.
