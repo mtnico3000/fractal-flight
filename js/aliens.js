@@ -12,12 +12,19 @@ import { doCrash } from './hud.js';
 // sheet, absorbing spore trees; every few trees they fire an energy bolt to
 // the mandelbulb RELAYSHIP on its mountaintop, which grows — at double size
 // it discharges a blast up to the mothership, which builds one more
-// harvester. Bombs are the counterplay: 100 downs a harvester, 6 the relay,
-// 10000 the mothership. Downed ships fall and melt into the terrain.
+// harvester. Bombs are the counterplay. Downed ships fall and melt into the
+// terrain.
 const SHIP_MAX = 6;
+// Bomb counts to down each hull. alienBombHits() does a plain hp-- and consumes
+// the bomb, with no splash — so these ARE the number of direct hits required.
+// Named because each value was written twice (spawn site + initAliens reset)
+// and the two copies drift apart the moment one is edited alone.
+const HP_MOTHER = 40;   // was 10000, i.e. effectively unkillable
+const HP_SHIP   = 20;   // was 100, set when hulls were 200 m long rather than 780
+const HP_RELAY  = 6;    // smallest target: a 30 m sphere on a peak
 export const alien = {
-  mother: { x: 400, y: 10000, z: 1800, hp: 10000, melt: 0, falling: false, vy: 0, gone: false },
-  relay: { x: 0, y: 0, z: 0, ground: 0, r: 15, baseR: 15, hp: 6, melt: 0, falling: false, vy: 0, gone: false },
+  mother: { x: 400, y: 10000, z: 1800, hp: HP_MOTHER, melt: 0, falling: false, vy: 0, gone: false },
+  relay: { x: 0, y: 0, z: 0, ground: 0, r: 15, baseR: 15, hp: HP_RELAY, melt: 0, falling: false, vy: 0, gone: false },
   ships: [],
   bolts: [],
 };
@@ -44,7 +51,7 @@ function spawnHarvester(fromMother) {
     z: fromMother ? alien.mother.z : spot.z,
     a: Math.random() * 6.2832,          // heading (movement dir; long axis is perpendicular)
     tx: spot.x, tz: spot.z,             // current plains target
-    hp: 100, melt: 0, falling: false, vy: 0,
+    hp: HP_SHIP, melt: 0, falling: false, vy: 0,
     deploying: !!fromMother,
     absorbed: 0, lastShot: 0, sweepAcc: 0, retarget: 0,
   };
@@ -54,7 +61,7 @@ function spawnHarvester(fromMother) {
 export function initAliens() {
   alien.mother.x = 400; alien.mother.z = 1800;
   alien.mother.y = TUNEA.moAlt.v;
-  alien.mother.hp = 10000; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false;
+  alien.mother.hp = HP_MOTHER; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false;
   // relay: the highest mountaintop we can find near the island center
   let peak = { x: 0, z: 0, h: -999 };
   for (let i = 0; i < 500; i++) {
@@ -67,7 +74,7 @@ export function initAliens() {
   alien.relay.baseR = TUNEA.relSize.v / 2;
   alien.relay.r = alien.relay.baseR;
   alien.relay.y = peak.h + 30 + alien.relay.r;
-  alien.relay.hp = 6; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
+  alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
   alien.ships.length = 0;
   alien.bolts.length = 0;
   spawnHarvester(false); spawnHarvester(false);

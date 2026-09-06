@@ -23,7 +23,8 @@
    attribution in README), then **B1 — multifractal octaves**.
 7. Push the branch, update the PR to julaub — it's been a long volley.
 
-Working conventions: run `python -m http.server 8734` for live testing;
+Working conventions: run `python serve.py 8734` for live testing (it sends
+no-store — the bare http.server lets a refresh replay cached modules);
 every flight/ring/alien change gets a Node harness check before commit;
 keep the GLSL↔terrain.js mirror in sync (CLAUDE.md).
 

@@ -33,9 +33,16 @@ the page now tells you so instead of loading forever). The single-file build
 is the double-click-friendly variant:
 
 ```sh
-python3 -m http.server 8734
+python3 serve.py 8734
 # then open http://localhost:8734/
 ```
+
+`serve.py` is `python -m http.server` plus one header: `Cache-Control:
+no-store`. Use it rather than the bare module — `http.server` sends no
+cache header at all, so a normal refresh replays the `js/*.js` the browser
+already has, and an edited module looks like it changed nothing. (If you do
+use the bare server, Ctrl+Shift+R, or tick "Disable Cache" in the devtools
+Network panel.)
 
 Note for mobile: browsers only expose motion sensors (TILT mode) on secure
 origins — serve over HTTPS, or use `adb reverse` so the phone sees

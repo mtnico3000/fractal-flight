@@ -74,7 +74,11 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 #tune .trow, #tuneA .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
 #tune .trow label, #tuneA .trow label { flex: 0 0 74px; opacity: 0.75; }
 #tune .trow input[type=range], #tuneA .trow input[type=range] {
-  flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
+  /* min-width:0 is load-bearing: a flex item defaults to min-width:auto, and a
+     range input's intrinsic width (~129px) then refuses to shrink, so the row
+     overflowed the 224px panel and pushed .val off the right edge — invisible
+     on the left-anchored panel, clipped off-screen on the right-anchored one. */
+  flex: 1; min-width: 0; height: 3px; -webkit-appearance: none; appearance: none;
   background: rgba(255, 200, 130, 0.25); border-radius: 2px; outline: none;
 }
 #tune .trow input[type=range]::-webkit-slider-thumb, #tuneA .trow input[type=range]::-webkit-slider-thumb {
@@ -85,14 +89,18 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   width: 10px; height: 10px; border: none;
   border-radius: 50%; background: rgba(255, 200, 130, 0.95); cursor: pointer;
 }
-#tune .trow .val, #tuneA .trow .val { flex: 0 0 44px; text-align: right; color: rgba(255, 200, 130, 0.9); }
-#tune .treset, #tuneA .treset {
-  margin-top: 6px; width: 100%; padding: 3px 0;
+#tune .trow .val, #tuneA .trow .val {
+  flex: 0 0 52px; text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums; color: rgba(255, 200, 130, 0.9);
+}
+#tune .tbtns, #tuneA .tbtns { display: flex; gap: 6px; margin-top: 6px; }
+#tune .tbtns button, #tuneA .tbtns button {
+  flex: 1; min-width: 0; padding: 3px 0;
   background: rgba(255, 200, 130, 0.12); color: rgba(255, 220, 180, 0.95);
   border: 1px solid rgba(255, 200, 130, 0.35); border-radius: 4px;
   font: inherit; letter-spacing: 1.5px; cursor: pointer;
 }
-#tune .treset:hover, #tuneA .treset:hover { background: rgba(255, 200, 130, 0.25); }
+#tune .tbtns button:hover, #tuneA .tbtns button:hover { background: rgba(255, 200, 130, 0.25); }
 #fx {
   position: fixed; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 5;
@@ -253,6 +261,12 @@ body.touch #tune, body.touch #tuneA { display: none; }
 #hud, #tune, #tuneA { z-index: 16; }
 #tuneA { left: auto; right: 18px; bottom: 130px; border-color: rgba(120, 255, 150, 0.3); }
 #tuneA h2, #tuneA h2 .caret { color: rgba(140, 255, 170, 0.95); }
+#tuneA .trow .val { color: rgba(140, 255, 170, 0.9); }
+#tuneA .tbtns button {
+  background: rgba(120, 255, 150, 0.12); color: rgba(190, 255, 210, 0.95);
+  border-color: rgba(120, 255, 150, 0.35);
+}
+#tuneA .tbtns button:hover { background: rgba(120, 255, 150, 0.25); }
 #err {
   position: fixed; inset: 0; display: none; overflow: auto;
   background: rgba(10, 5, 5, 0.96); color: #ff9c9c;

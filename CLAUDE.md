@@ -9,8 +9,10 @@ volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.1.
 
 Two parallel builds exist and must stay in sync:
 - **Modular** (this repo): index.html + css/style.css + 18 js/ modules. ES
-  modules → MUST be served over HTTP (`python3 -m http.server 8734`);
-  file:// shows an explanatory watchdog message instead of loading.
+  modules → MUST be served over HTTP (`python3 serve.py 8734` — the bare
+  `http.server` sends no cache header, so an edited module survives a refresh
+  and looks like it changed nothing); file:// shows an explanatory watchdog
+  message instead of loading.
 - **Single-file** (`fractal-flight-vX_Y.html`): everything inlined, works by
   double-click. Same code with small naming differences (see Gotchas).
 
