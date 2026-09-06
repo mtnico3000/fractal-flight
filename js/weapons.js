@@ -173,7 +173,8 @@ export function resolveBlasts() {
     for (let j = 0; j < activeBlast.cells.length; j++) {
       if (gpuBlastPlant[j] < 38) {   // shader says: living tree in this cell
         const c = activeBlast.cells[j];
-        collectTreeAt(c.x, activeBlast.y, c.z, Math.min(j * 0.03, 1.1));   // staggered pops
+        const got = collectTreeAt(c.x, activeBlast.y, c.z, Math.min(j * 0.03, 1.1), !!activeBlast.harvest);   // staggered pops; alien harvests score nothing
+        if (got && activeBlast.harvest) activeBlast.harvest.absorbed++;
       }
     }
     activeBlast = null;

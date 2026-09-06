@@ -3,7 +3,7 @@
 // Also owns the chase camera and the grind-then-crash ground contact.
 
 import { WATER_LEVEL, GRIND_DEPTH, START } from './config.js';
-import { craft, craftB, camPos, viewPos, viewZoom, pilotAim, flags, probe } from './state.js';
+import { craft, craftB, camPos, viewPos, viewZoom, camMode, pilotAim, flags, probe } from './state.js';
 import { normalize3, cross3, rotV, clamp1 } from './math.js';
 import { keys, touchInput, gyroInput, mouse, mouseView, viewOrigin, IS_TOUCH } from './input.js';
 import { terrainShapeJ } from './terrain.js';
@@ -12,6 +12,7 @@ import { collectTree } from './spores.js';
 import { updateRings, initRings } from './rings.js';
 import { fireGun, updateBullets, updateBombs, resolveBlasts } from './weapons.js';
 import { driftClouds, cloudImmersion } from './clouds.js';
+import { updateAliens, initAliens } from './aliens.js';
 import { engineUpdate, grindUpdate, cloudWindUpdate } from './audio.js';
 import { emitTrail } from './fx.js';
 
@@ -22,6 +23,31 @@ let camR = [-1, 0, 0], camU = [0, 1, 0], camF = [0, 0, 1];
 let orbitYaw = 0, orbitPitch = 0, orbitYawT = 0, orbitPitchT = 0;
 let followHdg = [0, 0, 1];   // level-flight heading memory (far-zoom loop exception)
 let followWCur = 1;          // latched follow weight (1 = chase the nose, 0 = stand off level)
+let prevFree = false, prevPilot = false;   // camMode edge detection (Y / X toggles)
+let prevObs = false, obsFreeWas = false;   // O = observation/saucer mode (v9.1)
+let savedView = null;   // Y-off snapshot: zoom + orbit restored on the next Y-on
+let pilotSaved = null;  // X-entry snapshot: the external view's angles, restored on X-exit (v8.5)
+// Inverse of the orbit mapping (v8.5): find the virtual origin that makes
+// the CURRENT cursor position produce the given angles — so restoring a view
+// is exact no matter where the mouse moved meanwhile. The deadzone ramp
+// makes it nonlinear; R·ramp(R) is monotonic, so bisection nails it.
+function originForAngles(yaw, pitch, mx, my, vw, vh) {
+  const bx = -yaw * (vw / 2) / Math.PI;
+  const by = pitch * (vh / 2) / (Math.PI / 2);
+  const B = Math.hypot(bx, by);
+  if (B < 1e-4) return { x: mx, y: my };
+  const dead = vh * 0.13 + 20;
+  let lo = dead + 0.001, hi = Math.max(B, dead + 60) + 1;
+  for (let i = 0; i < 24; i++) {
+    const R = (lo + hi) / 2;
+    let mm = Math.max(0, Math.min(1, (R - dead) / 60));
+    mm = mm * mm * (3 - 2 * mm);
+    if (R * mm < B) lo = R; else hi = R;
+  }
+  const s = (lo + hi) / 2 / B;
+  return { x: mx - bx * s, y: my - by * s };
+}
+
 let zoomCur = 1;   // eased wheel zoom (viewZoom.t is the target)
 
 export function resetFlight() {
@@ -32,6 +58,9 @@ export function resetFlight() {
   camR = [-1, 0, 0]; camU = [0, 1, 0]; camF = [0, 0, 1];
   // R also resets the view (v7.7): default zoom, orbit recentered on the cursor
   viewZoom.t = 1; zoomCur = 1;
+  camMode.free = false; camMode.pilot = false; camMode.obs = false;
+  savedView = null; pilotSaved = null;   // R: view memory back to factory
+  initAliens();                          // fresh invasion
   viewOrigin.x = mouseView.x; viewOrigin.y = mouseView.y;
   orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
   unCrash();
@@ -65,6 +94,32 @@ export function update(dt, now) {
   const lift = clamp1((keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0) + touchInput.lift);
   const boost = keys.ShiftLeft || keys.ShiftRight || touchInput.boost;
 
+  const rollFree = !!keys.Space;   // hoisted (v9.1): the camera reads it in every mode
+  let b, groundH;
+  if (camMode.obs) {
+    // ---- OBSERVATION MODE (v9.1): park as a hovering saucer ----
+    // Speed bleeds to zero, the craft levels itself, and the ARROW keys
+    // translate it like a UFO (up/down arrows = forward/back along the nose,
+    // left/right = strafe); W/S move it vertically. Terrain-clamped, no
+    // crash — it is a tweaking/observation tool.
+    craft.speed += (0 - craft.speed) * Math.min(1, dt * 3);
+    craft.rollVel = 0; craft.pitchVel = 0;
+    const lvlK = Math.min(1, dt * 2.5);
+    craft.f = normalize3([craft.f[0], craft.f[1] * (1 - lvlK), craft.f[2]]);
+    craft.u = normalize3([craft.u[0] * (1 - lvlK), craft.u[1] * (1 - lvlK) + lvlK, craft.u[2] * (1 - lvlK)]);
+    craft.r = normalize3(cross3(craft.f, craft.u));
+    craft.u = cross3(craft.r, craft.f);
+    const fl = Math.hypot(craft.f[0], craft.f[2]) || 1;
+    const mf = ((keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0)) * 60 * dt;
+    const ms = ((keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0)) * 60 * dt;
+    craft.pos[0] += craft.f[0] / fl * mf + craft.r[0] * ms;
+    craft.pos[2] += craft.f[2] / fl * mf + craft.r[2] * ms;
+    craft.pos[1] += ((keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0)) * 45 * dt;
+    groundH = (probe.ground !== null) ? probe.ground : terrainShapeJ(craft.pos[0], craft.pos[2]);
+    craft.pos[1] = Math.max(craft.pos[1], Math.max(groundH, WATER_LEVEL) + 3);
+    grindAmt = 0;
+    b = craftB();
+  } else {
   // ---- v4.0 FREE FLIGHT ----
   // A/D roll and W/S pitch are applied as incremental rotations in the
   // craft's OWN body frame (Rodrigues), so orientation is unrestricted:
@@ -79,7 +134,6 @@ export function update(dt, now) {
   // via W/S still work: pitch integrates freely while held). Space HELD:
   // the raw v4.6 triad — free roll rate, NO auto-level, NO pitch decay —
   // barrel rolls, knife-edge, sustained inverted flight.
-  const rollFree = !!keys.Space;
   craft.rollVel  += ((rollFree ? steer * ROLL_RATE : 0) - craft.rollVel) * Math.min(1, dt * 6);
   craft.pitchVel += (pitchIn * PITCH_RATE - craft.pitchVel) * Math.min(1, dt * 6);
   if (Math.abs(craft.rollVel) > 1e-4) {
@@ -162,7 +216,7 @@ export function update(dt, now) {
   craft.speed += (targetSpeed - craft.speed) * Math.min(1, dt * 2.0);
   craft.speed = Math.max(60, Math.min(330, craft.speed - craft.f[1] * 45 * dt));
 
-  const b = craftB();
+  b = craftB();
   craft.pos[0] += b.fwd[0] * craft.speed * dt;
   craft.pos[1] += b.fwd[1] * craft.speed * dt + lift * 110 * dt;
   craft.pos[2] += b.fwd[2] * craft.speed * dt;
@@ -170,7 +224,7 @@ export function update(dt, now) {
   // ---- collision = end of flight ----
   // GPU probe value = exactly the terrain the pixels show (fp32), refreshed
   // every frame. Fp64 JS mirror only bridges the first frame before readback.
-  const groundH = (probe.ground !== null) ? probe.ground : terrainShapeJ(craft.pos[0], craft.pos[2]);
+  groundH = (probe.ground !== null) ? probe.ground : terrainShapeJ(craft.pos[0], craft.pos[2]);
   // Two-stage terrain contact (v3.1): touching the surface only GRINDS —
   // rumble, camera shake, speed bleed — the fatal crash sits GRIND_DEPTH
   // below the old contact level. A shallow, near-horizontal descent scrapes
@@ -192,12 +246,14 @@ export function update(dt, now) {
     }
     if (probe.plantD < 2.2) collectTree();   // trees are spores to harvest, not walls (v1.7)
   }
+  }   // end normal-flight branch (observation mode skips the physics)
 
   updateRings(craft.pos, b.fwd, dt);   // ring course: pass-through scoring + respawn
 
   updateBullets(dt);   // tracers fly (and hit) independently of the craft
   updateBombs(dt);     // bombs fall straight down, detonate on the GPU's ground
   resolveBlasts();     // settle last frame's blast probe, arm the next
+  updateAliens(dt, now);   // the invasion economy ticks (v9.0)
   // clouds drift with the wind; wind noise swells when flying through one
   driftClouds(dt);
   cloudWindUpdate(cloudImmersion());
@@ -324,7 +380,85 @@ export function update(dt, now) {
   // swings instead of snapping. The chase camera itself is untouched — the
   // orbit only rotates what is rendered, and BOTH pipelines (GPU + 2D
   // overlay) consume the same rotated view, so nothing can misalign.
-  if (!IS_TOUCH) {
+  // Y / X camera modes (v8.1): input.js just flips the flags; transitions
+  // are handled here. Y ON engages mouse-cam + wheel without a jump (orbit
+  // center rebased onto the cursor); Y OFF resets to the plain chase view.
+  // X drops into the pilot seat with the gaze reset to straight ahead.
+  // O transitions: entering observation force-enables the free camera (Y);
+  // leaving restores whatever Y state you had before
+  if (camMode.obs && !prevObs) { obsFreeWas = camMode.free; camMode.free = true; }
+  if (!camMode.obs && prevObs) { camMode.free = obsFreeWas; }
+  prevObs = camMode.obs;
+  if (camMode.free && !prevFree) {
+    if (savedView) {
+      // Y remembers: pop instantly back to the exact previous view — same
+      // zoom, same orbit origin/angles, and the chase camera itself snapped
+      // to its saved craft-relative position and orientation (identical
+      // framing if the mouse has not moved; otherwise it glides from there)
+      viewZoom.t = savedView.t; zoomCur = savedView.t;
+      // angle restore is cursor-independent: rebase the origin so the mouse's
+      // CURRENT position reproduces the saved angles exactly
+      const o = originForAngles(savedView.yaw, savedView.pitch, mouseView.x, mouseView.y, window.innerWidth, window.innerHeight);
+      viewOrigin.x = o.x; viewOrigin.y = o.y;
+      orbitYaw = savedView.yaw; orbitPitch = savedView.pitch;
+      orbitYawT = savedView.yaw; orbitPitchT = savedView.pitch;
+      camPos[0] = craft.pos[0] + savedView.cp[0];
+      camPos[1] = craft.pos[1] + savedView.cp[1];
+      camPos[2] = craft.pos[2] + savedView.cp[2];
+      camR = [...savedView.cr]; camU = [...savedView.cu]; camF = [...savedView.cf];
+    } else {
+      viewOrigin.x = mouseView.x; viewOrigin.y = mouseView.y;
+    }
+  }
+  if (!camMode.free && prevFree) {
+    // if Y goes off while in the pilot seat, remember the OUTSIDE view's
+    // angles (pre-X snapshot), not the pilot's gaze direction
+    const extYaw = (camMode.pilot && pilotSaved) ? pilotSaved.yaw : orbitYaw;
+    const extPitch = (camMode.pilot && pilotSaved) ? pilotSaved.pitch : orbitPitch;
+    savedView = { t: viewZoom.t, ox: viewOrigin.x, oy: viewOrigin.y, yaw: extYaw, pitch: extPitch,
+                  cp: [camPos[0] - craft.pos[0], camPos[1] - craft.pos[1], camPos[2] - craft.pos[2]],
+                  cr: [...camR], cu: [...camU], cf: [...camF] };
+    viewZoom.t = 1; camMode.pilot = false; pilotSaved = null;
+    // instant OFF (v8.5): no glide — snap zoom, orbit and the chase camera
+    // itself straight to the steady behind-the-plane pose. The pose solves
+    // the camera's own fixed point (look-ahead + arm + spring lag at the
+    // current speed), so the next frames don't visibly settle either.
+    zoomCur = 1;
+    orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
+    const la = 30 + craft.speed / 3.5;   // look-ahead + spring-lag term
+    let cF = [craft.f[0], craft.f[1], craft.f[2]];
+    let cR = [1, 0, 0], cU = [0, 1, 0];
+    for (let i = 0; i < 12; i++) {
+      cF = normalize3([craft.f[0] * la + cF[0] * 17 - cU[0] * 5.5,
+                       craft.f[1] * la + cF[1] * 17 - cU[1] * 5.5,
+                       craft.f[2] * la + cF[2] * 17 - cU[2] * 5.5]);
+      cR = cross3(cF, [0, 1, 0]);
+      const cl = Math.hypot(cR[0], cR[1], cR[2]) || 1;
+      cR = [cR[0] / cl, cR[1] / cl, cR[2] / cl];
+      cU = cross3(cR, cF);
+    }
+    camF = cF; camR = cR; camU = cU;
+    camPos[0] = craft.pos[0] - cF[0] * 17 + cU[0] * 5.5 - craft.f[0] * (craft.speed / 3.5);
+    camPos[1] = craft.pos[1] - cF[1] * 17 + cU[1] * 5.5 - craft.f[1] * (craft.speed / 3.5);
+    camPos[2] = craft.pos[2] - cF[2] * 17 + cU[2] * 5.5 - craft.f[2] * (craft.speed / 3.5);
+  }
+  if (camMode.pilot && !prevPilot) {
+    pilotSaved = { yaw: orbitYaw, pitch: orbitPitch };   // remember the outside view
+    orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
+    viewOrigin.x = mouseView.x; viewOrigin.y = mouseView.y;
+  }
+  if (!camMode.pilot && prevPilot && pilotSaved) {
+    // X-exit: back to the exact outside view (Y active: the zoomed, angled
+    // view; Y off: angles were 0, so the plain chase view) — origin rebased
+    // so the current cursor reproduces the saved angles
+    const o = originForAngles(pilotSaved.yaw, pilotSaved.pitch, mouseView.x, mouseView.y, window.innerWidth, window.innerHeight);
+    viewOrigin.x = o.x; viewOrigin.y = o.y;
+    orbitYaw = pilotSaved.yaw; orbitPitch = pilotSaved.pitch;
+    orbitYawT = pilotSaved.yaw; orbitPitchT = pilotSaved.pitch;
+    pilotSaved = null;
+  }
+  prevFree = camMode.free; prevPilot = camMode.pilot;
+  if (!IS_TOUCH && (camMode.free || camMode.pilot)) {
     const vw = window.innerWidth, vh = window.innerHeight;
     const mdx = mouseView.x - viewOrigin.x, mdy = mouseView.y - viewOrigin.y;   // v7.4: middle-click rebases the center
     const mr = Math.hypot(mdx, mdy);
@@ -334,6 +468,8 @@ export function update(dt, now) {
     mm = mm * mm * (3 - 2 * mm);
     orbitYawT   = -(mdx / (vw / 2)) * Math.PI * mm;         // edge = 180°
     orbitPitchT =  (mdy / (vh / 2)) * (Math.PI / 2) * mm;   // edge = 90°
+  } else {
+    orbitYawT = 0; orbitPitchT = 0;   // camera modes off: mouse does nothing
   }
   orbitYaw   += (orbitYawT   - orbitYaw)   * Math.min(1, dt * 6);
   orbitPitch += (orbitPitchT - orbitPitch) * Math.min(1, dt * 6);
@@ -344,7 +480,7 @@ export function update(dt, now) {
   // the pilot's HEAD: mouse right = look right, top edge = look straight up.
   // The craft's own basis carries the view, so banking rolls the horizon.
   pilotAim.on = 0;
-  viewZoom.cockpit = zoomCur < 0.13 ? 1 : 0;
+  viewZoom.cockpit = (camMode.pilot || zoomCur < 0.13) ? 1 : 0;
   if (viewZoom.cockpit) {
     const lyaw = orbitYaw, lpit = -orbitPitch;
     let pF = craft.f, pR = craft.r, pU = craft.u;

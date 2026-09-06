@@ -1,8 +1,8 @@
 // HUD readouts, compass needle, crash overlay, toast messages.
 
 import { WATER_LEVEL } from './config.js';
-import { craft, flags } from './state.js';
-import { engineCrash } from './audio.js';
+import { craft, flags, camMode } from './state.js';
+import { engineCrash, isMuted } from './audio.js';
 import { trail } from './fx.js';
 import { clearWeapons } from './weapons.js';
 import { getScore, resetScore } from './spores.js';
@@ -12,6 +12,10 @@ const $spd = document.getElementById('spd');
 const $hdg = document.getElementById('hdg');
 const $fps = document.getElementById('fps');
 const $needle = document.getElementById('cneedle');
+const $keyY = document.getElementById('key-y');
+const $keyX = document.getElementById('key-x');
+const $keyM = document.getElementById('key-m');
+const $keyO = document.getElementById('key-o');
 export function updateHUD(fps) {
   $alt.textContent = Math.round(craft.pos[1] - WATER_LEVEL);
   $spd.textContent = Math.round(craft.speed);
@@ -20,6 +24,11 @@ export function updateHUD(fps) {
   $hdg.textContent = String(deg).padStart(3, '0');
   $needle.setAttribute('transform', 'rotate(' + (-deg) + ')');
   $fps.textContent = fps;
+  // toggle-status chips (v8.2): green = active
+  $keyY.classList.toggle('on', camMode.free);
+  $keyX.classList.toggle('on', camMode.pilot);
+  $keyO.classList.toggle('on', camMode.obs);
+  $keyM.classList.toggle('on', !isMuted());
 }
 
 const $crash = document.getElementById('crash');

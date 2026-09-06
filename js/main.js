@@ -15,11 +15,13 @@ import { bullets, bombs, impacts, bulletUniform, bulletProbePos, gpuBulletGround
 import { clouds, cloudArr, genClouds } from './clouds.js';
 import { updateHUD } from './hud.js';
 import { ensureAudio } from './audio.js';
-import { drawTrail, buildFxQueries, fxOcc } from './fx.js';
+import { drawTrail, buildFxQueries, fxOcc, drawBolts } from './fx.js';
+import { initAliens, packAlienUniforms, alien } from './aliens.js';
 
 // GPU collision probe readback buffer + grind-shake scratch
 const probeBuf = new Uint8Array(133 * 4);  // px 0-1 craft · 2-17 bullets · 18-81 blast cells · 82-84 bombs · 85-132 fx occlusion
 const fxPosArr = new Float32Array(48 * 3); // overlay occlusion query positions
+const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6) };
 
 // cursor visibility (v8.0): 100 = native crosshair, 0 = hidden; in between a
 // custom crosshair drawn at that alpha (a native cursor cannot be translucent)
@@ -92,6 +94,7 @@ async function main() {
 
   // collected-cells texture lives on unit 1 for the whole session
   initCollectedTex();
+  initAliens();
   gl.uniform1i(U.uCollected, 1);
   gl.uniform3f(U.uLivery, ...hexToLin($livery.value));
 
@@ -151,6 +154,18 @@ async function main() {
   gl.uniform1f(U.uShadows, TUNE.shadows.v);
   buildFxQueries(fxPosArr, bullets, bombs, impacts);
   gl.uniform3fv(U.uFxPos, fxPosArr);
+  packAlienUniforms(alienU);
+  gl.uniform3fv(U.uMotherPos, alienU.motherPos);
+  gl.uniform3fv(U.uMotherHalf, alienU.motherHalf);
+  gl.uniform1f(U.uMotherMelt, alienU.motherMelt);
+  gl.uniform4fv(U.uRelay, alienU.relay);
+  gl.uniform1f(U.uRelayMelt, alienU.relayMelt);
+  gl.uniform4fv(U.uShipPos, alienU.shipPos);
+  gl.uniform1fv(U.uShipLaser, alienU.shipLaser);
+  gl.uniform1fv(U.uShipMelt, alienU.shipMelt);
+  gl.uniform1f(U.uShipN, alienU.shipN);
+  gl.uniform3fv(U.uShipHalf, alienU.shipHalf);
+  gl.uniform4fv(U.uBoxParam, alienU.boxParam);
   gl.uniform1f(U.uOceanSlope, TUNE.oceanSlope.v);
   gl.uniform1f(U.uOceanMax,   TUNE.oceanMax.v);
   gl.uniform1f(U.uMassDecay,  TUNE.massDecay.v);
@@ -221,6 +236,7 @@ async function main() {
   for (let i = 0; i < 48; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
 
   drawTrail(camBasis, now, bullets, bombs, impacts);
+  drawBolts(camBasis, now, alien.bolts);
   if (running) requestAnimationFrame(frame);
 }
   setStatus('spinning up the GPU \u2014 first frame \u2026');

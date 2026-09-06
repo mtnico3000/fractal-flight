@@ -27,6 +27,18 @@ uniform vec3 uLivery;         // craft accent color (nose / wingtips / fin), sta
 uniform float uCockpit;       // 1 = pilot view: the craft itself is not drawn
 uniform float uShadows;       // shadow pack master toggle (tune panel)
 uniform vec3 uFxPos[48];      // overlay-particle occlusion queries (probe row px 85..132)
+// ---- alien fleet (v9.0) ----
+uniform vec3 uMotherPos;      // mothership center (axis-aligned, long axis = z)
+uniform vec3 uMotherHalf;     // half extents (w/2, h/2, l/2)
+uniform float uMotherMelt;    // 0 live · 0..1 melting glow
+uniform vec4 uRelay;          // relayship: xyz + radius (grows with harvest)
+uniform float uRelayMelt;
+uniform vec4 uShipPos[6];     // harvesters: xyz + heading
+uniform float uShipLaser[6];  // 1 = harvest sheet active
+uniform float uShipMelt[6];
+uniform float uShipN;
+uniform vec3 uShipHalf;       // harvester half extents (len/2, h/2, w/2)
+uniform vec4 uBoxParam;       // mandelbox: scale, minR2, fold, bulb power
 // ---- live tuning knobs (bottom-left panel) ----
 uniform float uOceanSlope;   // how fast the sea floor drops away from land
 uniform float uOceanMax;     // max ocean depth below the noise floor
@@ -623,6 +635,143 @@ vec3 ringNormal(vec3 wp) {
   return normal;
 }
 
+// ---------- alien fleet (v9.0) ----------
+// Ships are BOX-CROPPED rectangular mandelboxes: the fractal is evaluated in
+// a unit-cube domain and intersected with the exact ship box, so the
+// silhouette is guaranteed (any aspect ratio works) while the mandelbox
+// carves the hull detail. Fold/clamp math only — no trig — and every ship is
+// gated by a ray/box test, so rays that miss pay almost nothing.
+float mandelboxDE(vec3 p) {
+  vec3 q = p;
+  float dr = 1.0;
+  float fixR2 = 1.0, minR2 = uBoxParam.y;
+  for (int i = 0; i < 8; i++) {
+    q = clamp(q, -uBoxParam.z, uBoxParam.z) * 2.0 - q;   // box fold
+    float r2 = dot(q, q);
+    if (r2 < minR2) { float f = fixR2 / minR2; q *= f; dr *= f; }
+    else if (r2 < fixR2) { float f = fixR2 / r2; q *= f; dr *= f; }
+    q = q * uBoxParam.x + p;
+    dr = dr * abs(uBoxParam.x) + 1.0;
+  }
+  return length(q) / abs(dr);
+}
+
+float shipDE(vec3 l, vec3 h) {  // l = local coords, h = half extents
+  float hmin = min(h.x, min(h.y, h.z));
+  float mb = mandelboxDE(l / h * 1.15) / 1.15 * hmin;   // conservative for the stretch
+  return max(sdBox(l, h), mb);
+}
+
+float mandelbulbDE(vec3 p) {    // unit bulb, radius ~1.2
+  vec3 z = p;
+  float dr = 1.0, r = 0.0;
+  float pw = uBoxParam.w;
+  for (int i = 0; i < 7; i++) {
+    r = length(z);
+    if (r > 2.0) break;
+    float th = acos(clamp(z.z / max(r, 1e-6), -1.0, 1.0)) * pw;
+    float ph = atan(z.y, z.x) * pw;
+    float zr = pow(r, pw);
+    dr = pow(r, pw - 1.0) * pw * dr + 1.0;
+    z = zr * vec3(sin(th) * cos(ph), sin(th) * sin(ph), cos(th)) + p;
+  }
+  return 0.5 * log(max(r, 1e-6)) * r / dr;
+}
+
+vec3 shipLocal(vec3 wp, vec3 c, float ca, float sa) {
+  vec3 o = wp - c;
+  return vec3(o.x * ca - o.z * sa, o.y, o.x * sa + o.z * ca);
+}
+
+vec2 boxGate(vec3 lo, vec3 ld, vec3 h) {
+  vec3 inv = 1.0 / (ld + vec3(1e-8));
+  vec3 ta = (-h - lo) * inv, tb = (h - lo) * inv;
+  vec3 tmin = min(ta, tb), tmax = max(ta, tb);
+  return vec2(max(max(tmin.x, tmin.y), tmin.z), min(min(tmax.x, tmax.y), tmax.z));
+}
+
+// returns vec2(t, id): id 0 = mothership, 1..6 harvester, 7 = relay bulb
+vec2 marchAliens(vec3 ro, vec3 rd) {
+  float tBest = 1e9;
+  float idBest = -1.0;
+  // mothership (axis-aligned)
+  if (uMotherPos.y > -9000.0) {
+    vec3 lo = ro - uMotherPos;
+    vec2 g = boxGate(lo, rd, uMotherHalf + 2.0);
+    if (g.x < g.y && g.y > 0.0) {
+      float t = max(g.x, 0.0);
+      for (int i = 0; i < 48; i++) {
+        float d = shipDE(lo + rd * t, uMotherHalf);
+        if (d < 0.5 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 0.0; } break; }
+        t += d;
+        if (t > g.y) break;
+      }
+    }
+  }
+  // harvesters
+  for (int s = 0; s < 6; s++) {
+    if (float(s) >= uShipN) break;
+    if (uShipPos[s].y < -9000.0) continue;
+    float ca = cos(uShipPos[s].w), sa = sin(uShipPos[s].w);
+    vec3 lo = shipLocal(ro, uShipPos[s].xyz, ca, sa);
+    vec3 ld = vec3(rd.x * ca - rd.z * sa, rd.y, rd.x * sa + rd.z * ca);
+    vec2 g = boxGate(lo, ld, uShipHalf + 1.0);
+    if (g.x < g.y && g.y > 0.0) {
+      float t = max(g.x, 0.0);
+      for (int i = 0; i < 40; i++) {
+        float d = shipDE(lo + ld * t, uShipHalf);
+        if (d < 0.15 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 1.0 + float(s); } break; }
+        t += d;
+        if (t > g.y) break;
+      }
+    }
+  }
+  // relay bulb
+  if (uRelay.y > -9000.0) {
+    vec3 oc = ro - uRelay.xyz;
+    float R = uRelay.w * 1.35;
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - R * R;
+    float disc = b * b - c;
+    if (disc > 0.0) {
+      float sq = sqrt(disc);
+      float t = max(-b - sq, 0.0);
+      float t1 = -b + sq;
+      float S = uRelay.w / 1.2;
+      for (int i = 0; i < 48; i++) {
+        float d = mandelbulbDE((ro + rd * t - uRelay.xyz) / S) * S * 0.8;
+        if (d < 0.05 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 7.0; } break; }
+        t += d;
+        if (t > t1) break;
+      }
+    }
+  }
+  return vec2(tBest, idBest);
+}
+
+// numeric normal on whichever alien surface was hit
+vec3 alienNormal(vec3 wp, float id) {
+  vec2 e = vec2(0.35, 0.0);
+  if (id > 6.5) {
+    float S = uRelay.w / 1.2;
+    vec3 c = uRelay.xyz;
+    #define BDE(P) (mandelbulbDE(((P) - c) / S) * S)
+    return normalize(vec3(BDE(wp + e.xyy) - BDE(wp - e.xyy), BDE(wp + e.yxy) - BDE(wp - e.yxy), BDE(wp + e.yyx) - BDE(wp - e.yyx)));
+    #undef BDE
+  }
+  vec3 c; vec3 h; float ca = 1.0, sa = 0.0;
+  if (id < 0.5) { c = uMotherPos; h = uMotherHalf; }
+  else {
+    int s = int(id - 1.0);
+    c = uShipPos[s].xyz; h = uShipHalf;
+    ca = cos(uShipPos[s].w); sa = sin(uShipPos[s].w);
+  }
+  #define SDE(P) shipDE(shipLocal(P, c, ca, sa), h)
+  vec3 n = normalize(vec3(SDE(wp + e.xyy) - SDE(wp - e.xyy), SDE(wp + e.yxy) - SDE(wp - e.yxy), SDE(wp + e.yyx) - SDE(wp - e.yyx)));
+  #undef SDE
+  return n;
+}
+
 // ---------- shadow pack (v7.6) ----------
 // Three light-blockers beyond the terrain's own soft shadow, all gated by
 // the tune-panel toggle. CRAFT: real — bounding-sphere test then a short SDF
@@ -775,6 +924,7 @@ void main() {
   float tW = (rd.y < -1e-4 && ro.y > WATER_LEVEL) ? (WATER_LEVEL - ro.y) / rd.y : -1.0;
   float tC = marchCraft(ro, rd);
   float tR = marchRings(ro, rd);
+  vec2 mal = marchAliens(ro, rd);
 
   float t = T_MAX;
   int mat = 0;                                              // 0 sky
@@ -782,6 +932,7 @@ void main() {
   if (tW > 0.0 && tW < t) { t = tW; mat = 2; }              // water
   if (tC > 0.0 && tC < t) { t = tC; mat = 3; }              // aircraft
   if (tR > 0.0 && tR < t) { t = tR; mat = 5; }              // score ring
+  if (mal.y > -0.5 && mal.x < t) { t = mal.x; mat = 6; }    // alien fleet
 
   vec3 col;
 
@@ -888,6 +1039,41 @@ void main() {
     col += alb * 0.4;
     col = applyFog(col, ro, rd, t, sun);
 
+  } else if (mat == 6) {
+    // alien hull: dark iridescent metal, pulsing fluo-green seams, violet
+    // glow for the relay bulb; melting ships go molten orange
+    vec3 pos = ro + rd * t;
+    vec3 n = alienNormal(pos, mal.y);
+    float melt = (mal.y < 0.5) ? uMotherMelt : (mal.y > 6.5 ? uRelayMelt : uShipMelt[int(mal.y - 1.0)]);
+    float fres = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
+    float dif = clamp(dot(n, sun), 0.0, 1.0) * cloudShadow(pos, sun);
+    // bio-organic hull (v9.1): dendritic Julia filaments + fbm mottling in
+    // the ship's LOCAL frame — no world-aligned stripes, no moiré (the
+    // pattern fades to a plain glow with distance instead of aliasing)
+    vec3 lp;
+    float sizeRef;
+    if (mal.y < 0.5) { lp = pos - uMotherPos; sizeRef = uMotherHalf.z; }
+    else if (mal.y > 6.5) { lp = pos - uRelay.xyz; sizeRef = uRelay.w * 2.0; }
+    else {
+      int si = int(mal.y - 1.0);
+      float ca2 = cos(uShipPos[si].w), sa2 = sin(uShipPos[si].w);
+      lp = shipLocal(pos, uShipPos[si].xyz, ca2, sa2);
+      sizeRef = uShipHalf.x;
+    }
+    float oScale = 84.0 / max(sizeRef, 1.0);
+    float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
+    float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
+    float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);
+    vec3 alb = mix(vec3(0.05, 0.065, 0.08), vec3(0.16, 0.19, 0.23), fres) * (0.7 + 0.5 * mott);
+    col = alb * (sunLightCol(sun) * 1.4 * dif + skyAmbCol(sun) * 0.5);
+    vec3 glowC = (mal.y > 6.5) ? vec3(0.45, 0.35, 1.1) : vec3(0.2, 1.0, 0.45);
+    float vein = pow(clamp(org, 0.0, 1.0), 2.0);
+    col += glowC * vein * (0.5 + 0.25 * sin(uTime * 2.0 + org * 9.0)) * (0.35 + 0.65 * detail);
+    col += glowC * fres * 0.22;
+    if (mal.y > 6.5) col += vec3(0.55, 0.2, 1.0) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
+    col = mix(col, vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0)), clamp(melt, 0.0, 1.0) * 0.8);
+    col = applyFog(col, ro, rd, t, sun);
+
   } else {
     vec3 pos = ro + rd * t;
     vec3 n = craftNormal(pos);
@@ -903,6 +1089,29 @@ void main() {
     vec3 hlf = normalize(sun - rd);
     col = alb * lin + vec3(1.0, 0.9, 0.75) * pow(clamp(dot(n, hlf), 0.0, 1.0), 60.0) * sh * 0.8;
     col = applyFog(col, ro, rd, t, sun);
+  }
+
+  // alien harvest lasers (v9.0): a translucent fluo-green SHEET spanning the
+  // ship's full length, dropping to the terrain — brightest at ground contact
+  for (int s = 0; s < 6; s++) {
+    if (float(s) >= uShipN || uShipLaser[s] < 0.5) continue;
+    float ca = cos(uShipPos[s].w), sa = sin(uShipPos[s].w);
+    vec3 n = vec3(sa, 0.0, ca);                 // sheet normal = heading direction
+    float den = dot(rd, n);
+    if (abs(den) < 1e-4) continue;
+    float tp = dot(uShipPos[s].xyz - ro, n) / den;
+    if (tp < 0.0 || tp > t) continue;
+    vec3 hp = ro + rd * tp;
+    vec3 rel = hp - uShipPos[s].xyz;
+    float lx = rel.x * ca - rel.z * sa;         // along the long axis
+    if (abs(lx) > uShipHalf.x) continue;
+    if (hp.y > uShipPos[s].y - uShipHalf.y * 0.4) continue;
+    float gy = terrainShape(hp.xz);
+    if (hp.y < gy - 1.0) continue;
+    float pulse = 0.7 + 0.3 * sin(uTime * 9.0 + lx * 0.06);
+    float edge = smoothstep(uShipHalf.x, uShipHalf.x * 0.9, abs(lx));
+    float ground = 1.0 + 2.6 * exp(-(hp.y - gy) * 0.12);
+    col += vec3(0.25, 1.0, 0.35) * 0.14 * pulse * edge * ground;
   }
 
   // cumulonimbus over everything nearer than the hit (or the whole sky)

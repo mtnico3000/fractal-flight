@@ -27,7 +27,7 @@ export function initCollectedTex() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.activeTexture(gl.TEXTURE0);
 }
-export function collectTreeAt(wx, wy, wz, sndDelay) {
+export function collectTreeAt(wx, wy, wz, sndDelay, quiet) {
   // pops the (single) tree of the cell containing (wx, wz)
   const cx = Math.floor(wx / 26), cz = Math.floor(wz / 26);
   const key = cx + ':' + cz;
@@ -38,9 +38,11 @@ export function collectTreeAt(wx, wy, wz, sndDelay) {
   gl.bindTexture(gl.TEXTURE_2D, collectedTex);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, tx, ty, 1, 1, gl.RED, gl.UNSIGNED_BYTE, onePix);
   gl.activeTexture(gl.TEXTURE0);
-  score++;
-  $score.textContent = score;
-  popSound(sndDelay || 0);
+  if (!quiet) {
+    score++;
+    $score.textContent = score;
+  }
+  popSound(sndDelay || 0, quiet ? 0.10 : 0);
   pops.push({ x: wx, y: wy, z: wz, t0: performance.now() + (sndDelay || 0) * 1000 });
   return true;
 }

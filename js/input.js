@@ -2,7 +2,7 @@
 // joystick, touch buttons, and gyroscope tilt. Each source writes into its
 // own state object; the flight model sums and clamps them.
 
-import { sun, viewZoom } from './state.js';
+import { sun, viewZoom, camMode } from './state.js';
 import { canvas } from './renderer.js';
 import { ensureAudio, toggleMute } from './audio.js';
 import { fireGun, dropBomb } from './weapons.js';
@@ -23,8 +23,11 @@ window.addEventListener('keydown', e => {
   keys[e.code] = true;
   ensureAudio();
   if (e.code === 'KeyM') toggleMute();
+  if ((e.code === 'KeyY' || e.code === 'KeyZ') && !e.repeat) camMode.free = !camMode.free;   // KeyZ too: QWERTZ keyboards report the Y keycap as KeyZ
+  if (e.code === 'KeyX' && !e.repeat) camMode.pilot = !camMode.pilot;
+  if (e.code === 'KeyO' && !e.repeat) camMode.obs = !camMode.obs;
   if (e.code === 'KeyR') onReset();
-  if (['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space'].includes(e.code)) e.preventDefault();
+  if (['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
 canvas.addEventListener('pointerdown', ensureAudio);
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -42,6 +45,7 @@ window.addEventListener('mousemove', e => {
 // plane = cockpit view
 window.addEventListener('wheel', e => {
   e.preventDefault();
+  if (!camMode.free) return;   // wheel zoom only while the Y camera mode is on
   viewZoom.t = Math.max(0.07, Math.min(400, viewZoom.t * Math.exp(e.deltaY * 0.0012)));
 }, { passive: false });
 canvas.addEventListener('contextmenu', e => e.preventDefault());

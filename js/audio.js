@@ -7,6 +7,7 @@ import { craft, flags } from './state.js';
 let AC = null, ENG = null, muted = false;
 
 export function toggleMute() { muted = !muted; }
+export function isMuted() { return muted; }
 export function ensureAudio() {
   if (AC || muted) return;
   try {
@@ -72,7 +73,7 @@ export function grindUpdate(amt) {
   ENG.grindG.gain.setTargetAtTime(g, T, 0.05);
   ENG.grindF.frequency.setTargetAtTime(110 + amt * 240 + craft.speed * 1.4, T, 0.1);
 }
-export function popSound(delay) {
+export function popSound(delay, gain) {
   if (!AC || muted) return;
   const T = AC.currentTime + (delay || 0);
   const o = AC.createOscillator(), g = AC.createGain();
@@ -80,7 +81,7 @@ export function popSound(delay) {
   o.frequency.setValueAtTime(520 + Math.random() * 180, T);
   o.frequency.exponentialRampToValueAtTime(150, T + 0.11);
   g.gain.setValueAtTime(0.0001, T);
-  g.gain.exponentialRampToValueAtTime(0.20, T + 0.014);
+  g.gain.exponentialRampToValueAtTime(gain || 0.20, T + 0.014);
   g.gain.exponentialRampToValueAtTime(0.0001, T + 0.16);
   o.connect(g); g.connect(AC.destination);
   o.start(T); o.stop(T + 0.18);
@@ -202,6 +203,40 @@ export function explosionSound() {
   tsrc.connect(tg); tg.connect(AC.destination);
   tsrc.start(T); tsrc.stop(T + tdur);
 }
+
+export function zapSound() {
+  // harvester -> relay energy shot: quick filtered square zap
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'square';
+  o.frequency.setValueAtTime(920, T);
+  o.frequency.exponentialRampToValueAtTime(180, T + 0.16);
+  f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 2.5;
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.09, T + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 0.2);
+  o.connect(f); f.connect(g); g.connect(AC.destination);
+  o.start(T); o.stop(T + 0.22);
+}
+
+export function relayBlastSound() {
+  // relay -> mothership discharge: big rising-falling saw sweep
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(70, T);
+  o.frequency.exponentialRampToValueAtTime(950, T + 0.5);
+  o.frequency.exponentialRampToValueAtTime(120, T + 1.1);
+  f.type = 'lowpass'; f.frequency.value = 2400;
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.3, T + 0.08);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 1.2);
+  o.connect(f); f.connect(g); g.connect(AC.destination);
+  o.start(T); o.stop(T + 1.25);
+}
+
 
 export function ringSound() {
   // bright two-note chime, distinct from the spore pop

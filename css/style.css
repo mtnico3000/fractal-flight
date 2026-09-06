@@ -30,6 +30,12 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   background: rgba(0,0,0,0.5); text-align: center;
   color: rgba(255, 220, 180, 0.95); font-size: 10px; font-weight: 600;
 }
+#hud .key.on {
+  border-color: rgba(110, 230, 130, 0.8);
+  color: #b6f7c1;
+  background: rgba(30, 110, 55, 0.45);
+  text-shadow: 0 0 6px rgba(90, 220, 120, 0.5);
+}
 #hud .desc { opacity: 0.7; }
 #info {
   position: fixed; bottom: 14px; right: 18px;
@@ -48,7 +54,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   pointer-events: none;
 }
 #compass svg { width: 100%; height: 100%; }
-#tune {
+#tune, #tuneA {
   position: fixed; bottom: 14px; left: 18px; width: 224px;
   color: rgba(220, 230, 245, 0.85);
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
@@ -57,36 +63,36 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   border: 1px solid rgba(255, 200, 130, 0.25); border-radius: 6px;
   padding: 8px 10px; user-select: none;
 }
-#tune h2 {
+#tune h2, #tuneA h2 {
   font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
   color: rgba(255, 200, 130, 0.95); text-transform: uppercase;
   cursor: pointer; display: flex; justify-content: space-between;
 }
-#tune h2 .caret { opacity: 0.7; }
-#tune .body { margin-top: 6px; }
-#tune.closed .body { display: none; }
-#tune .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-#tune .trow label { flex: 0 0 74px; opacity: 0.75; }
-#tune .trow input[type=range] {
+#tune h2 .caret, #tuneA h2 .caret { opacity: 0.7; }
+#tune .body, #tuneA .body { margin-top: 6px; }
+#tune.closed .body, #tuneA.closed .body { display: none; }
+#tune .trow, #tuneA .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#tune .trow label, #tuneA .trow label { flex: 0 0 74px; opacity: 0.75; }
+#tune .trow input[type=range], #tuneA .trow input[type=range] {
   flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
   background: rgba(255, 200, 130, 0.25); border-radius: 2px; outline: none;
 }
-#tune .trow input[type=range]::-webkit-slider-thumb {
+#tune .trow input[type=range]::-webkit-slider-thumb, #tuneA .trow input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 10px; height: 10px;
   border-radius: 50%; background: rgba(255, 200, 130, 0.95); cursor: pointer;
 }
-#tune .trow input[type=range]::-moz-range-thumb {
+#tune .trow input[type=range]::-moz-range-thumb, #tuneA .trow input[type=range]::-moz-range-thumb {
   width: 10px; height: 10px; border: none;
   border-radius: 50%; background: rgba(255, 200, 130, 0.95); cursor: pointer;
 }
-#tune .trow .val { flex: 0 0 44px; text-align: right; color: rgba(255, 200, 130, 0.9); }
-#tune .treset {
+#tune .trow .val, #tuneA .trow .val { flex: 0 0 44px; text-align: right; color: rgba(255, 200, 130, 0.9); }
+#tune .treset, #tuneA .treset {
   margin-top: 6px; width: 100%; padding: 3px 0;
   background: rgba(255, 200, 130, 0.12); color: rgba(255, 220, 180, 0.95);
   border: 1px solid rgba(255, 200, 130, 0.35); border-radius: 4px;
   font: inherit; letter-spacing: 1.5px; cursor: pointer;
 }
-#tune .treset:hover { background: rgba(255, 200, 130, 0.25); }
+#tune .treset:hover, #tuneA .treset:hover { background: rgba(255, 200, 130, 0.25); }
 #fx {
   position: fixed; inset: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 5;
@@ -139,7 +145,7 @@ body.touch #hud .row { display: none; }
 body.touch #hud .touch-hint { display: block; }
 #hud .touch-hint { display: none; opacity: 0.7; font-size: 10px; }
 body.touch #info { bottom: auto; top: 96px; }
-body.touch #tune { display: none; }
+body.touch #tune, body.touch #tuneA { display: none; }
 #joystick {
   position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: calc(20px + env(safe-area-inset-left));
   width: 130px; height: 130px; border-radius: 50%;
@@ -244,7 +250,9 @@ body.touch #tune { display: none; }
 #startBtn:hover { background: rgba(255, 200, 130, 0.3); }
 @keyframes btnIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
 /* keep the key guide + tuning panel visible ON the start page */
-#hud, #tune { z-index: 16; }
+#hud, #tune, #tuneA { z-index: 16; }
+#tuneA { left: auto; right: 18px; bottom: 130px; border-color: rgba(120, 255, 150, 0.3); }
+#tuneA h2, #tuneA h2 .caret { color: rgba(140, 255, 170, 0.95); }
 #err {
   position: fixed; inset: 0; display: none; overflow: auto;
   background: rgba(10, 5, 5, 0.96); color: #ff9c9c;

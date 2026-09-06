@@ -66,6 +66,36 @@ function projectFx(camB, px, py, pz, W, H) {
   const ux = lx / (lz * TAN_HALF_FOV), uy = ly / (lz * TAN_HALF_FOV);
   return { x: (ux * H + W) / 2, y: H * (1 - uy) / 2, z: lz };
 }
+
+// alien energy bolts (v9.0): green harvester shots, blue-white relay blasts
+export function drawBolts(camB, now, bolts) {
+  if (!bolts.length) return;
+  const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
+  fxCtx.globalCompositeOperation = 'lighter';
+  fxCtx.lineCap = 'round';
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const b = bolts[i];
+    const k = (now - b.t0) / b.dur;
+    if (k > 1.15) { bolts.splice(i, 1); continue; }
+    const kk = Math.min(1, k);
+    const hx = b.x0 + (b.x1 - b.x0) * kk, hy = b.y0 + (b.y1 - b.y0) * kk, hz = b.z0 + (b.z1 - b.z0) * kk;
+    const tl = Math.max(0, kk - (b.big ? 0.3 : 0.15));
+    const txp = b.x0 + (b.x1 - b.x0) * tl, typ = b.y0 + (b.y1 - b.y0) * tl, tzp = b.z0 + (b.z1 - b.z0) * tl;
+    const A = projectFx(camB, txp, typ, tzp, W, H);
+    const C = projectFx(camB, hx, hy, hz, W, H);
+    if (!A || !C) continue;
+    const wpx = Math.max(b.big ? 3 : 1.5, (b.big ? 1200 : 350) / C.z);
+    const col = b.big ? '140,210,255' : '90,255,130';
+    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
+    fxCtx.strokeStyle = 'rgba(' + col + ',0.22)'; fxCtx.lineWidth = wpx * 3.2; fxCtx.stroke();
+    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
+    fxCtx.strokeStyle = 'rgba(' + col + ',0.9)'; fxCtx.lineWidth = wpx; fxCtx.stroke();
+    fxCtx.beginPath(); fxCtx.arc(C.x, C.y, wpx * 1.8, 0, 6.2832);
+    fxCtx.fillStyle = 'rgba(255,255,255,0.85)'; fxCtx.fill();
+  }
+  fxCtx.globalCompositeOperation = 'source-over';
+}
+
 export function drawTrail(camB, now, bullets, bombs, impacts) {
   const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
   if (fxCanvas.width !== W || fxCanvas.height !== H) { fxCanvas.width = W; fxCanvas.height = H; }

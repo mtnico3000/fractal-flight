@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Fractal Alps — Mandelbrot Flight v8.0</title>
+<title>Fractal Alps — Mandelbrot Flight v9.1</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <h1>Fractal Alps · Mandelbrot Flight <span style="opacity:.55">v8.0</span></h1>
+  <h1>Fractal Alps · Mandelbrot Flight <span style="opacity:.55">v9.1</span></h1>
   <div class="row"><span class="key">A</span><span class="key">D</span><span class="desc">roll · bank + pull to turn</span></div>
   <div class="row"><span class="key">SPACE</span><span class="desc">hold: free flight · no auto-level</span></div>
   <div class="row"><span class="key">W</span><span class="key">S</span><span class="desc">pitch · hold S for a loop</span></div>
@@ -20,10 +20,13 @@
   <div class="row"><span class="key">CLICK</span><span class="desc">fire · hold = burst</span></div>
   <div class="row"><span class="key">R-CLICK</span><span class="desc">drop bomb</span></div>
   <div class="row"><span class="key">R</span><span class="desc">reset / fly again</span></div>
-  <div class="row"><span class="key">M</span><span class="desc">engine sound on/off</span></div>
+  <div class="row"><span class="key" id="key-m">M</span><span class="desc">engine sound on/off</span></div>
   <div class="row"><span class="key">R-DRAG</span><span class="desc">reposition sun</span></div>
-  <div class="row"><span class="key">MOUSE</span><span class="desc">orbit view · center = chase cam</span></div>
-  <div class="row"><span class="key">WHEEL</span><span class="desc">zoom · far = map view · close = cockpit</span></div>
+  <div class="row"><span class="key" id="key-y">Y</span><span class="desc">mouse camera + zoom on/off</span></div>
+  <div class="row"><span class="key" id="key-x">X</span><span class="desc">pilot view on/off</span></div>
+  <div class="row"><span class="key" id="key-o">O</span><span class="desc">observation hover · arrows move · W/S up-down</span></div>
+  <div class="row"><span class="key">MOUSE</span><span class="desc">orbit view (Y on) · center = chase</span></div>
+  <div class="row"><span class="key">WHEEL</span><span class="desc">zoom (Y on) · far = map · close = cockpit</span></div>
   <div class="row"><span class="key">M-CLICK</span><span class="desc">recenter the view on the cursor</span></div>
   <div class="touch-hint">stick: steer &amp; pitch · drag sky: sun<br>tilt: steer with phone orientation</div>
 </div>
@@ -58,6 +61,10 @@
   <h2 id="tuneHead">Tuning <span class="caret">▸</span></h2>
   <div class="body" id="tuneBody"></div>
 </div>
+<div id="tuneA" class="closed">
+  <h2 id="tuneAHead">Aliens <span class="caret">▸</span></h2>
+  <div class="body" id="tuneABody"></div>
+</div>
 <div id="info">
   <div id="pilotTag" style="display:none;color:rgba(255,200,130,0.9);font-weight:700;letter-spacing:2px;margin-bottom:4px"></div>
   <div>ALT  <span id="alt">0</span> m</div>
@@ -67,7 +74,7 @@
 </div>
 <div id="start">
   <div>
-    <h1>FRACTAL ALPS<span>Mandelbrot Flight · v8.0</span></h1>
+    <h1>FRACTAL ALPS<span>Mandelbrot Flight · v9.1</span></h1>
     <div id="spinner"></div>
     <div id="loadStatus">waking up WebGL2 &hellip;</div>
     <div class="pilotrow">
@@ -82,7 +89,7 @@
 </div>
 <pre id="err"></pre>
 <script>
-// Watchdog (v8.0): module scripts are refused on file:// pages (CORS), in
+// Watchdog (v9.1): module scripts are refused on file:// pages (CORS), in
 // which case main.js never runs and the start page would spin forever.
 // This inline classic script always runs — if the game hasn't booted
 // shortly, say what is wrong instead.

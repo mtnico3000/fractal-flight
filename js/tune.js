@@ -1,5 +1,22 @@
 // ============ TUNING PANEL ============
 // Each knob: v = live value, d = default, min/max/step, fmt = display formatting.
+// ---- alien fleet knobs (v9.0): second panel, bottom-right ----
+export const TUNEA = {
+  boxScale: { label: 'box scale',   v: 2.4,   d: 2.4,   min: -3,   max: 3,     step: 0.1,  fmt: x => x.toFixed(1) },
+  boxFold:  { label: 'box fold',    v: 1.0,   d: 1.0,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
+  boxMinR:  { label: 'box min r',   v: 0.5,   d: 0.5,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
+  bulbPow:  { label: 'bulb power',  v: 8,     d: 8,     min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
+  moLen:    { label: 'mother len',  v: 2000,  d: 2000,  min: 400,  max: 3000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moWid:    { label: 'mother wid',  v: 1000,  d: 1000,  min: 200,  max: 2000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moHei:    { label: 'mother hgt',  v: 100,   d: 100,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  moAlt:    { label: 'mother alt',  v: 10000, d: 10000, min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
+  shLen:    { label: 'ship length', v: 200,   d: 200,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  shWid:    { label: 'ship width',  v: 60,    d: 60,    min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  shHei:    { label: 'ship height', v: 20,    d: 20,    min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
+  shSpeed:  { label: 'ship speed',  v: 8,     d: 8,     min: 2,    max: 30,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
+  relSize:  { label: 'relay size',  v: 30,    d: 30,    min: 10,   max: 80,    step: 2,    fmt: x => x.toFixed(0) + ' m' },
+};
+
 export const TUNE = {
   shadows:    { label: 'shadows',     v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'on' : 'off' },
   cursorA:    { label: 'cursor',      v: 0,       d: 0,       min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
@@ -23,15 +40,15 @@ export const TUNE = {
   cloudSize:  { label: 'cloud size',  v: 250,     d: 250,     min: 60,     max: 280,    step: 5,       fmt: x => x.toFixed(0) + ' m' },
 };
 
-export function buildTunePanel() {
-  const panel = document.getElementById('tune');
-  const body = document.getElementById('tuneBody');
-  document.getElementById('tuneHead').addEventListener('click', () => {
+function buildPanel(OBJ, panelId, headId, bodyId) {
+  const panel = document.getElementById(panelId);
+  const body = document.getElementById(bodyId);
+  document.getElementById(headId).addEventListener('click', () => {
     panel.classList.toggle('closed');
     panel.querySelector('.caret').textContent = panel.classList.contains('closed') ? '▸' : '▾';
   });
-  for (const key in TUNE) {
-    const t = TUNE[key];
+  for (const key in OBJ) {
+    const t = OBJ[key];
     const row = document.createElement('div');
     row.className = 'trow';
     row.innerHTML = `<label>${t.label}</label><input type="range" min="${t.min}" max="${t.max}" step="${t.step}" value="${t.v}"><span class="val">${t.fmt(t.v)}</span>`;
@@ -46,7 +63,12 @@ export function buildTunePanel() {
   const reset = document.createElement('button');
   reset.className = 'treset'; reset.textContent = 'RESET DEFAULTS';
   reset.addEventListener('click', () => {
-    for (const key in TUNE) { const t = TUNE[key]; t.v = t.d; t._slider.value = t.d; t._val.textContent = t.fmt(t.d); }
+    for (const key in OBJ) { const t = OBJ[key]; t.v = t.d; t._slider.value = t.d; t._val.textContent = t.fmt(t.d); }
   });
   body.appendChild(reset);
+}
+
+export function buildTunePanel() {
+  buildPanel(TUNE, 'tune', 'tuneHead', 'tuneBody');
+  buildPanel(TUNEA, 'tuneA', 'tuneAHead', 'tuneABody');
 }
