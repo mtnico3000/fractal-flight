@@ -176,6 +176,43 @@ Key chips in the HUD glow green when a toggle is active.
   `git checkout js/config.js` re-materialized ONE 29-line file as CRLF and
   put 28 stray `
 ` into an otherwise byte-stable artifact.
+- 🖥️ **ASK WHAT RESOLUTION AND WHICH GPU BEFORE DEBUGGING ANY GRAPHICS
+  COMPLAINT.** The whole of ROADMAP section A was built to fix a "shimmer"
+  that was really 683x359 on an Intel iGPU while an RTX 4090 sat idle in the
+  same laptop. Three compounding causes, all outside the code: the browser
+  defaults to the integrated GPU (no per-app preference; `powerPreference:
+  'high-performance'` is only a HINT and was not enough), the fps counter
+  could not report below 20 so the auto-scaler pinned resolution at its 0.4
+  floor, and on battery the dGPU sits at P8 / 210 MHz / 5.5 W against a
+  3105 MHz maximum. Fixed, the same code runs 1706x1495 at 37-45 fps with no
+  visible shimmer. One-off dGPU test:
+  `chrome.exe --user-data-dir=<temp> --force-high-performance-gpu <url>`,
+  confirmed with `nvidia-smi`. Full write-up in docs/RESEARCH.md §3.
+- ⏱️ **The fps counter is not an instrument, and it steers the auto-scaler.**
+  `frame()` clamps `dt` to 0.05 s so a stall cannot integrate one huge physics
+  step. The fps STAT must use the unclamped `rawDt` — accumulating the clamped
+  value pinned the readout at exactly 1/0.05 = 20 however bad things got,
+  which blinded `adjustQuality()` and produced a published cost figure that
+  was wrong. For real numbers use median `requestAnimationFrame` deltas.
+  `test/test_render.js` guards it.
+- 📈 **The `resolution` knob is the strongest antialiasing lever in the
+  game**, and the only one with no downside: 0 = auto (the adaptive scaler),
+  above 1 supersamples (the browser downsamples the oversized buffer on
+  composite). Measured −52% visible shimmer at 2x for 3.7x the frame time;
+  cost is linear in pixel count, ~1.9x per doubling. The HUD `RES` readout
+  exists because a resolution slider whose result you cannot see is unusable.
+- 🏎️ **`DPR` is capped at 1.0** (renderer.js), so the drawing buffer is
+  `clientWidth * renderScale`, NOT `clientWidth * devicePixelRatio`. Any
+  before/after measurement must peg the adaptive scaler first — it resizes the
+  buffer, which changes `uPixScale`, which changes the LOD being measured.
+- 🔁 **`core.autocrlf` is true, so even `git checkout -b` hands files back as
+  CRLF.** `build.js` normalizes with `read()`, and `test_docs.js` had to do
+  the same after every regex anchored on a newline silently stopped matching
+  on a fresh branch. Any new file-reading check needs the same treatment.
+- ✂️ **A2–A6 were built, measured and deliberately dropped** — they live on
+  branch `v9.1`, with numbers in docs/RESEARCH.md. Do not rebuild them
+  without reading that table first. A1 is kept because it is a net speedup
+  (+3%) as well as a quality gain.
 - 📏 Measured 6 Sept 2026: at the current fleet tuning a **harvester never
   visibly falls**. It hovers 45..60 m up while `shHei/2` is 60 m, so
   `fallAndMelt` lands it in the very frame it dies and it melts in place. The
@@ -213,6 +250,12 @@ node test/run_tests.js        # everything
   measured octave MEAN (toward zero and distant ground sinks as you fly at
   it), and no stray backtick closes the GLSL template. All three mutations
   verified red.
+- `test/test_render.js` — the two render-path invariants that fail SILENTLY:
+  the fps stat uses the unclamped `rawDt` (it floored at 20 and blinded the
+  auto-scaler), and a manually pinned `resolution` makes `adjustQuality()`
+  stand down (otherwise the slider appears to do nothing). Plus the
+  MAX_TEXTURE_SIZE clamp that keeps a 2x supersample from failing in
+  resize(). All three mutations verified red.
 - `test/test_docs.js` — README and CLAUDE.md must list every js/ module and
   no ghost, the module count must be right, and the Running command block
   must invoke serve.py. The README listed the v5 module set until 6 Sept

@@ -20,6 +20,15 @@ RIGHT-DRAG move the sun, R reset, M mute.
 Mobile: virtual stick (steer + pitch), TILT toggles gyro steering, on-screen
 BOOST / FIRE / BOMB / altitude buttons, drag the sky to move the sun.
 
+The TUNING panel's `resolution` knob is the strongest image-quality control:
+`auto` follows the adaptive scaler, while anything above 1.0 supersamples (the
+oversized buffer is downsampled on composite). Measured at 2x it removes about
+half the visible shimmer for roughly 3.7x the frame time; the HUD's RES
+readout shows what you are actually rendering.
+
+⚠️ If it looks blocky and RES is small, check WHICH GPU your browser picked —
+on a laptop it usually defaults to the integrated one. See docs/RESEARCH.md §3.
+
 The start page shows load progress (the long step is the driver compiling
 the ~800-line world shader), lets you set a pilot name and the craft's wing
 accent color (both remembered), and arms START once the GPU has drawn its

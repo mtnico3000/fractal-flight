@@ -46,85 +46,64 @@ proper testing.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
+**Branch `v9.2` is the mainline** (`main` points at it). It branches from A1;
+A2–A6 were built, measured and dropped — see below before rebuilding any of
+them.
+
 0. **Run `node test/run_tests.js` first.** It should print "all suites
-   passed". Then `python serve.py 8734` and fly it once.
-1. Read docs/HISTORY.md once (the WHY archive) and **docs/RESEARCH.md
-   before touching sections A or B** — it holds the full shimmer diagnosis
-   (7 causes), the reasoning behind each fix, the paper analyses, the
-   TerraForge findings, and the Mandelbox parameter guide.
-2. ✅ **C1 — single-file build script. DONE 6 Sept 2026.** `node build.js`
-   generates `fractal-flight-v9_1.html` from the modules. **The single file is
-   now a build ARTIFACT — never edit it.** `node test/run_tests.js` fails if
-   the committed artifact is not byte-identical to what the current source
-   produces, so it cannot drift again.
-   * The concatenation order is DERIVED from the import graph (depth-first
-     post-order = the browser's own module evaluation order), not the list
-     that used to sit here — a hard-coded list works until someone adds an
-     import. It comes out as: config · state · shaders · renderer · tune ·
-     audio · terrain · fx · spores · weapons · hud · input · math · rings ·
-     clouds · aliens · flight · main.
-   * The bundle is wrapped in an IIFE with `'use strict'`, so the artifact no
-     longer publishes ~200 globals the way the hand-built one did (`camPos`
-     was a real global in 20 places there). `check_module_refs.py` runs as
-     part of the build, which is what makes the concatenation safe.
-   * All four gaps the stale v9.1b had are closed and were verified against
-     it: the tuning-panel overflow fix + COPY JSON, the tuned world/fleet
-     defaults and raised ceilings, the bomb constants + `hullAlive`, and the
-     `camPos`→`viewPos` freeze fix.
-   * Found on the way: `css/style.css` started with a literal `<style>` line,
-     which CSS parses as an invalid rule that also eats the rule after it —
-     **the universal reset had been dead in the modular build all along**
-     (`content-box`, default heading margins, panels overflowing). Removed;
-     the modular HUD layout changed visibly for the better.
+   passed" (32 assertions, 6 files). Then `python serve.py 8734`, press
+   START, and fly it once.
+1. Read docs/HISTORY.md once (the WHY archive). **Before touching graphics,
+   read docs/RESEARCH.md §3** — in particular the entry explaining that the
+   whole shimmer hunt was answering the wrong question.
 
-3. ✅ **A1 — footprint-aware detail fade. DONE 6 Sept 2026.** Terrain and
-   colour octaves now fade out as they cross Nyquist for the pixel's ground
-   footprint, under a `detail fade` knob (0 = pre-A1 look, 1 = default,
-   2 = aggressive). Measured on a locked camera by shifting `uJitter` half a
-   pixel (method + numbers in docs/RESEARCH.md §3):
-   * ground-filling view, near field: shimmer **−41% mean, −70% median**.
-     That is the "ground sparkles" complaint, and it is fixed.
-   * far field: only −3%. **59% of the energy out there is silhouette
-     edges** — 10% of pixels flipping hit/miss — which A1 cannot touch by
-     construction.
-   * GPU throughput **+3%** (fade 1) / **+6%** (fade 2), cold shader compile
-     unchanged. Compare Mpix/s, not fps: the adaptive render scaler reacts to
-     fps and hides the effect.
-   * fade 2 measures the same as fade 1 in the near/mid field — everything
-     sub-pixel is already gone at 1 — so **1.0 is the right default** and 2 is
-     only a knob for weak GPUs.
-   * `terrainShape()` is unchanged (it is `terrainShapeLOD(p, 0.0)`), so the
-     probe row and the terrain.js mirror still agree: CPU/GPU divergence
-     measured at 0.04–0.31 m, the same fp32-vs-fp64 band as before A1.
-     `test/test_shader.js` locks that invariant.
-4. **A4 — silhouette stabilization. PROMOTED above A2/A3** by A1's
-   measurements: it is now where essentially all the remaining shimmer lives
-   (a few bisection refine steps at the hit, slower-growing hit tolerance).
-   Then **A2 + A3 — specular softening + shoreline band** (small, do
-   together, but not where the energy is).
-5. **C2 — CONTINUE the suite** (started 6 Sept 2026; `node test/run_tests.js`
-   is green with 29 assertions). Already covered: the alien bomb economy and
-   hull states, the tuning-panel invariants, README/CLAUDE.md drift, the
-   cross-module reference check, the single-file build's freshness, and the
-   shader-source invariants that keep collision full-detail. **Still to port: GLSL parse via
-   @shaderfrog/glsl-parser** (function-like #define macros produce ignorable
-   warnings) **and a jsdom module-graph smoke load** (matchMedia needs a
-   stub; do NOT override Node's `performance`). Both need dev dependencies,
-   which is why they were left — `.gitignore` already covers node_modules.
-   Keep adding opportunistically while touching flight/rings/aliens.
-6. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT
-   attribution in README), then **B1 — multifractal octaves**.
-7. Push the branch, update the PR to julaub — it's been a long volley.
-   Nothing has been pushed since v8.0: branch `v9.1` holds the whole
-   v8.1→v9.1b line plus this session's work, and `v7.0` still points exactly
-   at `origin/v7.0` so nothing jul has seen has moved.
+2. ▶ **C2 — CONTINUE the test suite. THIS IS THE NEXT ITEM.**
+   `node test/run_tests.js` is green with **32 assertions across 6 files**:
+   `test_aliens.js` (bomb economy, hull states), `test_tune.js` (knob
+   invariants), `test_build.js` (the artifact is byte-identical to what
+   build.js generates), `test_shader.js` (terrainShape is still the px=0
+   collision authority), `test_render.js` (fps stat uses rawDt; a pinned
+   resolution beats the auto-scaler), `test_docs.js` (README/CLAUDE.md
+   drift), plus `check_module_refs.py`.
+   * **Still to port, both needing dev dependencies** (`.gitignore` already
+     covers `node_modules`, which is why they were left):
+     - **GLSL parse via `@shaderfrog/glsl-parser`** — function-like `#define`
+       macros produce warnings that can be ignored. This would finally let
+       `test_shader.js` check the shader as CODE rather than by regex.
+     - **A jsdom module-graph smoke load** — stub `matchMedia`; do NOT
+       override Node's `performance`.
+   * Keep adding opportunistically while touching flight/rings/aliens.
 
-Working conventions: run `python serve.py 8734` for live testing (it sends
-no-store — the bare http.server lets a refresh replay cached modules);
-**run `node build.js` and commit the artifact with any change to js/, css/ or
-index.html** (the suite fails otherwise); every flight/ring/alien change gets
-a Node harness check before commit; keep the GLSL↔terrain.js mirror in sync
-(CLAUDE.md).
+3. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
+   for Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
+   (Musgrave-style octave coupling + a slider; mirror in terrain.js).
+
+4. **Push the branch and update the PR to julaub.** `main`/`v9.2` is **13+
+   commits ahead of `origin/main`** and nothing has been pushed since v8.0.
+   `origin` is Nico's own fork (mtnico3000); PRs go to julaub. Ask before
+   pushing — it is a volley.
+
+### ⏸ Parked, with reasons
+
+- **GPU / adapter warning on the start page.** Nico asked for a "GPU
+  selector"; a selector is **not buildable** — no web API enumerates or picks
+  an adapter (WebGL's `powerPreference` is a hint, WebGPU refuses enumeration
+  for fingerprinting reasons). What IS buildable and is worth more: read
+  `WEBGL_debug_renderer_info`, NAME the adapter on the start page, and warn
+  when it looks integrated/software, with the platform fix. Nico's call
+  8 Sept 2026: *"let's drop 2 for now"*. Caveats when it is picked up:
+  Firefox restricts the extension under `resistFingerprinting`, and it cannot
+  detect the battery/P8 case at all (the adapter name is identical at 210 MHz
+  and 3105 MHz) — only frame timing can.
+- **A2–A6.** Built, measured, dropped from the mainline; they live on branch
+  `v9.1`. The measurements are in docs/RESEARCH.md — **read that table before
+  rebuilding any of them.** A4 −28% far edges for −6% throughput; A2+A3
+  shore −71% / fireflies −83% for −2% (Nico: *"the beach fix was ok but had
+  some other aliasing issues which made me prefer the older version"*); A5 a
+  niche hover tool; A6 TAA measured **worse on both axes** (−31% detail,
+  +30% temporal) and needs motion vectors to be viable.
+- **`test_docs.js` CRLF fix is only on this branch.** If `v9.1` is ever
+  checked out fresh its doc guard will go red for that reason alone.
 
 ### Reference materials
 

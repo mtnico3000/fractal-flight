@@ -205,6 +205,66 @@ effect). Cold shader compile is unchanged, 83.6 s with A1 vs 82.9 s without
 -- measure this by busting the driver's program cache, or a warm reload
 reports 9 s and a cold one 80 s for the same code.
 
+### ⚠ THE SHIMMER DIAGNOSIS ABOVE WAS ANSWERING THE WRONG QUESTION (8 Sept 2026)
+
+Everything in section 3 is technically sound and was measured honestly. It
+was also **largely beside the point**, and the reason is worth more than any
+of the fixes.
+
+**The game was running at 683x359 on an Intel Iris Xe, while an RTX 4090 sat
+idle at 0% in the same laptop.** Three compounding causes:
+
+1. **The browser picked the iGPU.** No per-app GPU preference existed for
+   Chrome, so Windows defaulted it to integrated.
+   `powerPreference: 'high-performance'` in renderer.js is only a hint and was
+   NOT enough.
+2. **The fps counter could not report below 20.** `frame()` clamps `dt` to
+   0.05 s for physics; the fps stat accumulated that clamped value, so past
+   50 ms a frame it read exactly 20 forever. `adjustQuality()` steers on that
+   number, so it could not tell 20 fps from 3 and pinned renderScale at its
+   0.4 floor.
+3. **On battery the dGPU is held at its idle P-state** — measured 146/150
+   samples at P8 / 210 MHz / 5.5 W against a 3105 MHz / 150 W maximum.
+
+Fix all three and the same code runs at 1706x1495 at 37-45 fps, and the
+"pixel shifting" simply is not there. Nico, after seeing it: *"it's the low
+pixel count (auto, so about 683x359) that made me see the pixels
+shifting... We should have started with talking resolution!"*
+
+**Resolution is the strongest antialiasing lever in the game**, measured on a
+pinned camera against the DOWNSAMPLED image the compositor actually shows:
+
+| resolution scale | Mpix | frame time | visible shimmer |
+|---|---|---|---|
+| 1.00 | 0.65 | 1.00x | 2.071 |
+| 1.50 | 1.45 | 2.13x | **1.349 (-35%)** |
+| 2.00 | 2.58 | 3.69x | **1.000 (-52%)** |
+
+Doubling the pixel count costs ~1.9x frame time (cost is linear in pixels)
+and removes ~30% of the visible shimmer. Supersampling beats rendering at
+native (-30% vs -21% per doubling) because the downsample averages several
+samples into each display pixel — with no blur, no ghosting and nothing to
+tune, the exact opposite of A6's trade.
+
+**The methodological lesson, for the next graphics complaint:** ask what
+resolution and which GPU FIRST. Measuring fixes against a starved GPU
+measures the wrong thing however careful the measurements are. And do not
+use the HUD fps counter as an instrument — use median rAF deltas.
+
+### A2–A6 were built, measured, and DROPPED from the mainline (8 Sept 2026)
+
+They live on branch `v9.1` if ever wanted. Recorded so nobody rebuilds them:
+
+| item | measured | why dropped |
+|---|---|---|
+| A4 silhouette stabilization | far-field edge shimmer −28%, cost −6% throughput | modest gain for real cost once resolution was fixed |
+| A2+A3 specular AA + shoreline band | shore −71%, water fireflies −83%, cost −2% | the one Nico could SEE, but he judged it *"ok but had some other aliasing issues which made me prefer the older version"* |
+| A5 still-camera accumulation | hover converges, 5x cheaper parked | niche tool, added a freeze/signature machinery |
+| A6 TAA + reprojection | **−31% detail, +30% frame-to-frame change** — worse on both axes | needs motion vectors for camera-independent objects; shipped OFF, then dropped |
+
+A1 is kept on the mainline: it is the only one that is a net SPEEDUP (+3%)
+as well as a quality gain.
+
 ### Fixes, in order of value-per-effort (= ROADMAP A items)
 
 1. **Footprint-aware detail fade (A1)** — analytic mipmapping: scale fbm

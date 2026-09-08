@@ -56,12 +56,12 @@ Say which checks you promoted and which you deliberately did not, and why.
 
 Both are silent failures. Neither shows up as an error.
 
-- **The two builds.** Until ROADMAP C1 ships a build script, the modular repo
-  and the single-file `fractal-flight-vX_Y.html` are maintained by hand and
-  **every change is supposed to land in both**. If this session changed the
-  modular build only, either mirror it or write the divergence down
-  explicitly in the ROADMAP queue — an unrecorded divergence is how the dud
-  releases (v6_1, v6_2, v8_4, v9_1) happened.
+- **The two builds.** ✅ C1 shipped 6 Sept 2026, so this is now mechanical:
+  `node build.js` regenerates `fractal-flight-vX_Y.html` from the modules and
+  `node build.js --check` (also run by `test/test_build.js`) fails if the
+  committed artifact is not byte-identical. **Never hand-edit the artifact.**
+  Just confirm the check passes — hand-mirroring is what caused the dud
+  releases (v6_1, v6_2, v8_4, v9_1) and it is no longer a thing anyone does.
 - **The GLSL ↔ terrain.js mirror.** If `terrainShape` in `shaders.js` moved,
   `terrain.js` must move with it numerically — ring, cloud and alien
   placement and the camera clamp all read the JS mirror. Say whether you
@@ -104,8 +104,12 @@ points every new session at it. That queue *is* this project's handoff —
 ## 5. Clean up the workspace
 
 - Stop dev servers started for verification (`serve.py` on 8734).
-- Delete scratch files that ended up in the repo — this repo has no
-  `.gitignore`, so anything you drop in gets offered to `git add`.
+- Delete scratch files that ended up in the repo. There IS a `.gitignore`
+  now (added with C1) covering `__pycache__`, `node_modules` and editor
+  noise — but it deliberately does NOT ignore the generated single-file
+  build, which ships. Use the session scratchpad for temporary files.
+- Remove any `git worktree` added for A/B testing (`git worktree list`),
+  and stop the servers that were serving them.
 - Leave the browser tuning panel values alone; defaults live in `tune.js`.
 
 ## 6. Commit — carefully

@@ -410,6 +410,67 @@ than reasoned about.
   bundle with `new Function` and refuses to build; verified against the real
   bug before being called green.
 
+## v9.2 — the shimmer hunt, and what it was really about (7–8 Sept 2026)
+
+The longest detour in the project's history, and the most useful thing in it
+is the detour itself.
+
+**What was asked:** kill the shimmer (ROADMAP section A). **What was
+delivered:** A1 (footprint-aware detail fade), A4 (silhouette stabilization),
+A2+A3 (specular AA + shoreline band), A5 (still-camera accumulation), A6
+(TAA with reprojection). Every one measured with a purpose-built rig — a
+locked camera, `uJitter` shifted half a pixel, mean |delta luma| between the
+two frames, with a measurement floor of 0.004 against signals of 2–10.
+
+**What it turned out to be:** the game was rendering **683x359 on an Intel
+Iris Xe while an RTX 4090 sat idle at 0% in the same laptop.** Three causes
+compounded — the browser defaulted to the iGPU (a per-app GPU preference was
+never set, and `powerPreference: 'high-performance'` is only a hint); the fps
+counter could not report below 20, so the auto-scaler could not tell 20 fps
+from 3 and pinned resolution at its 0.4 floor; and on battery the dGPU sits
+at P8 / 210 MHz / 5.5 W against a 3105 MHz maximum. Fix those and the same
+code runs at 1706x1495 at 37–45 fps with no visible pixel shifting at all.
+
+Nico put it better than the roadmap did: *"it's the low pixel count (auto, so
+about 683x359) that made me see the pixels shifting... We should have started
+with talking resolution!"*
+
+- 🧭 **The lesson, stated plainly: ask what resolution and which GPU FIRST.**
+  Careful measurement of the wrong thing is still the wrong thing. Every A
+  number in docs/RESEARCH.md is honest and was taken on a starved GPU at a
+  resolution where the artifacts were real but the cause was not the code.
+- ⏱️ **A readout built for a HUD is not an instrument.** The fps counter
+  accumulated the CLAMPED physics `dt`, so past 50 ms a frame it read exactly
+  1/0.05 = 20 forever. It misled a published cost figure ("2x pixels = 1.6x
+  frame time"; the truth is ~1.9x, essentially linear) AND blinded the
+  auto-scaler that steers resolution. Nico spotted it from the other side:
+  *"it reads 20 but I see it's just a few frames per second, I can almost
+  count them."* Fixed; `test/test_render.js` guards it.
+- 📈 **Resolution is the strongest antialiasing lever there is**, and the
+  only one with no downside: −52% visible shimmer at 2x for 3.7x frame time,
+  no blur, no ghosting, nothing to tune. Shipped as the `resolution` knob
+  with a RES readout in the HUD, because a slider whose result you cannot see
+  is not usable.
+- ✂️ **A2–A6 were dropped from the mainline** and v9.2 branches from A1.
+  A1 stays because it is a net speedup (+3%) as well as a quality gain. The
+  others are on branch `v9.1` with their numbers in RESEARCH.md so nobody
+  rebuilds them. On A2+A3 specifically — the water/beach fix, the only one
+  visible in a still frame — Nico's verdict was *"the beach fix was ok but
+  had some other aliasing issues which made me prefer the older version."*
+- 🔌 **A hardware detour worth recording**: the barrel AC adapter is dead
+  (confirmed by elimination — USB-C PD charges fine, the ACPI AC-adapter
+  device is healthy, the battery is at 75% of design). It matters because on
+  battery the dGPU will not leave P8, so graphics work is blocked on a
+  replacement. The periodic "hiccup" seen only on the RTX, on both builds,
+  vanished after a reboot and was never reproduced by frame-time sampling
+  (zero spikes above 1.8x median). The only world-state teleport found was
+  jul's ring recycler moving a ring ~4 km on a ~4 s cadence — `js/rings.js`,
+  untouched by every A-commit.
+- Also fixed on the way: `test_docs.js` now normalizes line endings. With
+  `core.autocrlf` on, a bare `git checkout -b` re-materialized the docs as
+  CRLF and every regex anchored on a newline stopped matching — the same trap
+  `build.js` already guards with `read()`.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-
