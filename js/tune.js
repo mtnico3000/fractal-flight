@@ -19,6 +19,7 @@ export const TUNEA = {
 
 export const TUNE = {
   shadows:    { label: 'shadows',     v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'on' : 'off' },
+  resScale:   { label: 'resolution',  v: 0,     d: 0,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'auto' : x.toFixed(2) + '×' },
   detailFade: { label: 'detail fade',v: 1,      d: 1,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
   cursorA:    { label: 'cursor',      v: 15,      d: 15,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
   oceanSlope: { label: 'ocean slope', v: 0.016,   d: 0.016,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },

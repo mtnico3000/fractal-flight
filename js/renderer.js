@@ -18,14 +18,22 @@ export function fatal(msg) {
 let renderScale = 0.85;                    // start a notch below full, adapt up/down
 const DPR = Math.min(window.devicePixelRatio || 1, 1.0);
 export function setRenderScale(s) { renderScale = s; }
+export function getRenderScale() { return renderScale; }
+// A manual resolution scale above 1 supersamples: the buffer is bigger than
+// the canvas and the browser downsamples it on composite, which is real
+// antialiasing with none of TAA's blur or ghosting. Clamped to what the
+// driver will actually hand out rather than failing inside resize().
+const MAX_TEX = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096;
 export function adjustQuality(fps) {
   if (fps < 32 && renderScale > 0.4) renderScale = Math.max(0.4, renderScale - 0.15); // drop harder, floor lower (iGPU)
   else if (fps > 56 && renderScale < 1.0) renderScale = Math.min(1.0, renderScale + 0.05);
 }
 
 export function resize() {
-  const w = Math.round(canvas.clientWidth * DPR * renderScale);
-  const h = Math.round(canvas.clientHeight * DPR * renderScale);
+  const lim = Math.min(1, MAX_TEX / Math.max(1, canvas.clientWidth * DPR * renderScale),
+                          MAX_TEX / Math.max(1, canvas.clientHeight * DPR * renderScale));
+  const w = Math.round(canvas.clientWidth * DPR * renderScale * lim);
+  const h = Math.round(canvas.clientHeight * DPR * renderScale * lim);
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w; canvas.height = h;
     gl.viewport(0, 0, w, h);

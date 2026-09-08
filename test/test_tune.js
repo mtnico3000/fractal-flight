@@ -47,7 +47,7 @@ check('every knob is fully formed (label, range, step, fmt)', () => {
 });
 
 check('the two panels hold the expected number of knobs', () => {
-  eq(Object.keys(TUNE).length, 21, 'TUNE knob count');
+  eq(Object.keys(TUNE).length, 22, 'TUNE knob count');
   eq(Object.keys(TUNEA).length, 13, 'TUNEA knob count');
 });
 

@@ -4,7 +4,7 @@
 
 import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD } from './config.js';
 import { craft, camPos, viewPos, viewZoom, sun, probe } from './state.js';
-import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, nextFrame } from './renderer.js';
+import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
 import { TUNE, buildTunePanel } from './tune.js';
 import { initInput, IS_TOUCH } from './input.js';
 import { update, resetFlight, grindAmt } from './flight.js';
@@ -39,6 +39,7 @@ function applyCursor(v) {
   canvas.style.cursor = 'url(' + cc.toDataURL() + ') 12 12, crosshair';
 }
 let lastCursorA = -1;
+let wasManualRes = false;   // manual -> auto transition, see frame()
 
 const shakeCam = [0, 0, 0];   // scratch: camPos + grind jitter, uploaded to the GPU
 
@@ -105,21 +106,36 @@ async function main() {
   let fpsAcc = 0, fpsN = 0, fpsShown = 0, fpsTimer = 0;
 
   function frame(now) {
-  const dt = Math.min((now - lastT) / 1000, 0.05);
+  // dt is CLAMPED for the physics: a long stall must not integrate one huge
+  // step and fling the craft through a mountain. The fps statistic must use
+  // the REAL elapsed time though -- accumulating the clamped value pins the
+  // readout at exactly 1/0.05 = 20 the moment a frame takes over 50 ms, so it
+  // could never report below 20 however slow things actually got. That is not
+  // cosmetic: adjustQuality() steers on this number.
+  const rawDt = (now - lastT) / 1000;
+  const dt = Math.min(rawDt, 0.05);
   lastT = now;
 
   const { craftBasis, camBasis } = update(dt, now);
+  // Resolution scale: 0 = auto (the adaptive scaler), anything else pins it.
+  // Above 1 this supersamples -- the browser downsamples the oversized buffer
+  // on composite, which is the one antialiasing route with no blur, no
+  // ghosting and nothing to tune.
+  const manualRes = TUNE.resScale.v > 0.025;
+  if (manualRes) setRenderScale(TUNE.resScale.v);
+  else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
+  wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
 
   // dynamic resolution: keep it fluid on weak GPUs, crisp on strong ones
-  fpsAcc += dt; fpsN++; fpsTimer += dt;
+  fpsAcc += rawDt; fpsN++; fpsTimer += rawDt;   // real time, not the physics clamp
   if (fpsTimer > 0.75) {
     const fps = fpsN / fpsAcc;
     fpsShown = Math.round(fps);
-    adjustQuality(fps);
+    if (!manualRes) adjustQuality(fps);   // a pinned resolution wins
     fpsAcc = 0; fpsN = 0; fpsTimer = 0;
   }
-  updateHUD(fpsShown);
+  updateHUD(fpsShown, canvas.width, canvas.height);
   if (TUNE.cursorA.v !== lastCursorA) { lastCursorA = TUNE.cursorA.v; applyCursor(lastCursorA); }
 
   const sunDir = [

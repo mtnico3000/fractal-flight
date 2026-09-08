@@ -10,8 +10,13 @@ const path = require('path');
 const { check, ok, summary } = require('./harness');
 
 const root = path.join(__dirname, '..');
-const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
-const claude = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8');
+// Line endings normalized, same reason build.js does it: core.autocrlf is on
+// by default on Windows, so a fresh clone -- or even a `git checkout -b` --
+// hands these files back as CRLF, and every regex here anchored on a newline
+// silently stops matching. Cost a red suite on the a1-resolution branch.
+const read = f => fs.readFileSync(path.join(root, f), 'utf8').replace(/\r\n/g, '\n');
+const readme = read('README.md');
+const claude = read('CLAUDE.md');
 const modules = fs.readdirSync(path.join(root, 'js')).filter(f => f.endsWith('.js')).sort();
 
 console.log('docs');

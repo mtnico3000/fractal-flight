@@ -354,6 +354,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <div>SPD  <span id="spd">0</span> kn</div>
   <div>HDG  <span id="hdg">000</span>°</div>
   <div>FPS  <span id="fps">0</span></div>
+  <div>RES  <span id="res">0</span></div>
 </div>
 <div id="start">
   <div>
@@ -1697,14 +1698,22 @@ function fatal(msg) {
 let renderScale = 0.85;                    // start a notch below full, adapt up/down
 const DPR = Math.min(window.devicePixelRatio || 1, 1.0);
 function setRenderScale(s) { renderScale = s; }
+function getRenderScale() { return renderScale; }
+// A manual resolution scale above 1 supersamples: the buffer is bigger than
+// the canvas and the browser downsamples it on composite, which is real
+// antialiasing with none of TAA's blur or ghosting. Clamped to what the
+// driver will actually hand out rather than failing inside resize().
+const MAX_TEX = gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096;
 function adjustQuality(fps) {
   if (fps < 32 && renderScale > 0.4) renderScale = Math.max(0.4, renderScale - 0.15); // drop harder, floor lower (iGPU)
   else if (fps > 56 && renderScale < 1.0) renderScale = Math.min(1.0, renderScale + 0.05);
 }
 
 function resize() {
-  const w = Math.round(canvas.clientWidth * DPR * renderScale);
-  const h = Math.round(canvas.clientHeight * DPR * renderScale);
+  const lim = Math.min(1, MAX_TEX / Math.max(1, canvas.clientWidth * DPR * renderScale),
+                          MAX_TEX / Math.max(1, canvas.clientHeight * DPR * renderScale));
+  const w = Math.round(canvas.clientWidth * DPR * renderScale * lim);
+  const h = Math.round(canvas.clientHeight * DPR * renderScale * lim);
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w; canvas.height = h;
     gl.viewport(0, 0, w, h);
@@ -1799,6 +1808,7 @@ const TUNEA = {
 
 const TUNE = {
   shadows:    { label: 'shadows',     v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'on' : 'off' },
+  resScale:   { label: 'resolution',  v: 0,     d: 0,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'auto' : x.toFixed(2) + '×' },
   detailFade: { label: 'detail fade',v: 1,      d: 1,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
   cursorA:    { label: 'cursor',      v: 15,      d: 15,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
   oceanSlope: { label: 'ocean slope', v: 0.016,   d: 0.016,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },
@@ -2726,12 +2736,13 @@ const $alt = document.getElementById('alt');
 const $spd = document.getElementById('spd');
 const $hdg = document.getElementById('hdg');
 const $fps = document.getElementById('fps');
+const $res = document.getElementById('res');
 const $needle = document.getElementById('cneedle');
 const $keyY = document.getElementById('key-y');
 const $keyX = document.getElementById('key-x');
 const $keyM = document.getElementById('key-m');
 const $keyO = document.getElementById('key-o');
-function updateHUD(fps) {
+function updateHUD(fps, bw, bh) {
   $alt.textContent = Math.round(craft.pos[1] - WATER_LEVEL);
   $spd.textContent = Math.round(craft.speed);
   let deg = Math.round(Math.atan2(craft.f[0], craft.f[2]) * 180 / Math.PI) % 360;
@@ -2739,6 +2750,8 @@ function updateHUD(fps) {
   $hdg.textContent = String(deg).padStart(3, '0');
   $needle.setAttribute('transform', 'rotate(' + (-deg) + ')');
   $fps.textContent = fps;
+  // the resolution slider is only usable if you can see what it costs
+  $res.textContent = bw + '×' + bh;
   // toggle-status chips (v8.2): green = active
   $keyY.classList.toggle('on', camMode.free);
   $keyX.classList.toggle('on', camMode.pilot);
@@ -4105,6 +4118,7 @@ function applyCursor(v) {
   canvas.style.cursor = 'url(' + cc.toDataURL() + ') 12 12, crosshair';
 }
 let lastCursorA = -1;
+let wasManualRes = false;   // manual -> auto transition, see frame()
 
 const shakeCam = [0, 0, 0];   // scratch: camPos + grind jitter, uploaded to the GPU
 
@@ -4171,21 +4185,36 @@ async function main() {
   let fpsAcc = 0, fpsN = 0, fpsShown = 0, fpsTimer = 0;
 
   function frame(now) {
-  const dt = Math.min((now - lastT) / 1000, 0.05);
+  // dt is CLAMPED for the physics: a long stall must not integrate one huge
+  // step and fling the craft through a mountain. The fps statistic must use
+  // the REAL elapsed time though -- accumulating the clamped value pins the
+  // readout at exactly 1/0.05 = 20 the moment a frame takes over 50 ms, so it
+  // could never report below 20 however slow things actually got. That is not
+  // cosmetic: adjustQuality() steers on this number.
+  const rawDt = (now - lastT) / 1000;
+  const dt = Math.min(rawDt, 0.05);
   lastT = now;
 
   const { craftBasis, camBasis } = update(dt, now);
+  // Resolution scale: 0 = auto (the adaptive scaler), anything else pins it.
+  // Above 1 this supersamples -- the browser downsamples the oversized buffer
+  // on composite, which is the one antialiasing route with no blur, no
+  // ghosting and nothing to tune.
+  const manualRes = TUNE.resScale.v > 0.025;
+  if (manualRes) setRenderScale(TUNE.resScale.v);
+  else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
+  wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
 
   // dynamic resolution: keep it fluid on weak GPUs, crisp on strong ones
-  fpsAcc += dt; fpsN++; fpsTimer += dt;
+  fpsAcc += rawDt; fpsN++; fpsTimer += rawDt;   // real time, not the physics clamp
   if (fpsTimer > 0.75) {
     const fps = fpsN / fpsAcc;
     fpsShown = Math.round(fps);
-    adjustQuality(fps);
+    if (!manualRes) adjustQuality(fps);   // a pinned resolution wins
     fpsAcc = 0; fpsN = 0; fpsTimer = 0;
   }
-  updateHUD(fpsShown);
+  updateHUD(fpsShown, canvas.width, canvas.height);
   if (TUNE.cursorA.v !== lastCursorA) { lastCursorA = TUNE.cursorA.v; applyCursor(lastCursorA); }
 
   const sunDir = [
