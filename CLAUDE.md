@@ -3,7 +3,7 @@
 WebGL2 raymarched flight game over a Mandelbrot-shaped island. No meshes, no
 textures: every pixel sphere-traces a procedural world each frame. Two-player
 "ping-pong" development between Nico (mtnico3000) and jul (julaub) — code
-volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.1.
+volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.2.
 
 ## Builds — IMPORTANT
 
@@ -15,7 +15,7 @@ ROADMAP C1 on 6 Sept 2026.
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
   message instead of loading.
-- **Single-file** (`fractal-flight-v9_1.html`): a GENERATED ARTIFACT. **Never
+- **Single-file** (`fractal-flight-v9_2.html`): a GENERATED ARTIFACT. **Never
   edit it.** It is the double-click build jul and everyone else actually
   plays, so it ships in the repo even though it is generated.
 
@@ -244,4 +244,4 @@ v2→v4.6 built the world/weapons/probe; v5 merged jul's rings + went
 modular; v5-v6 restored arcade feel + start page; v7 camera suite +
 shadows + fx occlusion; v8 view toggles with exact memory; v9 alien
 invasion + observation mode; C1 ended the dual-maintenance (`build.js`).
-Current: v9.1.
+Current: v9.2.
