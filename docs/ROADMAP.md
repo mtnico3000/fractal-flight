@@ -1,5 +1,49 @@
 # Roadmap (drafted after the terrain/shimmer research session)
 
+## ⏸ BLOCKED ON HARDWARE — read this first (8 Sept 2026)
+
+**The barrel AC adapter is dead. Resume the graphics work when Nico says a
+new one has arrived.** Diagnosed by elimination on 8 Sept 2026:
+
+| evidence | reading |
+|---|---|
+| barrel adapter connected | `PowerLineStatus: Offline` — no AC seen at all |
+| after a full EC reset (shutdown, 40 s power-button hold, 10 min unplugged) | charge LED never lit |
+| **USB-C PD connected** | `PowerLineStatus: Online`, **charging at 24.6 W** |
+| ACPI "Microsoft AC Adapter" device | present, status **OK** |
+| battery health | 67 812 / 90 001 mWh (75 %), fine |
+
+USB-C charging works, so the EC, the charging circuit and the battery are
+all healthy — **only the barrel adapter is broken.** (A charge LIMIT would
+read "plugged in, not charging"; "Offline" means no adapter at all.)
+
+**Why this blocks the graphics work:** on battery the RTX 4090 is pinned at
+its idle P-state. Measured under sustained load: **146/150 samples at P8,
+210 MHz, 5.5 W**, against a card maximum of 3105 MHz / 150 W — roughly 7 %
+of clock on 4 % of power. USB-C PD flips PowerLineStatus to Online but only
+delivers ~25 W, which cannot feed a 150 W GPU, so it is not a substitute for
+proper testing.
+
+**When the adapter is back, resume in this order:**
+1. `nvidia-smi --query-gpu=pstate,clocks.sm,power.draw --format=csv` while
+   the game runs. Expect it to leave P8. If it does not, set NVIDIA Control
+   Panel > Manage 3D settings > Power management mode > Prefer maximum
+   performance.
+2. G-Helper `performance_mode` is **2 = Silent** with power limits of 80 —
+   switch to Balanced/Turbo before judging frame rates.
+3. Chrome must be forced onto the dGPU; `powerPreference:
+   'high-performance'` in renderer.js is NOT enough on this laptop. One-off:
+   `chrome.exe --user-data-dir=<temp> --force-high-performance-gpu <url>`.
+4. Re-test the periodic hiccup. It appeared ONLY on the RTX (never on the
+   iGPU), on both the A1 and v9.1 builds, and **went away after a reboot** —
+   consistent with a driver clock/power-state transition rather than
+   anything in the game. Frame-time sampling found zero spikes above 1.8x
+   median, and the only teleport in the world state was jul's ring recycler
+   (a ring moves ~4 km on a ~4 s cadence, `js/rings.js`, untouched by any
+   A-commit).
+
+---
+
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
 0. **Run `node test/run_tests.js` first.** It should print "all suites
