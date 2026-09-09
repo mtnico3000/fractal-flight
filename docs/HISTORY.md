@@ -471,6 +471,113 @@ with talking resolution!"*
   CRLF and every regex anchored on a newline stopped matching — the same trap
   `build.js` already guards with `read()`.
 
+## v9.3 — testing the tests, and a blue fleet (9 Sept 2026)
+
+Started as "check the repo and tell me the next steps". The first
+`node test/run_tests.js` printed **`1 suite(s) FAILED` while every single
+assertion printed `ok`** — which is why nobody had noticed it.
+
+### The flake, and what it was really saying
+
+`crashedAt()` in `test_aliens.js` parked the craft on `ships[0]`, marked the
+hull falling, and asserted no crash. But `initAliens()` drops **two**
+harvesters on independent random plains spots, and the harvester box is
+780 × 330 × 120 m. Measured over 3000 runs: **21 (0.7%)** land within
+57..408 m of each other, and the craft parked on the inert `ships[0]` is then
+inside the still-live `ships[1]`. The crash was real; it just came from the
+neighbour. At suite level that surfaced ~5% of the time. `crashedAt` now
+displaces every other hull before the update.
+
+`hullAlive()` was never wrong. The test was.
+
+### Two assertions that were passing for the wrong reason
+
+Found by breaking the source deliberately, which is now `test/mutants.js`:
+
+- **The A1 octave-fade check had never tested `fbmLOD`.** It sliced each
+  shader function with a fixed 700-char window; `fbmLOD`'s body is ~413
+  chars, so the window ran on into `fbmRLOD`. Fading `fbmLOD` toward `0.0` —
+  precisely the "distant ground sinks as you fly at it" bug the comment
+  describes — left all four assertions green, answered by the neighbour's
+  `mix()`.
+- **"A MELTING hull is inert" passed with `melt` deleted from `hullAlive`
+  entirely**, because a melting hull *sinks*, sliding out from under a craft
+  parked at its pre-update position. It was testing displacement, not
+  inertness. `crashedAt` now follows the hull for 8 frames.
+
+The same mistake then appeared in the terrain test being written to fix it:
+regexes scanning the whole shader were answered by `terrainCheapH()`, a
+**third** copy of the shaping maths (shadow rays) that nothing had ever
+guarded. Scoping to one function body fixed it and added a check that the
+cheap variant still shares the main body's constants.
+
+**Lesson, and it is the one worth keeping: a passing assertion is not
+evidence that it tests anything.** Only breaking the code it names proves it.
+
+### `test/test_terrain.js` — the last hole in the collision path
+
+`terrain.js` is the fp64 CPU mirror of `terrainShape`, read by ring placement,
+alien placement and the camera clamp, and it had **zero** coverage. Three
+angles, because none alone is enough: golden heights under a *pinned* TUNE
+stub (retuning the world is routine and must not false-red it); constants
+compared **numerically** against the GLSL, since the shader writes `1.0e-4`
+where the mirror writes `1e-4`; and the derived ones reconstructed — the
+shader's `smoothstep(0.58, 0.72, v)` survives in the mirror only as a `0.14`
+span, so it asserts `0.58 + 0.14 === 0.72`. 12 mutants, from both sides.
+
+### The fleet turns blue, and bombs land on hulls
+
+Nico's tuning values, and the fluo-green/violet palette moved to blue —
+hulls, seams, relay, harvest sheet. Melt stays orange as the only warm thing
+left on a hull, so damage reads at a glance.
+
+Bomb hits on hulls got their own treatment. The ring is drawn **on the face
+it struck**: `aliens.js` resolves the face in hull-local space and `fx.js`
+re-derives it in world space every frame, so it wraps a flank and *rides* a
+moving harvester (at 30 m/s a static ring drifts 24 m off the ship inside its
+own 0.8 s life). The face is chosen in **half-extents, not metres** — a bomb
+landing on a 1200 m deck 300 m forward of centre is 300 m along the length
+and 59 m up the height, so metres pick the nose and draw the ring hanging in
+the air beside the ship.
+
+The first attempt at a hull detonation sound was wrong in an instructive way:
+it took `explosionSound()` and moved every frequency down, keeping the
+architecture — noise burst under a sweeping lowpass, plus a sine drop. Nico:
+*"the sound is still the same bomb sound I think"*. He was right. Shifting
+pitch does not change timbre. What separates hitting a hull from hitting dirt
+is **resonance**: soil is broadband and dead, a big hollow metal box rings.
+Rebuilt around two high-Q bandpass bands ringing over a deep sub, with the
+bright crack removed entirely.
+
+### Energy beams move into the shader
+
+*"The lasers are seen through the mountains and hulls."* They were 2D lines
+on the fx overlay, which has no depth buffer. Moved into the fragment shader,
+where the ray's closest approach to the beam segment is compared against the
+primary hit — occlusion against terrain, hulls and trees for free. The 48 fx
+occlusion probe slots were already fully allocated (trail 16, bullets 8,
+bombs 3, pops 10, impacts 11), so sampling the beam was not an option, and a
+single visibility value would have made the whole beam blink.
+
+Only `(source, head, tail, fade)` is uploaded — one vec4 instead of six
+floats, because `uShipPos`/`uRelay`/`uMotherPos` already hold the geometry.
+That also welds a beam to a harvester still in motion.
+
+Moving them exposed a leak: `drawBolts()` had been the only thing splicing
+spent bolts out of `alien.bolts`.
+
+### Relay
+
+5× base (150 m), growing to 7× that — about 35× the old bulb. The growth
+increment is now derived from `GROW`/`STEPS` so resizing cannot silently
+change the 50-arrival pacing of the invasion economy.
+
+### The backtick trap, live
+
+Writing `` `t` `` in a GLSL comment ended the JS template early. `build.js`
+named it instantly and `test_shader.js` counted 6 backticks where 4 belong.
+The v9.1 gotcha, catching a fresh instance of itself.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

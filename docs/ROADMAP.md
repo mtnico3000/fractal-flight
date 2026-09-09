@@ -1,87 +1,103 @@
 # Roadmap (drafted after the terrain/shimmer research session)
 
-## ⏸ BLOCKED ON HARDWARE — read this first (8 Sept 2026)
+## ⚠ PARTLY UNBLOCKED — read this first (updated 9 Sept 2026)
 
-**The barrel AC adapter is dead. Resume the graphics work when Nico says a
-new one has arrived.** Diagnosed by elimination on 8 Sept 2026:
+**The barrel AC adapter is still dead. Nico is on USB-C PD.** The graphics
+work is no longer fully blocked — the RTX does leave its idle P-state on
+USB-C — but it is not running at full power either.
 
-| evidence | reading |
-|---|---|
-| barrel adapter connected | `PowerLineStatus: Offline` — no AC seen at all |
-| after a full EC reset (shutdown, 40 s power-button hold, 10 min unplugged) | charge LED never lit |
-| **USB-C PD connected** | `PowerLineStatus: Online`, **charging at 24.6 W** |
-| ACPI "Microsoft AC Adapter" device | present, status **OK** |
-| battery health | 67 812 / 90 001 mWh (75 %), fine |
+| power source | pstate | SM clock | draw |
+|---|---|---|---|
+| battery (8 Sept) | P8, 146/150 samples | 210 MHz | 5.5 W |
+| **USB-C PD (now)** | P4–P5 | 855–1710 MHz | 13–20 W |
+| 240 W barrel (spec) | P0 | up to 2040 MHz | up to 150 W |
 
-USB-C charging works, so the EC, the charging circuit and the battery are
-all healthy — **only the barrel adapter is broken.** (A charge LIMIT would
-read "plugged in, not charging"; "Offline" means no adapter at all.)
+**The finding that matters:** `power.default_limit` reads **80 W** against a
+`power.max_limit` of **150 W**, and one sample caught the card at exactly
+1455 MHz — the documented boost ceiling for a 4090 Laptop at 80 W TGP. So the
+GPU is on the 80 W profile.
 
-**Why this blocks the graphics work:** on battery the RTX 4090 is pinned at
-its idle P-state. Measured under sustained load: **146/150 samples at P8,
-210 MHz, 5.5 W**, against a card maximum of 3105 MHz / 150 W — roughly 7 %
-of clock on 4 % of power. USB-C PD flips PowerLineStatus to Online but only
-delivers ~25 W, which cannot feed a 150 W GPU, so it is not a substitute for
-proper testing.
+⚠️ **Not yet separated: is that cap the USB-C supply, or G-Helper?**
+`performance_mode` is now 0 (Balanced); it was 2 (Silent, limits 80) during
+the v9.2 hunt. **Try Turbo before concluding a new adapter is needed.** That
+is the single cheapest experiment left and nobody has run it.
 
-**When the adapter is back, resume in this order:**
-1. `nvidia-smi --query-gpu=pstate,clocks.sm,power.draw --format=csv` while
-   the game runs. Expect it to leave P8. If it does not, set NVIDIA Control
-   Panel > Manage 3D settings > Power management mode > Prefer maximum
-   performance.
-2. G-Helper `performance_mode` is **2 = Silent** with power limits of 80 —
-   switch to Balanced/Turbo before judging frame rates.
-3. Chrome must be forced onto the dGPU; `powerPreference:
-   'high-performance'` in renderer.js is NOT enough on this laptop. One-off:
-   `chrome.exe --user-data-dir=<temp> --force-high-performance-gpu <url>`.
-4. Re-test the periodic hiccup. It appeared ONLY on the RTX (never on the
-   iGPU), on both the A1 and v9.1 builds, and **went away after a reboot** —
-   consistent with a driver clock/power-state transition rather than
-   anything in the game. Frame-time sampling found zero spikes above 1.8x
-   median, and the only teleport in the world state was jul's ring recycler
-   (a ring moves ~4 km on a ~4 s cadence, `js/rings.js`, untouched by any
-   A-commit).
+Nico's verdict 9 Sept 2026, after the adapter research: *"it looks like I need
+a new adapter."* The failure pattern (dies, revives after being left unplugged,
+dies again after a reboot) is a latched protection circuit, not a dead brick,
+and is reported on other ROG units — full write-up and sources in
+**docs/RESEARCH.md §4**, which also covers iGPU vs dGPU and the Chrome flag.
+
+**Chrome on the dGPU** (needs its own `--user-data-dir`, or a running Chrome
+swallows the flag):
+
+```sh
+chrome.exe --user-data-dir=%TEMP%f-rtx-profile --force-high-performance-gpu http://127.0.0.1:8734/index.html
+```
+
+**Still untested from v9.2:** the periodic hiccup. It appeared ONLY on the RTX
+(never the iGPU), on both A1 and v9.1, and went away after a reboot —
+consistent with a driver clock/power-state transition, not the game. Frame-time
+sampling found zero spikes above 1.8x median, and the only teleport in world
+state was jul's ring recycler (~4 km on a ~4 s cadence, `js/rings.js`,
+untouched by any A-commit). Re-test on real AC.
 
 ---
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Branch `v9.2` is the mainline** (`main` points at it). It branches from A1;
-A2–A6 were built, measured and dropped — see below before rebuilding any of
-them.
+**Version is v9.3.** The git branch is still named `v9.2` — the version moved
+on and the branch name did not. Rename it or cut a `v9.3` branch if that
+bothers you; nothing depends on it.
 
-0. **Run `node test/run_tests.js` first.** It should print "all suites
-   passed" (46 assertions, 7 files). Then `python serve.py 8734`, press
-   START, and fly it once.
-1. Read docs/HISTORY.md once (the WHY archive). **Before touching graphics,
-   read docs/RESEARCH.md §3** — in particular the entry explaining that the
-   whole shimmer hunt was answering the wrong question.
+0. **Run the gates.** `node test/run_tests.js` should print "all suites
+   passed" (**46 assertions, 7 files**). Then `python serve.py 8734`, press
+   START, fly it once.
+1. If you are changing anything in `test/`, also run **`node test/mutants.js`**
+   (slow, opt-in, 23/23 caught as of v9.3). A green suite is not evidence:
+   two assertions were found passing for the wrong reason on 9 Sept 2026.
+   See the header of that file before trusting any test you did not break.
 
-2. ▶ **C2 — CONTINUE the test suite. THIS IS THE NEXT ITEM.**
-   `node test/run_tests.js` is green with **46 assertions across 7 files**:
-   `test_aliens.js` (bomb economy, hull states), `test_tune.js` (knob
-   invariants), `test_build.js` (the artifact is byte-identical to what
-   build.js generates), `test_shader.js` (terrainShape is still the px=0
-   collision authority), `test_render.js` (fps stat uses rawDt; a pinned
-   resolution beats the auto-scaler), `test_docs.js` (README/CLAUDE.md
-   drift), plus `check_module_refs.py`.
-   * **Still to port, both needing dev dependencies** (`.gitignore` already
-     covers `node_modules`, which is why they were left):
-     - **GLSL parse via `@shaderfrog/glsl-parser`** — function-like `#define`
-       macros produce warnings that can be ignored. This would finally let
-       `test_shader.js` check the shader as CODE rather than by regex.
-     - **A jsdom module-graph smoke load** — stub `matchMedia`; do NOT
-       override Node's `performance`.
-   * Keep adding opportunistically while touching flight/rings/aliens.
+2. ▶ **C2 — the two remaining ports. THIS IS THE NEXT ITEM.**
+   Both need dev dependencies, and that is a **decision for Nico, not a
+   principle**. The often-repeated "no npm" applies to the *shipped artifact*
+   — `test_build.js` requires it to fetch nothing, because it runs from a
+   double-clicked `file://` page. Tooling is already Node (`build.js`). Nico,
+   9 Sept 2026: *"I'm not against node at all."*
+   - **GLSL parse via `@shaderfrog/glsl-parser`** — function-like `#define`
+     macros produce ignorable warnings. Would let `test_shader.js` check the
+     shader as CODE rather than by regex, which is the weakest part of the
+     suite: every shader assertion is currently a regex over source text, and
+     two of them have already been fooled by reading into a neighbouring
+     function.
+   - **A jsdom module-graph smoke load** — stub `matchMedia`; do NOT override
+     Node's `performance`.
 
-3. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
+3. **Coverage still missing.** `terrain.js` got its test in v9.3. Nothing yet
+   for `flight.js`, `rings.js`, `weapons.js`, `spores.js`, `fx.js`, `math.js`.
+   `rings.js` is the interesting one — jul's 4 s delayed recycler is the only
+   thing in the world that teleports, and it was a suspect during the hiccup
+   hunt.
+
+4. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
    for Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
-   (Musgrave-style octave coupling + a slider; mirror in terrain.js).
+   (Musgrave-style octave coupling + a slider; mirror it in `terrain.js` —
+   and `test_terrain.js` will now hold you to that).
 
-4. **Push the branch and update the PR to julaub.** `main`/`v9.2` is **13+
-   commits ahead of `origin/main`** and nothing has been pushed since v8.0.
-   `origin` is Nico's own fork (mtnico3000); PRs go to julaub. Ask before
-   pushing — it is a volley.
+5. **Push the branch and update the PR to julaub.** `main` is **17 commits
+   ahead of `origin/main`** and nothing has been pushed since v8.0. `origin`
+   is Nico's own fork (mtnico3000); PRs go to julaub. **Ask before pushing —
+   it is a volley.** Not done as of 9 Sept 2026 because it was never asked
+   for.
+
+### Open questions for Nico
+
+- Turbo vs a new adapter (see the top of this file) — one command decides it.
+- npm for the two C2 ports: yes or no?
+- The blue fleet, the hull-conforming bomb rings and the resonant hull
+  detonation all landed in v9.3 with only partial visual confirmation —
+  the beams and the big relay were seen in flight, a bomb ring on a hull was
+  never photographed. Worth a look while flying.
 
 ### ⏸ Parked, with reasons
 
@@ -189,12 +205,17 @@ at a surface with detail far beyond Nyquist, with no AA of any kind
    dependency order, strip import/export, rename the few divergent
    identifiers). Ends the dual-build maintenance that caused repeated
    patch-drift bugs.
-2. **Port the Node test harnesses (S/M)** from the Cowork sessions into
-   `test/` with npm scripts (flight modes, rings, aliens economy, GLSL parse
-   via @shaderfrog/glsl-parser, jsdom module-graph smoke).
-3. **Uniform budget check (S).** ~260 vec4 slots used; verify link on
-   weakest target (jul's phone). If tight: pack alien ship data into a
-   texture instead of uniforms.
+2. **Port the Node test harnesses (S/M)** — ✅ mostly done. `test/` runs with
+   no npm: 46 assertions across 7 files plus `check_module_refs.py`, and
+   `test/mutants.js` verifies the tests themselves (23/23). Still to port,
+   both needing dev deps: GLSL parse via @shaderfrog/glsl-parser, and a jsdom
+   module-graph smoke load. Flight modes and rings still have no coverage.
+3. **Uniform budget check (S).** ~267 vec4 slots used — v9.3 added
+   `uAlienHit` (1) and `uBolts[6]`. Verify link on the weakest target (jul's
+   phone); the guaranteed mobile minimum is 224, so it may already fail there.
+   If tight: pack alien ship data into a texture instead of uniforms. Both
+   v9.3 additions were already written to be frugal (one vec2 for the whole
+   fleet's hit flare; beams send indices, not endpoints).
 4. **GitHub Pages deploy (S).** Playable URL for the ping-pong, no local
    server.
 

@@ -124,8 +124,12 @@ Key chips in the HUD glow green when a toggle is active.
   of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
-- **uniform budget**: ~260 vec4 slots used. Desktop fine; weakest mobile
-  GPUs (min guarantee 224) may fail to link since the alien fleet was added.
+- **uniform budget**: ~267 vec4 slots used (v9.3 added `uAlienHit` and
+  `uBolts[6]`). Desktop fine; weakest mobile GPUs (min guarantee 224) may
+  fail to link since the alien fleet was added. This is why the bomb-hit
+  flare is ONE vec2 for the whole fleet rather than a per-hull array, and why
+  the energy beams upload `(source, head, tail, fade)` instead of endpoints —
+  `uShipPos`/`uRelay`/`uMotherPos` already hold the geometry.
 - **fp32 terrain quantization**: don't move MB_CENTER/MB_SCALE without
   updating BOTH shader constants and terrain.js literals.
 - **Trees**: plantEval must match its collision-probe usage (probes pass
@@ -222,6 +226,26 @@ Key chips in the HUD glow green when a toggle is active.
   mothership (2200 m) and relay do fall. Cost a red test before it was
   understood.
 
+- 🖼️ **The fx overlay has NO depth buffer, so anything that can pass behind
+  terrain does not belong on it.** The alien energy beams were 2D lines on the
+  overlay and were painted straight over the mountains they crossed. Moved
+  into the fragment shader on 9 Sept 2026, where comparing the ray's closest
+  approach against the primary hit distance occludes them against terrain,
+  hulls and trees at once. The harvest laser SHEET had been doing this
+  correctly since v9.0 (`tp > t`) — the precedent was already in the file.
+- 🧹 **When a draw call moves, check what else it was doing.** `fx.js`
+  `drawBolts()` was the only thing splicing spent bolts out of `alien.bolts`.
+  Moving the beams into the shader deleted it, and nothing else pruned the
+  array — it would have grown for the entire session, taking the arrival loop
+  with it. Rendering code that also owns lifetime is a trap; the pruning now
+  lives in `updateAliens` with a test.
+- 🎛️ **A size knob that also sets a rate must derive the rate.** The relay
+  grew `baseR * 0.02` per energy arrival and blasted at `2 × baseR` — exactly
+  50 arrivals. Making the relay 5× bigger without touching that would have
+  needed 300 arrivals and the blast would effectively never come. It is now
+  `(RELAY_GROW - 1) / RELAY_STEPS` with `RELAY_STEPS` pinned at 50, so
+  resizing the bulb cannot silently re-pace the invasion economy.
+
 ## Tests — `node test/run_tests.js`
 
 **ROADMAP C2 has started.** `test/` exists and runs with no npm, no framework
@@ -276,7 +300,16 @@ node test/run_tests.js        # everything
   there, so it is checked rather than remembered.
 - `test/check_module_refs.py` — the modular/single-file divergence guard
   above. Verified to go RED on the real `camPos` bug before being called
-  green.
+  green. It earned its keep again on 9 Sept 2026, rejecting a local named
+  `U` in fx.js that collides with renderer.js's exported uniform table.
+- `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
+  (slow, and it writes to `js/` as it works; it refuses to start if those
+  files are dirty). It breaks the source one bug at a time and requires every
+  test to go red. **A green suite is not evidence until this passes**: on
+  9 Sept 2026 two assertions were passing for the wrong reason — one read
+  past the end of the function it was checking and was answered by its
+  neighbour, the other was satisfied by a melting hull sinking rather than by
+  the predicate it named. 23/23 mutants caught as of v9.3.
 
 Still to port: GLSL parse via @shaderfrog/glsl-parser, and a jsdom
 module-graph smoke load. GLSL is checked with

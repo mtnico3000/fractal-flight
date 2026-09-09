@@ -293,3 +293,84 @@ Ruled out: MSAA (meaningless for a fullscreen raymarch quad);
 supersampling always-on (renderScale > 1 works on a 4090 but is a brute-
 force battery burner — the adaptive scaler already allows it implicitly on
 strong GPUs).
+
+---
+
+## 4. Power delivery and what the RTX 4090 actually runs at (9 Sept 2026)
+
+Section 3 ends by admitting the shimmer hunt answered the wrong question: the
+real cause was 683x359 on an Intel iGPU while the RTX sat idle. This section
+is the follow-up measurement, because *"is the dGPU actually running?"* turns
+out to have three separate answers depending on how the laptop is powered.
+
+### Measured on this machine
+
+| power source | pstate | SM clock | draw | note |
+|---|---|---|---|---|
+| **battery** (8 Sept) | P8, 146/150 samples | 210 MHz | 5.5 W | ~7% of clock. Unusable. |
+| **USB-C PD** (9 Sept) | P4-P5 | 855-1710 MHz | 13-20 W | charging at only ~14 W |
+| **240 W barrel** (spec) | P0 | up to 2040 MHz boost | up to 150 W | not testable — adapter dead |
+
+Card maximum on this machine is **3105 MHz**.
+
+### The finding that was not expected
+
+```
+power.default_limit :  80.00 W     <- what the GPU is capped at
+power.max_limit     : 150.00 W     <- what the card can do
+```
+
+**The 4090 is running the 80 W profile, not the 150 W one.** One sample
+caught it at exactly **1455 MHz**, which is the documented boost ceiling for a
+4090 Laptop configured at 80 W TGP (150 W gives up to 2040 MHz). The two
+numbers corroborate each other.
+
+⚠️ **Not yet separated:** whether the 80 W cap comes from the USB-C supply or
+from G-Helper's profile. `performance_mode` was 0 (Balanced) when measured,
+having been 2 (Silent, limits of 80) during the v9.2 shimmer hunt. **Try
+Turbo before assuming a new adapter is required** — it may lift without one.
+
+### Scale of the differences
+
+Battery -> USB-C is the enormous jump (~7x the clock). USB-C -> barrel is
+roughly **+20-30%** on top: the 80 W -> 150 W step buys about +40% clock
+headroom, which does not convert 1:1.
+
+Practical consequence for any future A/B measurement: **take both sides in one
+sitting on one power source, and re-check `pstate` before and after.**
+Comparing a number taken at 1455 MHz against one taken at 210 MHz is exactly
+the trap that produced the A2-A6 saga.
+
+```sh
+nvidia-smi --query-gpu=pstate,clocks.sm,power.draw,utilization.gpu --format=csv -l 1
+```
+
+### The adapter itself — a latched fault, not a dead brick
+
+Nico's barrel adapter has twice "died" and twice come back after being left
+unplugged (once ~10 minutes, once overnight), most recently dying again after
+a reboot. That pattern is a **latched protection circuit**, not a failed one:
+an OCP/OTP trip sets a latch that removes drive from the converter, and the
+latch only clears once the bulk capacitor bleeds below roughly 5% of rated
+voltage. Unplugging for minutes clears it; toggling the wall switch does not.
+
+The same symptom is reported on ROG hardware — a Zephyrus GX501 charger that
+["didn't work 99% of the time"](https://forums.tomsguide.com/threads/rog-zephyrus-gx501-charger-doesnt-work-99-of-the-time.440961/latest)
+then worked after being left unplugged, and a
+[G750JZ whose adapter "fixed itself" after 4-6 hours](https://rog-forum.asus.com/t5/rog-gaming-notebooks/g750jz-not-recognizing-ac-power-supply-not-powering-on-or/td-p/671074),
+recurring repeatedly. ASUS's own guidance is that recurring abnormal charging
+on the original adapter warrants RMA. **Conclusion: replace it.** A latch that
+trips this readily indicates a degrading component and will worsen.
+
+### iGPU vs dGPU, since it keeps mattering
+
+The **iGPU** is on the CPU die, shares system RAM and the CPU power budget.
+The **dGPU** is the discrete RTX with its own VRAM and up to 150 W. In
+**hybrid/Optimus** mode (G-Helper `gpu_mode: 1`, Standard) the display is
+physically wired to the *iGPU*, and the dGPU renders into a buffer that is
+copied across — so the dGPU is optional and the browser picks. Chrome defaults
+to the low-power adapter. `powerPreference: 'high-performance'` is only a
+hint; `--force-high-performance-gpu` with a separate `--user-data-dir` is what
+actually moves it (Chrome reuses a running instance and ignores the flag
+otherwise). G-Helper "Ultimate" MUXes the display straight to the dGPU —
+fastest, needs a reboot.

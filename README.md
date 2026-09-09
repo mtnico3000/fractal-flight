@@ -148,8 +148,17 @@ node test/run_tests.js
 ```
 
 No npm, no framework, no browser — the harness evaluates the real `js/`
-modules with stubbed imports. Covers the alien bomb economy and hull states,
-the tuning-panel invariants, a check that no module references another
-module's exports without importing them, and a check that the committed
-single-file build is exactly what `build.js` generates from the current
-source.
+modules with stubbed imports. 46 assertions across 7 files: the alien bomb
+economy and hull states, the bomb-ring geometry, the invasion pacing, the
+tuning-panel invariants, shader-source invariants, the CPU terrain mirror
+against the GLSL it mirrors, README/CLAUDE.md drift, a check that no module
+references another module's exports without importing them, and a check that
+the committed single-file build is exactly what `build.js` generates.
+
+```sh
+node test/mutants.js     # slow, opt-in: are the tests testing anything?
+```
+
+Breaks the source on purpose, one bug at a time, and requires every test to
+go red. Two assertions were found passing for the wrong reason this way — see
+the header of `test/mutants.js`. Run it after adding or changing a test.
