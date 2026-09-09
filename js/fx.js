@@ -67,34 +67,9 @@ function projectFx(camB, px, py, pz, W, H) {
   return { x: (ux * H + W) / 2, y: H * (1 - uy) / 2, z: lz };
 }
 
-// alien energy bolts (v9.0): green harvester shots, blue-white relay blasts
-export function drawBolts(camB, now, bolts) {
-  if (!bolts.length) return;
-  const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
-  fxCtx.globalCompositeOperation = 'lighter';
-  fxCtx.lineCap = 'round';
-  for (let i = bolts.length - 1; i >= 0; i--) {
-    const b = bolts[i];
-    const k = (now - b.t0) / b.dur;
-    if (k > 1.15) { bolts.splice(i, 1); continue; }
-    const kk = Math.min(1, k);
-    const hx = b.x0 + (b.x1 - b.x0) * kk, hy = b.y0 + (b.y1 - b.y0) * kk, hz = b.z0 + (b.z1 - b.z0) * kk;
-    const tl = Math.max(0, kk - (b.big ? 0.3 : 0.15));
-    const txp = b.x0 + (b.x1 - b.x0) * tl, typ = b.y0 + (b.y1 - b.y0) * tl, tzp = b.z0 + (b.z1 - b.z0) * tl;
-    const A = projectFx(camB, txp, typ, tzp, W, H);
-    const C = projectFx(camB, hx, hy, hz, W, H);
-    if (!A || !C) continue;
-    const wpx = Math.max(b.big ? 3 : 1.5, (b.big ? 1200 : 350) / C.z);
-    const col = b.big ? '140,210,255' : '90,255,130';
-    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
-    fxCtx.strokeStyle = 'rgba(' + col + ',0.22)'; fxCtx.lineWidth = wpx * 3.2; fxCtx.stroke();
-    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
-    fxCtx.strokeStyle = 'rgba(' + col + ',0.9)'; fxCtx.lineWidth = wpx; fxCtx.stroke();
-    fxCtx.beginPath(); fxCtx.arc(C.x, C.y, wpx * 1.8, 0, 6.2832);
-    fxCtx.fillStyle = 'rgba(255,255,255,0.85)'; fxCtx.fill();
-  }
-  fxCtx.globalCompositeOperation = 'source-over';
-}
+// The alien energy beams used to be drawn here as 2D lines. They are now 3D
+// in the fragment shader (see uBolts in shaders.js): the overlay has no depth
+// buffer, so a beam behind a mountain was painted straight over it.
 
 export function drawTrail(camB, now, bullets, bombs, impacts) {
   const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
@@ -151,12 +126,82 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
   // height and is projected in perspective, so the circle tilts with slopes.
   for (let i = impacts.length - 1; i >= 0; i--) {
     const p = impacts[i];
-    const life = (p.kind === 3) ? 0.9 : 0.45;
+    const life = (p.kind === 3) ? 0.9 : (p.kind === 4 ? 0.8 : 0.45);
     const age = (now - p.t0) / 1000;
     if (age > life) { impacts.splice(i, 1); continue; }
     const k = age / life;
     const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
     if (vv < 0.02) continue;
+    if (p.kind === 4) {
+      // Alien hull detonation. kind 3 below lies on the TERRAIN; this one lies
+      // on the HULL. aliens.js hands over the struck face as a frame in the
+      // hull's own local space -- an origin plus two in-plane axes, or a normal
+      // plus a radius for the relay bulb -- and the hull object itself, so the
+      // ring is re-derived in world space every frame. That does both things a
+      // billboard could not: it wraps the side that was actually hit instead of
+      // facing the camera, and it rides a harvester that is still moving (at
+      // 30 m/s a static ring drifts 24 m off the ship inside its own lifetime).
+      const h = p.hull;
+      const ca = p.rot ? Math.cos(h.a) : 1, sa = p.rot ? Math.sin(h.a) : 0;
+      const toW = l => [h.x + l[0] * ca + l[2] * sa, h.y + l[1], h.z - l[0] * sa + l[2] * ca];
+      const toD = d => (p.rot ? [d[0] * ca + d[2] * sa, d[1], -d[0] * sa + d[2] * ca] : d);
+      const oW = toW(p.lp), uW = toD(p.u), vW = toD(p.v), nW = p.curv > 0 ? toD(p.n) : null;
+      p.x = oW[0]; p.y = oW[1]; p.z = oW[2];    // keep the occlusion probe on the hull
+      const dx = p.x - viewPos[0], dy = p.y - viewPos[1], dz = p.z - viewPos[2];
+      const dist = Math.max(20, Math.hypot(dx, dy, dz));
+      const pxPerM = H / (2 * dist * TAN_HALF_FOV);
+      const frac = Math.min(1, k * 2.0);
+      fxCtx.globalCompositeOperation = 'lighter';
+      const cs = projectFx(camB, p.x, p.y, p.z, W, H);
+      if (cs && k < 0.32) {
+        // Deliberately dim. Under 'lighter', over an already-lit hull, a near
+        // white core blew out into a hard camera-flash blink instead of reading
+        // as a detonation, so this is half the alpha and half the radius it was.
+        fxCtx.beginPath();
+        fxCtx.arc(cs.x, cs.y, Math.max(1.5, 7 * pxPerM * (1 - k * 3.1) + 1.5), 0, 6.2832);
+        fxCtx.fillStyle = 'rgba(170,205,240,' + Math.max(0, 0.30 * (1 - k * 3.1) * vv).toFixed(3) + ')';
+        fxCtx.fill();
+      }
+      const traceHull = (fr) => {
+        const r = p.maxR * fr;
+        if (r < 0.05) return false;
+        let started = false, drew = false;
+        fxCtx.beginPath();
+        for (let q = 0; q <= RING_N; q++) {
+          const th = ((q % RING_N) / RING_N) * 6.28318;
+          const c = Math.cos(th), sn = Math.sin(th);
+          let wx, wy, wz;
+          if (nW) {                                // geodesic cap over the bulb
+            const ph = Math.min(r / p.curv, 2.4), cp = Math.cos(ph), sp = Math.sin(ph);
+            wx = oW[0] + p.curv * (cp * nW[0] + sp * (c * uW[0] + sn * vW[0]));
+            wy = oW[1] + p.curv * (cp * nW[1] + sp * (c * uW[1] + sn * vW[1]));
+            wz = oW[2] + p.curv * (cp * nW[2] + sp * (c * uW[2] + sn * vW[2]));
+          } else {                                 // flat ring lying on the face
+            wx = oW[0] + (c * uW[0] + sn * vW[0]) * r;
+            wy = oW[1] + (c * uW[1] + sn * vW[1]) * r;
+            wz = oW[2] + (c * uW[2] + sn * vW[2]) * r;
+          }
+          const sp2 = projectFx(camB, wx, wy, wz, W, H);
+          if (!sp2) { started = false; continue; }  // vertex behind camera: break the path
+          if (!started) { fxCtx.moveTo(sp2.x, sp2.y); started = true; }
+          else fxCtx.lineTo(sp2.x, sp2.y);
+          drew = true;
+        }
+        return drew;
+      };
+      if (traceHull(frac)) {
+        fxCtx.strokeStyle = 'rgba(150,215,255,' + ((1 - k) * 0.7 * vv).toFixed(3) + ')';
+        fxCtx.lineWidth = Math.max(1.2, 3.0 * pxPerM * (1 - k) + 1);
+        fxCtx.stroke();
+      }
+      if (traceHull(frac * 0.55)) {
+        fxCtx.strokeStyle = 'rgba(95,165,255,' + ((1 - k) * 0.4 * vv).toFixed(3) + ')';
+        fxCtx.lineWidth = Math.max(1, 2.2 * pxPerM * (1 - k) + 0.8);
+        fxCtx.stroke();
+      }
+      fxCtx.globalCompositeOperation = 'source-over';
+      continue;
+    }
     if (p.kind === 3) {
       const frac = Math.min(1, k * 2.2);            // expands to full radius fast
       // viewPos, NOT camPos: the orbit rotates the render view only, and the

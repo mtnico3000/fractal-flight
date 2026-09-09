@@ -2,7 +2,7 @@
 // world and fleet into tune.js on 6 Sept 2026.
 //
 // `v` is the live value and `d` is what RESET restores. They are edited by
-// hand, in pairs, across 33 knobs, which is exactly the shape of edit where
+// hand, in pairs, across 35 knobs, which is exactly the shape of edit where
 // one of the pair gets missed: the symptom is a panel that looks right until
 // someone presses RESET and the world silently changes.
 

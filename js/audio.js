@@ -156,6 +156,75 @@ export function bombDropSound() {
   o.start(T); o.stop(T + 0.13);
 }
 
+// Bomb against an alien hull.
+//
+// The first attempt at this just took explosionSound() and moved every
+// frequency down. That was a mistake: it is the same ARCHITECTURE -- a noise
+// burst under a sweeping lowpass, plus a sine drop -- so it still read as "the
+// ground blast, further away" rather than as a different event.
+//
+// What separates hitting a hull from hitting dirt is RESONANCE. Soil is
+// broadband and dead; a big hollow metal box rings at a few frequencies and
+// sustains. So this is built the other way round: two narrow bandpass bands
+// with high Q ring on after the impact, over a deep sub, and the bright crack
+// that makes explosionSound() read as "open air" is gone entirely.
+export function hullExplosionSound() {
+  if (!AC || muted) return;
+  const T = AC.currentTime, sr = AC.sampleRate;
+  const noise = (dur) => {
+    const buf = AC.createBuffer(1, Math.floor(sr * dur), sr);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    const src = AC.createBufferSource(); src.buffer = buf;
+    return src;
+  };
+
+  // sub: the "bassy" part -- an octave under the ground blast's 64 Hz
+  const o = AC.createOscillator(), og = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(44, T);
+  o.frequency.exponentialRampToValueAtTime(16, T + 1.0);
+  og.gain.setValueAtTime(0.7, T);
+  og.gain.exponentialRampToValueAtTime(0.001, T + 1.25);
+  o.connect(og); og.connect(AC.destination);
+  o.start(T); o.stop(T + 1.3);
+
+  // whump: resonant lowpass, Q high enough to have a body of its own
+  const wsrc = noise(0.6);
+  const wf = AC.createBiquadFilter(); wf.type = 'lowpass'; wf.Q.value = 9;
+  wf.frequency.setValueAtTime(240, T);
+  wf.frequency.exponentialRampToValueAtTime(55, T + 0.5);
+  const wg = AC.createGain();
+  wg.gain.setValueAtTime(0.45, T);
+  wg.gain.exponentialRampToValueAtTime(0.001, T + 0.55);
+  wsrc.connect(wf); wf.connect(wg); wg.connect(AC.destination);
+  wsrc.start(T); wsrc.stop(T + 0.6);
+
+  // hull ring: the part that says "metal box". Two narrow bands, different
+  // decays, so the tail beats slightly instead of sounding like one tone.
+  for (const [hz, q, gain, dur] of [[118, 16, 0.30, 1.0], [287, 13, 0.17, 0.72]]) {
+    const rs = noise(dur);
+    const bp = AC.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = hz; bp.Q.value = q;
+    const rg = AC.createGain();
+    rg.gain.setValueAtTime(gain, T);
+    rg.gain.exponentialRampToValueAtTime(0.001, T + dur);
+    rs.connect(bp); bp.connect(rg); rg.connect(AC.destination);
+    rs.start(T); rs.stop(T + dur + 0.02);
+  }
+
+  // onset: a short mid thud so the hit has an edge, well below the ground
+  // blast's 1500 Hz highpass crack
+  const tsrc = noise(0.09);
+  const tf = AC.createBiquadFilter(); tf.type = 'bandpass';
+  tf.frequency.value = 700; tf.Q.value = 1.1;
+  const tg = AC.createGain();
+  tg.gain.setValueAtTime(0.14, T);
+  tg.gain.exponentialRampToValueAtTime(0.001, T + 0.09);
+  tsrc.connect(tf); tf.connect(tg); tg.connect(AC.destination);
+  tsrc.start(T); tsrc.stop(T + 0.1);
+}
+
 export function explosionSound() {
   if (!AC || muted) return;
   const T = AC.currentTime;

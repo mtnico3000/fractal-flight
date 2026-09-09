@@ -101,7 +101,7 @@ export async function initRenderer(status, lock) {
 
   ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
    'uRingsPos','uRingMats','uLivery','uCockpit','uShadows','uFxPos',
-   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
+   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uAlienHit','uBolts','uBoltN','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
     .forEach(n => U[n] = gl.getUniformLocation(prog, n));
   return true;
 }

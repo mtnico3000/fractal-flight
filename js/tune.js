@@ -6,15 +6,15 @@ export const TUNEA = {
   boxFold:  { label: 'box fold',    v: 0.7,   d: 0.7,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
   boxMinR:  { label: 'box min r',   v: 0.8,   d: 0.8,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
   bulbPow:  { label: 'bulb power',  v: 10,    d: 10,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
-  moLen:    { label: 'mother len',  v: 3000,  d: 3000,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
-  moWid:    { label: 'mother wid',  v: 2000,  d: 2000,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
-  moHei:    { label: 'mother hgt',  v: 310,   d: 310,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  moAlt:    { label: 'mother alt',  v: 2200,  d: 2200,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
-  shLen:    { label: 'ship length', v: 780,   d: 780,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  shWid:    { label: 'ship width',  v: 330,   d: 330,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  moLen:    { label: 'mother len',  v: 3500,  d: 3500,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moWid:    { label: 'mother wid',  v: 3500,  d: 3500,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moHei:    { label: 'mother hgt',  v: 400,   d: 400,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  moAlt:    { label: 'mother alt',  v: 2600,  d: 2600,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
+  shLen:    { label: 'ship length', v: 1200,  d: 1200,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  shWid:    { label: 'ship width',  v: 800,   d: 800,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
   shHei:    { label: 'ship height', v: 120,   d: 120,   min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
   shSpeed:  { label: 'ship speed',  v: 30,    d: 30,    min: 2,    max: 60,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
-  relSize:  { label: 'relay size',  v: 30,    d: 30,    min: 10,   max: 80,    step: 2,    fmt: x => x.toFixed(0) + ' m' },
+  relSize:  { label: 'relay size',  v: 150,   d: 150,   min: 30,   max: 400,   step: 5,    fmt: x => x.toFixed(0) + ' m' },
 };
 
 export const TUNE = {

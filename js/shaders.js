@@ -34,6 +34,9 @@ uniform vec3 uMotherHalf;     // half extents (w/2, h/2, l/2)
 uniform float uMotherMelt;    // 0 live · 0..1 melting glow
 uniform vec4 uRelay;          // relayship: xyz + radius (grows with harvest)
 uniform float uRelayMelt;
+uniform vec2  uAlienHit;         // x = hull id (matches mal.y), y = flash 1..0
+uniform vec4  uBolts[6];         // (source id 0..5 ship / 6 relay, head, tail, fade)
+uniform float uBoltN;
 uniform vec4 uShipPos[6];     // harvesters: xyz + heading
 uniform float uShipLaser[6];  // 1 = harvest sheet active
 uniform float uShipMelt[6];
@@ -1119,8 +1122,9 @@ void main() {
     col = applyFog(col, ro, rd, t, sun);
 
   } else if (mat == 6) {
-    // alien hull: dark iridescent metal, pulsing fluo-green seams, violet
-    // glow for the relay bulb; melting ships go molten orange
+    // alien hull: dark blue-steel metal, pulsing cyan-blue seams, deep blue
+    // glow for the relay bulb; melting ships stay molten orange -- now the
+    // only warm thing on a hull, so damage reads at a glance
     vec3 pos = ro + rd * t;
     vec3 n = alienNormal(pos, mal.y);
     float melt = (mal.y < 0.5) ? uMotherMelt : (mal.y > 6.5 ? uRelayMelt : uShipMelt[int(mal.y - 1.0)]);
@@ -1143,13 +1147,20 @@ void main() {
     float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
     float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
     float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);
-    vec3 alb = mix(vec3(0.05, 0.065, 0.08), vec3(0.16, 0.19, 0.23), fres) * (0.7 + 0.5 * mott);
+    vec3 alb = mix(vec3(0.040, 0.062, 0.105), vec3(0.115, 0.180, 0.300), fres) * (0.7 + 0.5 * mott);
     col = alb * (sunLightCol(sun) * 1.4 * dif + skyAmbCol(sun) * 0.5);
-    vec3 glowC = (mal.y > 6.5) ? vec3(0.45, 0.35, 1.1) : vec3(0.2, 1.0, 0.45);
+    vec3 glowC = (mal.y > 6.5) ? vec3(0.25, 0.72, 1.35) : vec3(0.14, 0.62, 1.15);
     float vein = pow(clamp(org, 0.0, 1.0), 2.0);
     col += glowC * vein * (0.5 + 0.25 * sin(uTime * 2.0 + org * 9.0)) * (0.35 + 0.65 * detail);
     col += glowC * fres * 0.22;
-    if (mal.y > 6.5) col += vec3(0.55, 0.2, 1.0) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
+    if (mal.y > 6.5) col += vec3(0.18, 0.50, 1.20) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
+    // bomb hit: this hull flares cold white-blue for a beat. One vec2 for the
+    // whole fleet rather than a per-hull array -- the uniform budget is already
+    // over the 224-slot mobile minimum (see CLAUDE.md), and two bombs landing
+    // on two different hulls inside the same flash window is not a real case.
+    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
+    col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
+    col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
     col = mix(col, vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0)), clamp(melt, 0.0, 1.0) * 0.8);
     col = applyFog(col, ro, rd, t, sun);
 
@@ -1170,7 +1181,7 @@ void main() {
     col = applyFog(col, ro, rd, t, sun);
   }
 
-  // alien harvest lasers (v9.0): a translucent fluo-green SHEET spanning the
+  // alien harvest lasers (v9.0): a translucent cyan-blue SHEET spanning the
   // ship's full length, dropping to the terrain — brightest at ground contact
   for (int s = 0; s < 6; s++) {
     if (float(s) >= uShipN || uShipLaser[s] < 0.5) continue;
@@ -1190,7 +1201,45 @@ void main() {
     float pulse = 0.7 + 0.3 * sin(uTime * 9.0 + lx * 0.06);
     float edge = smoothstep(uShipHalf.x, uShipHalf.x * 0.9, abs(lx));
     float ground = 1.0 + 2.6 * exp(-(hp.y - gy) * 0.12);
-    col += vec3(0.25, 1.0, 0.35) * 0.14 * pulse * edge * ground;
+    col += vec3(0.30, 0.85, 1.0) * 0.14 * pulse * edge * ground;
+  }
+
+  // alien energy beams: harvester -> relay, then relay -> mothership.
+  //
+  // These used to be 2D lines on the fx overlay, which has no depth buffer, so
+  // a beam crossing behind a ridge was still painted over it. Here in the
+  // marcher the closest-approach distance along the ray is compared against the
+  // primary hit distance t, which occludes them against terrain, hulls and trees
+  // for free -- the same trick the harvest sheet above already used.
+  //
+  // Only (source, head, tail, fade) is uploaded; the ENDPOINTS are read from
+  // uShipPos / uRelay / uMotherPos, which cost nothing extra and keep a beam
+  // welded to a harvester that is still moving.
+  for (int i = 0; i < 6; i++) {
+    if (float(i) >= uBoltN) break;
+    vec4 bv = uBolts[i];
+    int sid = int(bv.x + 0.5);
+    bool big = sid > 5;
+    vec3 p0 = big ? uRelay.xyz : uShipPos[sid].xyz;
+    vec3 p1 = big ? uMotherPos : uRelay.xyz;
+    vec3 ba = mix(p0, p1, bv.z), bb = mix(p0, p1, bv.y);
+    vec3 sg = bb - ba;
+    float cc = dot(sg, sg);
+    if (cc < 1.0) continue;
+    // closest approach between the view ray and the beam segment
+    vec3 w0 = ro - ba;
+    float Bc = dot(rd, sg), Dc = dot(rd, w0), Ec = dot(sg, w0);
+    float den = cc - Bc * Bc;
+    float u = (abs(den) < 1e-5) ? clamp(-Ec / cc, 0.0, 1.0)
+                                : clamp((Ec - Bc * Dc) / den, 0.0, 1.0);
+    float sray = -Dc + u * Bc;
+    if (sray < 0.0 || sray > t) continue;      // behind the camera, or behind the world
+    float dist = length(ro + rd * sray - (ba + sg * u));
+    float wid = big ? 26.0 : 11.0;
+    float halo = exp(-dist * dist / (wid * wid));
+    float core = exp(-dist * dist / (wid * wid * 0.10));
+    vec3 bcol = big ? vec3(0.55, 0.82, 1.0) : vec3(0.22, 0.60, 1.0);
+    col += bcol * (halo * 0.45 + core * 1.7) * bv.w;
   }
 
   // cumulonimbus over everything nearer than the hit (or the whole sky)

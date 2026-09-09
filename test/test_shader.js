@@ -36,6 +36,19 @@ check('the collision probe row answers with terrainShape, never the LOD variant'
   ok(/terrainShape\(/.test(probe), 'the probe row should call terrainShape');
 });
 
+// Slice a shader function to its OWN body, bounded by the next top-level
+// declaration. This used to be a fixed 700-char window, which reached past
+// the end of the function: fbmLOD's window covered all of fbmLOD AND most of
+// fbmRLOD, so breaking fbmLOD's fade was still answered green by the
+// neighbour's mix(). Verified 9 Sept 2026 -- fading fbmLOD toward 0.0, the
+// exact bug the check below names, passed all four assertions.
+function bodyOf(name) {
+  const i = glsl.indexOf('float ' + name + '(');
+  ok(i >= 0, 'shader function ' + name + '() not found');
+  const next = glsl.indexOf('\nfloat ', i + 1);
+  return glsl.slice(i, next < 0 ? glsl.length : next);
+}
+
 // The fade must decay toward each octave's measured mean. Toward zero it also
 // lowers the average height, so distant ground sinks as you fly at it -- a
 // systematic sub-pixel shift across a whole silhouette, which reads as the
@@ -44,8 +57,7 @@ check('faded octaves decay toward the octave mean, not toward zero', () => {
   ok(/NOISE_MEAN\s*=\s*0\.49/.test(glsl), 'NOISE_MEAN should be the measured E[noise()]');
   ok(/RIDGE_MEAN\s*=\s*0\.44/.test(glsl), 'RIDGE_MEAN should be the measured E[ridged octave term]');
   for (const fn of ['fbmLOD', 'fbmRLOD', 'ridgedLOD']) {
-    const body = glsl.slice(glsl.indexOf('float ' + fn));
-    ok(/mix\(\s*(NOISE|RIDGE)_MEAN/.test(body.slice(0, 700)), fn + ' must fade toward the mean');
+    ok(/mix\(\s*(NOISE|RIDGE)_MEAN/.test(bodyOf(fn)), fn + ' must fade toward the mean');
   }
 });
 

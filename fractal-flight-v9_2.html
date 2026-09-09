@@ -424,6 +424,7 @@ const BULLET_RANGE = 1600; // meters of flight before the tracer burns out
 const MAXBOMB = 3;
 const BLAST_R = 100;       // meters: everything poppable inside this radius dies
 const BLASTC = 64;         // max cells one detonation can query
+const HULL_BLAST_R = 70;  // meters: visual radius of the air-burst ring on an alien hull
 const RING_N = 28;         // ring vertices for the ground-conforming blast circle
 const BOMB_BOOST = 40;     // horizontal speed on top of the plane's own speed
 
@@ -505,6 +506,9 @@ uniform vec3 uMotherHalf;     // half extents (w/2, h/2, l/2)
 uniform float uMotherMelt;    // 0 live · 0..1 melting glow
 uniform vec4 uRelay;          // relayship: xyz + radius (grows with harvest)
 uniform float uRelayMelt;
+uniform vec2  uAlienHit;         // x = hull id (matches mal.y), y = flash 1..0
+uniform vec4  uBolts[6];         // (source id 0..5 ship / 6 relay, head, tail, fade)
+uniform float uBoltN;
 uniform vec4 uShipPos[6];     // harvesters: xyz + heading
 uniform float uShipLaser[6];  // 1 = harvest sheet active
 uniform float uShipMelt[6];
@@ -1590,8 +1594,9 @@ void main() {
     col = applyFog(col, ro, rd, t, sun);
 
   } else if (mat == 6) {
-    // alien hull: dark iridescent metal, pulsing fluo-green seams, violet
-    // glow for the relay bulb; melting ships go molten orange
+    // alien hull: dark blue-steel metal, pulsing cyan-blue seams, deep blue
+    // glow for the relay bulb; melting ships stay molten orange -- now the
+    // only warm thing on a hull, so damage reads at a glance
     vec3 pos = ro + rd * t;
     vec3 n = alienNormal(pos, mal.y);
     float melt = (mal.y < 0.5) ? uMotherMelt : (mal.y > 6.5 ? uRelayMelt : uShipMelt[int(mal.y - 1.0)]);
@@ -1614,13 +1619,20 @@ void main() {
     float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
     float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
     float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);
-    vec3 alb = mix(vec3(0.05, 0.065, 0.08), vec3(0.16, 0.19, 0.23), fres) * (0.7 + 0.5 * mott);
+    vec3 alb = mix(vec3(0.040, 0.062, 0.105), vec3(0.115, 0.180, 0.300), fres) * (0.7 + 0.5 * mott);
     col = alb * (sunLightCol(sun) * 1.4 * dif + skyAmbCol(sun) * 0.5);
-    vec3 glowC = (mal.y > 6.5) ? vec3(0.45, 0.35, 1.1) : vec3(0.2, 1.0, 0.45);
+    vec3 glowC = (mal.y > 6.5) ? vec3(0.25, 0.72, 1.35) : vec3(0.14, 0.62, 1.15);
     float vein = pow(clamp(org, 0.0, 1.0), 2.0);
     col += glowC * vein * (0.5 + 0.25 * sin(uTime * 2.0 + org * 9.0)) * (0.35 + 0.65 * detail);
     col += glowC * fres * 0.22;
-    if (mal.y > 6.5) col += vec3(0.55, 0.2, 1.0) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
+    if (mal.y > 6.5) col += vec3(0.18, 0.50, 1.20) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
+    // bomb hit: this hull flares cold white-blue for a beat. One vec2 for the
+    // whole fleet rather than a per-hull array -- the uniform budget is already
+    // over the 224-slot mobile minimum (see CLAUDE.md), and two bombs landing
+    // on two different hulls inside the same flash window is not a real case.
+    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
+    col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
+    col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
     col = mix(col, vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0)), clamp(melt, 0.0, 1.0) * 0.8);
     col = applyFog(col, ro, rd, t, sun);
 
@@ -1641,7 +1653,7 @@ void main() {
     col = applyFog(col, ro, rd, t, sun);
   }
 
-  // alien harvest lasers (v9.0): a translucent fluo-green SHEET spanning the
+  // alien harvest lasers (v9.0): a translucent cyan-blue SHEET spanning the
   // ship's full length, dropping to the terrain — brightest at ground contact
   for (int s = 0; s < 6; s++) {
     if (float(s) >= uShipN || uShipLaser[s] < 0.5) continue;
@@ -1661,7 +1673,45 @@ void main() {
     float pulse = 0.7 + 0.3 * sin(uTime * 9.0 + lx * 0.06);
     float edge = smoothstep(uShipHalf.x, uShipHalf.x * 0.9, abs(lx));
     float ground = 1.0 + 2.6 * exp(-(hp.y - gy) * 0.12);
-    col += vec3(0.25, 1.0, 0.35) * 0.14 * pulse * edge * ground;
+    col += vec3(0.30, 0.85, 1.0) * 0.14 * pulse * edge * ground;
+  }
+
+  // alien energy beams: harvester -> relay, then relay -> mothership.
+  //
+  // These used to be 2D lines on the fx overlay, which has no depth buffer, so
+  // a beam crossing behind a ridge was still painted over it. Here in the
+  // marcher the closest-approach distance along the ray is compared against the
+  // primary hit distance t, which occludes them against terrain, hulls and trees
+  // for free -- the same trick the harvest sheet above already used.
+  //
+  // Only (source, head, tail, fade) is uploaded; the ENDPOINTS are read from
+  // uShipPos / uRelay / uMotherPos, which cost nothing extra and keep a beam
+  // welded to a harvester that is still moving.
+  for (int i = 0; i < 6; i++) {
+    if (float(i) >= uBoltN) break;
+    vec4 bv = uBolts[i];
+    int sid = int(bv.x + 0.5);
+    bool big = sid > 5;
+    vec3 p0 = big ? uRelay.xyz : uShipPos[sid].xyz;
+    vec3 p1 = big ? uMotherPos : uRelay.xyz;
+    vec3 ba = mix(p0, p1, bv.z), bb = mix(p0, p1, bv.y);
+    vec3 sg = bb - ba;
+    float cc = dot(sg, sg);
+    if (cc < 1.0) continue;
+    // closest approach between the view ray and the beam segment
+    vec3 w0 = ro - ba;
+    float Bc = dot(rd, sg), Dc = dot(rd, w0), Ec = dot(sg, w0);
+    float den = cc - Bc * Bc;
+    float u = (abs(den) < 1e-5) ? clamp(-Ec / cc, 0.0, 1.0)
+                                : clamp((Ec - Bc * Dc) / den, 0.0, 1.0);
+    float sray = -Dc + u * Bc;
+    if (sray < 0.0 || sray > t) continue;      // behind the camera, or behind the world
+    float dist = length(ro + rd * sray - (ba + sg * u));
+    float wid = big ? 26.0 : 11.0;
+    float halo = exp(-dist * dist / (wid * wid));
+    float core = exp(-dist * dist / (wid * wid * 0.10));
+    vec3 bcol = big ? vec3(0.55, 0.82, 1.0) : vec3(0.22, 0.60, 1.0);
+    col += bcol * (halo * 0.45 + core * 1.7) * bv.w;
   }
 
   // cumulonimbus over everything nearer than the hit (or the whole sky)
@@ -1781,7 +1831,7 @@ async function initRenderer(status, lock) {
 
   ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
    'uRingsPos','uRingMats','uLivery','uCockpit','uShadows','uFxPos',
-   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
+   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uAlienHit','uBolts','uBoltN','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
     .forEach(n => U[n] = gl.getUniformLocation(prog, n));
   return true;
 }
@@ -1795,15 +1845,15 @@ const TUNEA = {
   boxFold:  { label: 'box fold',    v: 0.7,   d: 0.7,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
   boxMinR:  { label: 'box min r',   v: 0.8,   d: 0.8,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
   bulbPow:  { label: 'bulb power',  v: 10,    d: 10,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
-  moLen:    { label: 'mother len',  v: 3000,  d: 3000,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
-  moWid:    { label: 'mother wid',  v: 2000,  d: 2000,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
-  moHei:    { label: 'mother hgt',  v: 310,   d: 310,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  moAlt:    { label: 'mother alt',  v: 2200,  d: 2200,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
-  shLen:    { label: 'ship length', v: 780,   d: 780,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  shWid:    { label: 'ship width',  v: 330,   d: 330,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  moLen:    { label: 'mother len',  v: 3500,  d: 3500,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moWid:    { label: 'mother wid',  v: 3500,  d: 3500,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
+  moHei:    { label: 'mother hgt',  v: 400,   d: 400,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  moAlt:    { label: 'mother alt',  v: 2600,  d: 2600,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
+  shLen:    { label: 'ship length', v: 1200,  d: 1200,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  shWid:    { label: 'ship width',  v: 800,   d: 800,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
   shHei:    { label: 'ship height', v: 120,   d: 120,   min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
   shSpeed:  { label: 'ship speed',  v: 30,    d: 30,    min: 2,    max: 60,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
-  relSize:  { label: 'relay size',  v: 30,    d: 30,    min: 10,   max: 80,    step: 2,    fmt: x => x.toFixed(0) + ' m' },
+  relSize:  { label: 'relay size',  v: 150,   d: 150,   min: 30,   max: 400,   step: 5,    fmt: x => x.toFixed(0) + ' m' },
 };
 
 const TUNE = {
@@ -2069,6 +2119,75 @@ function bombDropSound() {
   o.start(T); o.stop(T + 0.13);
 }
 
+// Bomb against an alien hull.
+//
+// The first attempt at this just took explosionSound() and moved every
+// frequency down. That was a mistake: it is the same ARCHITECTURE -- a noise
+// burst under a sweeping lowpass, plus a sine drop -- so it still read as "the
+// ground blast, further away" rather than as a different event.
+//
+// What separates hitting a hull from hitting dirt is RESONANCE. Soil is
+// broadband and dead; a big hollow metal box rings at a few frequencies and
+// sustains. So this is built the other way round: two narrow bandpass bands
+// with high Q ring on after the impact, over a deep sub, and the bright crack
+// that makes explosionSound() read as "open air" is gone entirely.
+function hullExplosionSound() {
+  if (!AC || muted) return;
+  const T = AC.currentTime, sr = AC.sampleRate;
+  const noise = (dur) => {
+    const buf = AC.createBuffer(1, Math.floor(sr * dur), sr);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    const src = AC.createBufferSource(); src.buffer = buf;
+    return src;
+  };
+
+  // sub: the "bassy" part -- an octave under the ground blast's 64 Hz
+  const o = AC.createOscillator(), og = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(44, T);
+  o.frequency.exponentialRampToValueAtTime(16, T + 1.0);
+  og.gain.setValueAtTime(0.7, T);
+  og.gain.exponentialRampToValueAtTime(0.001, T + 1.25);
+  o.connect(og); og.connect(AC.destination);
+  o.start(T); o.stop(T + 1.3);
+
+  // whump: resonant lowpass, Q high enough to have a body of its own
+  const wsrc = noise(0.6);
+  const wf = AC.createBiquadFilter(); wf.type = 'lowpass'; wf.Q.value = 9;
+  wf.frequency.setValueAtTime(240, T);
+  wf.frequency.exponentialRampToValueAtTime(55, T + 0.5);
+  const wg = AC.createGain();
+  wg.gain.setValueAtTime(0.45, T);
+  wg.gain.exponentialRampToValueAtTime(0.001, T + 0.55);
+  wsrc.connect(wf); wf.connect(wg); wg.connect(AC.destination);
+  wsrc.start(T); wsrc.stop(T + 0.6);
+
+  // hull ring: the part that says "metal box". Two narrow bands, different
+  // decays, so the tail beats slightly instead of sounding like one tone.
+  for (const [hz, q, gain, dur] of [[118, 16, 0.30, 1.0], [287, 13, 0.17, 0.72]]) {
+    const rs = noise(dur);
+    const bp = AC.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = hz; bp.Q.value = q;
+    const rg = AC.createGain();
+    rg.gain.setValueAtTime(gain, T);
+    rg.gain.exponentialRampToValueAtTime(0.001, T + dur);
+    rs.connect(bp); bp.connect(rg); rg.connect(AC.destination);
+    rs.start(T); rs.stop(T + dur + 0.02);
+  }
+
+  // onset: a short mid thud so the hit has an edge, well below the ground
+  // blast's 1500 Hz highpass crack
+  const tsrc = noise(0.09);
+  const tf = AC.createBiquadFilter(); tf.type = 'bandpass';
+  tf.frequency.value = 700; tf.Q.value = 1.1;
+  const tg = AC.createGain();
+  tg.gain.setValueAtTime(0.14, T);
+  tg.gain.exponentialRampToValueAtTime(0.001, T + 0.09);
+  tsrc.connect(tf); tf.connect(tg); tg.connect(AC.destination);
+  tsrc.start(T); tsrc.stop(T + 0.1);
+}
+
 function explosionSound() {
   if (!AC || muted) return;
   const T = AC.currentTime;
@@ -2306,34 +2425,9 @@ function projectFx(camB, px, py, pz, W, H) {
   return { x: (ux * H + W) / 2, y: H * (1 - uy) / 2, z: lz };
 }
 
-// alien energy bolts (v9.0): green harvester shots, blue-white relay blasts
-function drawBolts(camB, now, bolts) {
-  if (!bolts.length) return;
-  const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
-  fxCtx.globalCompositeOperation = 'lighter';
-  fxCtx.lineCap = 'round';
-  for (let i = bolts.length - 1; i >= 0; i--) {
-    const b = bolts[i];
-    const k = (now - b.t0) / b.dur;
-    if (k > 1.15) { bolts.splice(i, 1); continue; }
-    const kk = Math.min(1, k);
-    const hx = b.x0 + (b.x1 - b.x0) * kk, hy = b.y0 + (b.y1 - b.y0) * kk, hz = b.z0 + (b.z1 - b.z0) * kk;
-    const tl = Math.max(0, kk - (b.big ? 0.3 : 0.15));
-    const txp = b.x0 + (b.x1 - b.x0) * tl, typ = b.y0 + (b.y1 - b.y0) * tl, tzp = b.z0 + (b.z1 - b.z0) * tl;
-    const A = projectFx(camB, txp, typ, tzp, W, H);
-    const C = projectFx(camB, hx, hy, hz, W, H);
-    if (!A || !C) continue;
-    const wpx = Math.max(b.big ? 3 : 1.5, (b.big ? 1200 : 350) / C.z);
-    const col = b.big ? '140,210,255' : '90,255,130';
-    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
-    fxCtx.strokeStyle = 'rgba(' + col + ',0.22)'; fxCtx.lineWidth = wpx * 3.2; fxCtx.stroke();
-    fxCtx.beginPath(); fxCtx.moveTo(A.x, A.y); fxCtx.lineTo(C.x, C.y);
-    fxCtx.strokeStyle = 'rgba(' + col + ',0.9)'; fxCtx.lineWidth = wpx; fxCtx.stroke();
-    fxCtx.beginPath(); fxCtx.arc(C.x, C.y, wpx * 1.8, 0, 6.2832);
-    fxCtx.fillStyle = 'rgba(255,255,255,0.85)'; fxCtx.fill();
-  }
-  fxCtx.globalCompositeOperation = 'source-over';
-}
+// The alien energy beams used to be drawn here as 2D lines. They are now 3D
+// in the fragment shader (see uBolts in shaders.js): the overlay has no depth
+// buffer, so a beam behind a mountain was painted straight over it.
 
 function drawTrail(camB, now, bullets, bombs, impacts) {
   const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
@@ -2390,12 +2484,82 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
   // height and is projected in perspective, so the circle tilts with slopes.
   for (let i = impacts.length - 1; i >= 0; i--) {
     const p = impacts[i];
-    const life = (p.kind === 3) ? 0.9 : 0.45;
+    const life = (p.kind === 3) ? 0.9 : (p.kind === 4 ? 0.8 : 0.45);
     const age = (now - p.t0) / 1000;
     if (age > life) { impacts.splice(i, 1); continue; }
     const k = age / life;
     const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
     if (vv < 0.02) continue;
+    if (p.kind === 4) {
+      // Alien hull detonation. kind 3 below lies on the TERRAIN; this one lies
+      // on the HULL. aliens.js hands over the struck face as a frame in the
+      // hull's own local space -- an origin plus two in-plane axes, or a normal
+      // plus a radius for the relay bulb -- and the hull object itself, so the
+      // ring is re-derived in world space every frame. That does both things a
+      // billboard could not: it wraps the side that was actually hit instead of
+      // facing the camera, and it rides a harvester that is still moving (at
+      // 30 m/s a static ring drifts 24 m off the ship inside its own lifetime).
+      const h = p.hull;
+      const ca = p.rot ? Math.cos(h.a) : 1, sa = p.rot ? Math.sin(h.a) : 0;
+      const toW = l => [h.x + l[0] * ca + l[2] * sa, h.y + l[1], h.z - l[0] * sa + l[2] * ca];
+      const toD = d => (p.rot ? [d[0] * ca + d[2] * sa, d[1], -d[0] * sa + d[2] * ca] : d);
+      const oW = toW(p.lp), uW = toD(p.u), vW = toD(p.v), nW = p.curv > 0 ? toD(p.n) : null;
+      p.x = oW[0]; p.y = oW[1]; p.z = oW[2];    // keep the occlusion probe on the hull
+      const dx = p.x - viewPos[0], dy = p.y - viewPos[1], dz = p.z - viewPos[2];
+      const dist = Math.max(20, Math.hypot(dx, dy, dz));
+      const pxPerM = H / (2 * dist * TAN_HALF_FOV);
+      const frac = Math.min(1, k * 2.0);
+      fxCtx.globalCompositeOperation = 'lighter';
+      const cs = projectFx(camB, p.x, p.y, p.z, W, H);
+      if (cs && k < 0.32) {
+        // Deliberately dim. Under 'lighter', over an already-lit hull, a near
+        // white core blew out into a hard camera-flash blink instead of reading
+        // as a detonation, so this is half the alpha and half the radius it was.
+        fxCtx.beginPath();
+        fxCtx.arc(cs.x, cs.y, Math.max(1.5, 7 * pxPerM * (1 - k * 3.1) + 1.5), 0, 6.2832);
+        fxCtx.fillStyle = 'rgba(170,205,240,' + Math.max(0, 0.30 * (1 - k * 3.1) * vv).toFixed(3) + ')';
+        fxCtx.fill();
+      }
+      const traceHull = (fr) => {
+        const r = p.maxR * fr;
+        if (r < 0.05) return false;
+        let started = false, drew = false;
+        fxCtx.beginPath();
+        for (let q = 0; q <= RING_N; q++) {
+          const th = ((q % RING_N) / RING_N) * 6.28318;
+          const c = Math.cos(th), sn = Math.sin(th);
+          let wx, wy, wz;
+          if (nW) {                                // geodesic cap over the bulb
+            const ph = Math.min(r / p.curv, 2.4), cp = Math.cos(ph), sp = Math.sin(ph);
+            wx = oW[0] + p.curv * (cp * nW[0] + sp * (c * uW[0] + sn * vW[0]));
+            wy = oW[1] + p.curv * (cp * nW[1] + sp * (c * uW[1] + sn * vW[1]));
+            wz = oW[2] + p.curv * (cp * nW[2] + sp * (c * uW[2] + sn * vW[2]));
+          } else {                                 // flat ring lying on the face
+            wx = oW[0] + (c * uW[0] + sn * vW[0]) * r;
+            wy = oW[1] + (c * uW[1] + sn * vW[1]) * r;
+            wz = oW[2] + (c * uW[2] + sn * vW[2]) * r;
+          }
+          const sp2 = projectFx(camB, wx, wy, wz, W, H);
+          if (!sp2) { started = false; continue; }  // vertex behind camera: break the path
+          if (!started) { fxCtx.moveTo(sp2.x, sp2.y); started = true; }
+          else fxCtx.lineTo(sp2.x, sp2.y);
+          drew = true;
+        }
+        return drew;
+      };
+      if (traceHull(frac)) {
+        fxCtx.strokeStyle = 'rgba(150,215,255,' + ((1 - k) * 0.7 * vv).toFixed(3) + ')';
+        fxCtx.lineWidth = Math.max(1.2, 3.0 * pxPerM * (1 - k) + 1);
+        fxCtx.stroke();
+      }
+      if (traceHull(frac * 0.55)) {
+        fxCtx.strokeStyle = 'rgba(95,165,255,' + ((1 - k) * 0.4 * vv).toFixed(3) + ')';
+        fxCtx.lineWidth = Math.max(1, 2.2 * pxPerM * (1 - k) + 0.8);
+        fxCtx.stroke();
+      }
+      fxCtx.globalCompositeOperation = 'source-over';
+      continue;
+    }
     if (p.kind === 3) {
       const frac = Math.min(1, k * 2.2);            // expands to full radius fast
       // viewPos, NOT camPos: the orbit rotates the render view only, and the
@@ -3310,7 +3474,7 @@ function driftClouds(dt) {
 // ==================== js/aliens.js ====================
 // ============ ALIEN INVASION (v9.0) ============
 // A rectangular-mandelbox MOTHERSHIP parks high over the island. Harvester
-// ships (box-cropped mandelboxes) sweep the plains with a fluo-green laser
+// ships (box-cropped mandelboxes) sweep the plains with a cyan-blue laser
 // sheet, absorbing spore trees; every few trees they fire an energy bolt to
 // the mandelbulb RELAYSHIP on its mountaintop, which grows — at double size
 // it discharges a blast up to the mothership, which builds one more
@@ -3382,6 +3546,83 @@ function initAliens() {
   spawnHarvester(false); spawnHarvester(false);
 }
 
+// A bomb landing on a hull flags that hull for a brief colour flare. One id
+// for the whole fleet, not an array: the shader reads it as a single vec2 (see
+// the uniform-budget note in CLAUDE.md), and two hulls being hit inside the
+// same 0.6 s window is not a case worth six uniform slots.
+// The relay inflates as it absorbs energy, then blasts and resets. GROW is
+// how many times its base radius it reaches first; STEPS is how many energy
+// arrivals that takes. STEPS is pinned at the value the old numbers implied
+// ((2 - 1) / 0.02 = 50) so changing the SIZE never silently changes the
+// PACING of the invasion economy -- the growth increment is derived from the
+// pair rather than written as its own magic 0.02.
+const RELAY_GROW = 7;                    // 7 x a 150 m base = ~35 x the old 30 m relay
+const RELAY_STEPS = 50;                  // energy arrivals from base to blast
+const BOLT_MAX = 6;                      // beams the shader can draw at once
+const HIT_FLASH = 0.6;                   // seconds the flare stays visible
+let hitId = -1, hitT0 = -1e9;            // hull id (matches mal.y), and when
+
+// Which FACE did the bomb strike, and what does a ring lying on it look like?
+// Returned in the hull's own local frame, so fx.js can re-derive the world
+// position every frame and the ring keeps riding the hull as it flies on.
+//   half  = local half-extents. For a ship that is [len/2, hei/2, wid/2] along
+//           (lx, y, lz) -- the same axes alienBombHits tests against.
+//   rot   = does the hull carry a heading (ships yes, mothership no).
+function boxFace(B, hull, half, rot) {
+  const ox = B.x - hull.x, oy = B.y - hull.y, oz = B.z - hull.z;
+  let lx = ox, lz = oz;
+  if (rot) {
+    const ca = Math.cos(hull.a), sa = Math.sin(hull.a);
+    lx = ox * ca - oz * sa; lz = ox * sa + oz * ca;
+  }
+  const l = [lx, oy, lz];
+  // the face is the axis the hit sits furthest along, measured in half-extents
+  // -- not in metres, or every hit on a 3500 m mothership would pick its length
+  let ax = 0, best = -1;
+  for (let i = 0; i < 3; i++) {
+    const d = Math.abs(l[i]) / Math.max(half[i], 1e-6);
+    if (d > best) { best = d; ax = i; }
+  }
+  const i1 = (ax + 1) % 3, i2 = (ax + 2) % 3;
+  const lp = [l[0], l[1], l[2]];
+  lp[ax] = (l[ax] < 0 ? -1 : 1) * (half[ax] + 0.8);      // sit just proud of the skin
+  lp[i1] = Math.max(-half[i1], Math.min(half[i1], lp[i1]));
+  lp[i2] = Math.max(-half[i2], Math.min(half[i2], lp[i2]));
+  const u = [0, 0, 0], v = [0, 0, 0];
+  u[i1] = 1; v[i2] = 1;
+  // clamped to the face so the ring cannot hang off the side it is drawn on --
+  // that is what limits a hit on a harvester flank to its 60 m height
+  return { lp, u, v, n: null, curv: 0,
+           maxR: Math.min(HULL_BLAST_R, Math.min(half[i1], half[i2]) * 0.92) };
+}
+
+// The relay is a bulb, so its ring is a geodesic cap around the hit direction
+// rather than a flat disc: it curves over the surface the way the box ring
+// lies flat on a face.
+function sphereFace(B, hull, R) {
+  let nx = B.x - hull.x, ny = B.y - hull.y, nz = B.z - hull.z;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  nx /= len; ny /= len; nz /= len;
+  const a = Math.abs(ny) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let ux = ny * a[2] - nz * a[1], uy = nz * a[0] - nx * a[2], uz = nx * a[1] - ny * a[0];
+  const ul = Math.hypot(ux, uy, uz) || 1;
+  ux /= ul; uy /= ul; uz /= ul;
+  const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+  return { lp: [0, 0, 0], u: [ux, uy, uz], v: [vx, vy, vz], n: [nx, ny, nz],
+           curv: R, maxR: Math.min(HULL_BLAST_R, R * 1.6) };
+}
+
+function hullHit(id, B, frame, hull, rot) {
+  hitId = id; hitT0 = performance.now();
+  // kind 4 = a burst ON a hull. kind 3 is laid on the terrain; this one is laid
+  // on the face that was actually struck, and carries a reference to the hull
+  // so it keeps following it for the 0.8 s it lives.
+  impacts.push({ x: B.x, y: B.y, z: B.z, t0: hitT0, kind: 4,
+                 hull, rot, lp: frame.lp, u: frame.u, v: frame.v,
+                 n: frame.n, curv: frame.curv, maxR: frame.maxR });
+  hullExplosionSound();
+}
+
 function alienBombHits(bombs) {
   // bombs vs hulls: oriented-box tests in JS (analytic, cheap)
   for (let i = 0; i < bombs.length; i++) {
@@ -3391,28 +3632,29 @@ function alienBombHits(bombs) {
     const m = alien.mother;
     if (!m.gone && !m.falling &&
         Math.abs(B.x - m.x) < TUNEA.moWid.v / 2 && Math.abs(B.y - m.y) < TUNEA.moHei.v / 2 + 3 && Math.abs(B.z - m.z) < TUNEA.moLen.v / 2) {
-      bombs[i] = null; m.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-      explosionSound();
+      bombs[i] = null; m.hp--;
+      hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
       continue;
     }
     // relay (sphere)
     const r = alien.relay;
     if (!r.gone && !r.falling && Math.hypot(B.x - r.x, B.y - r.y, B.z - r.z) < r.r + 3) {
-      bombs[i] = null; r.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-      explosionSound();
+      bombs[i] = null; r.hp--;
+      hullHit(7.0, B, sphereFace(B, r, r.r), r, false);
       if (r.hp <= 0) { r.falling = true; }
       continue;
     }
     // harvesters (heading-oriented boxes)
-    for (const s of alien.ships) {
+    for (let si = 0; si < alien.ships.length; si++) {
+      const s = alien.ships[si];
       if (s.falling || s.melt > 0) continue;
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = B.x - s.x, oz = B.z - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
       if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(B.y - s.y) < TUNEA.shHei.v / 2 + 3 && Math.abs(lz) < TUNEA.shWid.v / 2 + 3) {
-        bombs[i] = null; s.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-        explosionSound();
+        bombs[i] = null; s.hp--;
+        hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
         break;
       }
@@ -3513,7 +3755,10 @@ function updateAliens(dt, now) {
     // energy shot to the relay: every 3 trees, at most one per ~1.5 s
     if (!r.gone && !r.falling && s.absorbed >= 3 && now - s.lastShot > 1500) {
       s.absorbed -= 3; s.lastShot = now;
-      alien.bolts.push({ x0: s.x, y0: s.y, z0: s.z, x1: r.x, y1: r.y, z1: r.z, t0: now, dur: 600, big: false, done: false });
+      // `ship` (not an index) survives another harvester being spliced out;
+      // the shader resolves it back to a slot each frame and drops the beam
+      // if the firing ship has since died.
+      alien.bolts.push({ x0: s.x, y0: s.y, z0: s.z, x1: r.x, y1: r.y, z1: r.z, t0: now, dur: 600, big: false, done: false, ship: s, src: 0 });
       zapSound();
     }
   }
@@ -3525,13 +3770,22 @@ function updateAliens(dt, now) {
     if (b.big) {
       if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
     } else if (!r.gone && !r.falling) {
-      r.r += r.baseR * 0.02;                              // relay grows very slightly
-      if (r.r >= r.baseR * 2) {
+      r.r += r.baseR * (RELAY_GROW - 1) / RELAY_STEPS;
+      if (r.r >= r.baseR * RELAY_GROW) {
         r.r = r.baseR;
-        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false });
+        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false, ship: null, src: 6 });
         relayBlastSound();
       }
     }
+  }
+
+  // Retire spent beams. fx.js used to splice these out as it drew them; once
+  // the beams moved into the shader nothing else did, and alien.bolts grew
+  // without bound for the whole session -- a slow leak, and an arrival loop
+  // that got longer every shot. Same 1.15 overshoot the renderer used.
+  for (let i = alien.bolts.length - 1; i >= 0; i--) {
+    const b = alien.bolts[i];
+    if (b.done && now - b.t0 > b.dur * 1.15) alien.bolts.splice(i, 1);
   }
 
   // flying into a LIVE hull ends the flight. A downed one is inert — the same
@@ -3571,6 +3825,32 @@ function packAlienUniforms(out) {
   }
   out.shipHalf = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
   out.boxParam = [TUNEA.boxScale.v, TUNEA.boxMinR.v * TUNEA.boxMinR.v, TUNEA.boxFold.v, TUNEA.bulbPow.v];
+  // Energy beams, packed as (source id, head, tail, fade). The ENDPOINTS are
+  // not sent: the shader already holds uShipPos / uRelay / uMotherPos, so a
+  // beam costs one vec4 instead of six floats -- and reading them live means
+  // the beam stays welded to a harvester that is still flying rather than to
+  // wherever it was standing when it fired.
+  const bnow = performance.now();
+  let bn = 0;
+  for (const bl of alien.bolts) {
+    if (bn >= BOLT_MAX) break;
+    const sid = bl.src === 6 ? 6 : alien.ships.indexOf(bl.ship);
+    if (sid < 0) continue;                     // the firing harvester is gone
+    const k = (bnow - bl.t0) / bl.dur;
+    if (k < 0 || k > 1.15) continue;
+    const head = Math.min(1, k);
+    out.bolts[bn * 4] = sid;
+    out.bolts[bn * 4 + 1] = head;
+    out.bolts[bn * 4 + 2] = 0;                 // tail pinned at the source: a
+    // full beam bridging ship and relay, not a short travelling dash
+    out.bolts[bn * 4 + 3] = k <= 1 ? 1 : Math.max(0, 1 - (k - 1) / 0.15);
+    bn++;
+  }
+  out.boltN = bn;
+
+  const hitAge = (performance.now() - hitT0) / 1000;
+  const fl = hitAge < HIT_FLASH ? 1.0 - hitAge / HIT_FLASH : 0.0;
+  out.alienHit = [hitId, fl * fl];       // squared: flares hard, fades off quickly
 }
 
 // ==================== js/flight.js ====================
@@ -4100,7 +4380,8 @@ function update(dt, now) {
 // GPU collision probe readback buffer + grind-shake scratch
 const probeBuf = new Uint8Array(133 * 4);  // px 0-1 craft · 2-17 bullets · 18-81 blast cells · 82-84 bombs · 85-132 fx occlusion
 const fxPosArr = new Float32Array(48 * 3); // overlay occlusion query positions
-const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6) };
+const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6),
+                 bolts: new Float32Array(24), boltN: 0 };
 
 // cursor visibility (v8.0): 100 = native crosshair, 0 = hidden; in between a
 // custom crosshair drawn at that alpha (a native cursor cannot be translucent)
@@ -4256,6 +4537,9 @@ async function main() {
   gl.uniform1f(U.uMotherMelt, alienU.motherMelt);
   gl.uniform4fv(U.uRelay, alienU.relay);
   gl.uniform1f(U.uRelayMelt, alienU.relayMelt);
+  gl.uniform2fv(U.uAlienHit, alienU.alienHit);
+  gl.uniform4fv(U.uBolts, alienU.bolts);
+  gl.uniform1f(U.uBoltN, alienU.boltN);
   gl.uniform4fv(U.uShipPos, alienU.shipPos);
   gl.uniform1fv(U.uShipLaser, alienU.shipLaser);
   gl.uniform1fv(U.uShipMelt, alienU.shipMelt);
@@ -4332,7 +4616,6 @@ async function main() {
   for (let i = 0; i < 48; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
 
   drawTrail(camBasis, now, bullets, bombs, impacts);
-  drawBolts(camBasis, now, alien.bolts);
   if (running) requestAnimationFrame(frame);
 }
   setStatus('spinning up the GPU \u2014 first frame \u2026');

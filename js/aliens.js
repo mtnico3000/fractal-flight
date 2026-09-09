@@ -2,13 +2,14 @@ import { TUNEA } from './tune.js';
 import { craft } from './state.js';
 import { terrainShapeJ } from './terrain.js';
 import { collectedSet } from './spores.js';
+import { HULL_BLAST_R } from './config.js';
 import { bombs, impacts, blastQueue } from './weapons.js';
-import { explosionSound, zapSound, relayBlastSound } from './audio.js';
+import { hullExplosionSound, zapSound, relayBlastSound } from './audio.js';
 import { doCrash } from './hud.js';
 
 // ============ ALIEN INVASION (v9.0) ============
 // A rectangular-mandelbox MOTHERSHIP parks high over the island. Harvester
-// ships (box-cropped mandelboxes) sweep the plains with a fluo-green laser
+// ships (box-cropped mandelboxes) sweep the plains with a cyan-blue laser
 // sheet, absorbing spore trees; every few trees they fire an energy bolt to
 // the mandelbulb RELAYSHIP on its mountaintop, which grows — at double size
 // it discharges a blast up to the mothership, which builds one more
@@ -80,6 +81,83 @@ export function initAliens() {
   spawnHarvester(false); spawnHarvester(false);
 }
 
+// A bomb landing on a hull flags that hull for a brief colour flare. One id
+// for the whole fleet, not an array: the shader reads it as a single vec2 (see
+// the uniform-budget note in CLAUDE.md), and two hulls being hit inside the
+// same 0.6 s window is not a case worth six uniform slots.
+// The relay inflates as it absorbs energy, then blasts and resets. GROW is
+// how many times its base radius it reaches first; STEPS is how many energy
+// arrivals that takes. STEPS is pinned at the value the old numbers implied
+// ((2 - 1) / 0.02 = 50) so changing the SIZE never silently changes the
+// PACING of the invasion economy -- the growth increment is derived from the
+// pair rather than written as its own magic 0.02.
+const RELAY_GROW = 7;                    // 7 x a 150 m base = ~35 x the old 30 m relay
+const RELAY_STEPS = 50;                  // energy arrivals from base to blast
+const BOLT_MAX = 6;                      // beams the shader can draw at once
+const HIT_FLASH = 0.6;                   // seconds the flare stays visible
+let hitId = -1, hitT0 = -1e9;            // hull id (matches mal.y), and when
+
+// Which FACE did the bomb strike, and what does a ring lying on it look like?
+// Returned in the hull's own local frame, so fx.js can re-derive the world
+// position every frame and the ring keeps riding the hull as it flies on.
+//   half  = local half-extents. For a ship that is [len/2, hei/2, wid/2] along
+//           (lx, y, lz) -- the same axes alienBombHits tests against.
+//   rot   = does the hull carry a heading (ships yes, mothership no).
+function boxFace(B, hull, half, rot) {
+  const ox = B.x - hull.x, oy = B.y - hull.y, oz = B.z - hull.z;
+  let lx = ox, lz = oz;
+  if (rot) {
+    const ca = Math.cos(hull.a), sa = Math.sin(hull.a);
+    lx = ox * ca - oz * sa; lz = ox * sa + oz * ca;
+  }
+  const l = [lx, oy, lz];
+  // the face is the axis the hit sits furthest along, measured in half-extents
+  // -- not in metres, or every hit on a 3500 m mothership would pick its length
+  let ax = 0, best = -1;
+  for (let i = 0; i < 3; i++) {
+    const d = Math.abs(l[i]) / Math.max(half[i], 1e-6);
+    if (d > best) { best = d; ax = i; }
+  }
+  const i1 = (ax + 1) % 3, i2 = (ax + 2) % 3;
+  const lp = [l[0], l[1], l[2]];
+  lp[ax] = (l[ax] < 0 ? -1 : 1) * (half[ax] + 0.8);      // sit just proud of the skin
+  lp[i1] = Math.max(-half[i1], Math.min(half[i1], lp[i1]));
+  lp[i2] = Math.max(-half[i2], Math.min(half[i2], lp[i2]));
+  const u = [0, 0, 0], v = [0, 0, 0];
+  u[i1] = 1; v[i2] = 1;
+  // clamped to the face so the ring cannot hang off the side it is drawn on --
+  // that is what limits a hit on a harvester flank to its 60 m height
+  return { lp, u, v, n: null, curv: 0,
+           maxR: Math.min(HULL_BLAST_R, Math.min(half[i1], half[i2]) * 0.92) };
+}
+
+// The relay is a bulb, so its ring is a geodesic cap around the hit direction
+// rather than a flat disc: it curves over the surface the way the box ring
+// lies flat on a face.
+function sphereFace(B, hull, R) {
+  let nx = B.x - hull.x, ny = B.y - hull.y, nz = B.z - hull.z;
+  const len = Math.hypot(nx, ny, nz) || 1;
+  nx /= len; ny /= len; nz /= len;
+  const a = Math.abs(ny) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let ux = ny * a[2] - nz * a[1], uy = nz * a[0] - nx * a[2], uz = nx * a[1] - ny * a[0];
+  const ul = Math.hypot(ux, uy, uz) || 1;
+  ux /= ul; uy /= ul; uz /= ul;
+  const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+  return { lp: [0, 0, 0], u: [ux, uy, uz], v: [vx, vy, vz], n: [nx, ny, nz],
+           curv: R, maxR: Math.min(HULL_BLAST_R, R * 1.6) };
+}
+
+function hullHit(id, B, frame, hull, rot) {
+  hitId = id; hitT0 = performance.now();
+  // kind 4 = a burst ON a hull. kind 3 is laid on the terrain; this one is laid
+  // on the face that was actually struck, and carries a reference to the hull
+  // so it keeps following it for the 0.8 s it lives.
+  impacts.push({ x: B.x, y: B.y, z: B.z, t0: hitT0, kind: 4,
+                 hull, rot, lp: frame.lp, u: frame.u, v: frame.v,
+                 n: frame.n, curv: frame.curv, maxR: frame.maxR });
+  hullExplosionSound();
+}
+
 function alienBombHits(bombs) {
   // bombs vs hulls: oriented-box tests in JS (analytic, cheap)
   for (let i = 0; i < bombs.length; i++) {
@@ -89,28 +167,29 @@ function alienBombHits(bombs) {
     const m = alien.mother;
     if (!m.gone && !m.falling &&
         Math.abs(B.x - m.x) < TUNEA.moWid.v / 2 && Math.abs(B.y - m.y) < TUNEA.moHei.v / 2 + 3 && Math.abs(B.z - m.z) < TUNEA.moLen.v / 2) {
-      bombs[i] = null; m.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-      explosionSound();
+      bombs[i] = null; m.hp--;
+      hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
       continue;
     }
     // relay (sphere)
     const r = alien.relay;
     if (!r.gone && !r.falling && Math.hypot(B.x - r.x, B.y - r.y, B.z - r.z) < r.r + 3) {
-      bombs[i] = null; r.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-      explosionSound();
+      bombs[i] = null; r.hp--;
+      hullHit(7.0, B, sphereFace(B, r, r.r), r, false);
       if (r.hp <= 0) { r.falling = true; }
       continue;
     }
     // harvesters (heading-oriented boxes)
-    for (const s of alien.ships) {
+    for (let si = 0; si < alien.ships.length; si++) {
+      const s = alien.ships[si];
       if (s.falling || s.melt > 0) continue;
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = B.x - s.x, oz = B.z - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
       if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(B.y - s.y) < TUNEA.shHei.v / 2 + 3 && Math.abs(lz) < TUNEA.shWid.v / 2 + 3) {
-        bombs[i] = null; s.hp--; impacts.push({ x: B.x, y: B.y, z: B.z, t0: performance.now(), kind: 0 });
-        explosionSound();
+        bombs[i] = null; s.hp--;
+        hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
         break;
       }
@@ -211,7 +290,10 @@ export function updateAliens(dt, now) {
     // energy shot to the relay: every 3 trees, at most one per ~1.5 s
     if (!r.gone && !r.falling && s.absorbed >= 3 && now - s.lastShot > 1500) {
       s.absorbed -= 3; s.lastShot = now;
-      alien.bolts.push({ x0: s.x, y0: s.y, z0: s.z, x1: r.x, y1: r.y, z1: r.z, t0: now, dur: 600, big: false, done: false });
+      // `ship` (not an index) survives another harvester being spliced out;
+      // the shader resolves it back to a slot each frame and drops the beam
+      // if the firing ship has since died.
+      alien.bolts.push({ x0: s.x, y0: s.y, z0: s.z, x1: r.x, y1: r.y, z1: r.z, t0: now, dur: 600, big: false, done: false, ship: s, src: 0 });
       zapSound();
     }
   }
@@ -223,13 +305,22 @@ export function updateAliens(dt, now) {
     if (b.big) {
       if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
     } else if (!r.gone && !r.falling) {
-      r.r += r.baseR * 0.02;                              // relay grows very slightly
-      if (r.r >= r.baseR * 2) {
+      r.r += r.baseR * (RELAY_GROW - 1) / RELAY_STEPS;
+      if (r.r >= r.baseR * RELAY_GROW) {
         r.r = r.baseR;
-        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false });
+        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false, ship: null, src: 6 });
         relayBlastSound();
       }
     }
+  }
+
+  // Retire spent beams. fx.js used to splice these out as it drew them; once
+  // the beams moved into the shader nothing else did, and alien.bolts grew
+  // without bound for the whole session -- a slow leak, and an arrival loop
+  // that got longer every shot. Same 1.15 overshoot the renderer used.
+  for (let i = alien.bolts.length - 1; i >= 0; i--) {
+    const b = alien.bolts[i];
+    if (b.done && now - b.t0 > b.dur * 1.15) alien.bolts.splice(i, 1);
   }
 
   // flying into a LIVE hull ends the flight. A downed one is inert — the same
@@ -269,4 +360,30 @@ export function packAlienUniforms(out) {
   }
   out.shipHalf = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
   out.boxParam = [TUNEA.boxScale.v, TUNEA.boxMinR.v * TUNEA.boxMinR.v, TUNEA.boxFold.v, TUNEA.bulbPow.v];
+  // Energy beams, packed as (source id, head, tail, fade). The ENDPOINTS are
+  // not sent: the shader already holds uShipPos / uRelay / uMotherPos, so a
+  // beam costs one vec4 instead of six floats -- and reading them live means
+  // the beam stays welded to a harvester that is still flying rather than to
+  // wherever it was standing when it fired.
+  const bnow = performance.now();
+  let bn = 0;
+  for (const bl of alien.bolts) {
+    if (bn >= BOLT_MAX) break;
+    const sid = bl.src === 6 ? 6 : alien.ships.indexOf(bl.ship);
+    if (sid < 0) continue;                     // the firing harvester is gone
+    const k = (bnow - bl.t0) / bl.dur;
+    if (k < 0 || k > 1.15) continue;
+    const head = Math.min(1, k);
+    out.bolts[bn * 4] = sid;
+    out.bolts[bn * 4 + 1] = head;
+    out.bolts[bn * 4 + 2] = 0;                 // tail pinned at the source: a
+    // full beam bridging ship and relay, not a short travelling dash
+    out.bolts[bn * 4 + 3] = k <= 1 ? 1 : Math.max(0, 1 - (k - 1) / 0.15);
+    bn++;
+  }
+  out.boltN = bn;
+
+  const hitAge = (performance.now() - hitT0) / 1000;
+  const fl = hitAge < HIT_FLASH ? 1.0 - hitAge / HIT_FLASH : 0.0;
+  out.alienHit = [hitId, fl * fl];       // squared: flares hard, fades off quickly
 }

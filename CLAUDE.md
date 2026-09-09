@@ -46,7 +46,8 @@ what `build.js` produces — that is what makes "never edit it" enforceable.
   `terrainShapeLOD(p, px)` is the ONE terrain body — see the collision note
   below. The fragment shader IS the game world: terrainShape (2× mandelDE + domain-warped ridged fbm + lakes),
   plantEval (tree-fern SDF, Julia-carved fronds), clouds, water, craft SDF,
-  rings (mat 5), alien fleet (mat 6: box-cropped rectangular mandelbox ships;
+  rings (mat 5), laser sheets + energy beams (both depth-tested against the
+primary hit), alien fleet (mat 6: blue-toned box-cropped mandelbox ships;
   relay = power-8 mandelbulb), shadow pack, laser sheets, sky/fog/dusk.
 - `flight.js` — 6DOF triad flight (Rodrigues rotations), arcade auto-level
   (SPACE = raw free flight), chase camera + mouse orbit + wheel zoom +
@@ -64,7 +65,9 @@ what `build.js` produces — that is what makes "never edit it" enforceable.
   kills). `activeBlast.harvest` marks alien sweeps (no player score).
 - `spores.js` — tree harvesting score + 512² collected-cells texture (unit 1).
 - `fx.js` — 2D overlay canvas: contrails, tracers, bomb blink, blast rings,
-  pops, alien energy bolts. Occlusion via GPU probe queries (48 slots).
+  pops. **The overlay has NO depth buffer** — anything that can pass behind
+  terrain belongs in the shader instead. The alien energy beams were moved
+  there on 9 Sept 2026 for exactly that reason. Occlusion via GPU probe queries (48 slots).
 - `audio.js` — all synthesized (engine + LFO wobble, grind, wind, pops, guns,
   bombs, zap, relay blast, crash). M toggles mute.
 - `tune.js` — TUNE (world panel) + TUNEA (green Aliens panel, bottom-right).
@@ -235,7 +238,7 @@ node test/run_tests.js        # everything
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
   live hull is lethal while a falling/melting one is inert.
 - `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
-  in pairs across 33 knobs, and a missed `d` only shows when someone presses
+  in pairs across 35 knobs, and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
 - `test/test_build.js` — the single file must be byte-identical to what
@@ -256,6 +259,16 @@ node test/run_tests.js        # everything
   stand down (otherwise the slider appears to do nothing). Plus the
   MAX_TEXTURE_SIZE clamp that keeps a 2x supersample from failing in
   resize(). All three mutations verified red.
+- `test/test_terrain.js` — the CPU mirror vs the GLSL it mirrors, the last
+  module in the collision path with no coverage. Golden heights under a
+  PINNED TUNE stub (so retuning the world cannot false-red it), the
+  Mandelbrot constants compared numerically against the shader (`1.0e-4` in
+  GLSL vs `1e-4` in JS), and the DERIVED ones reconstructed: the shader's
+  `smoothstep(0.58, 0.72, v)` is `(v - 0.58) / 0.14` in the mirror, so the
+  high edge survives only as a span and is checked as `0.58 + 0.14 === 0.72`.
+  Also guards `terrainCheapH()`, the THIRD copy of the shaping maths (shadow
+  rays) — deliberately coarser, but it has to share the constants or shadows
+  are cast by a different mountain than the one drawn. 12 mutants verified red.
 - `test/test_docs.js` — README and CLAUDE.md must list every js/ module and
   no ghost, the module count must be right, and the Running command block
   must invoke serve.py. The README listed the v5 module set until 6 Sept

@@ -15,13 +15,14 @@ import { bullets, bombs, impacts, bulletUniform, bulletProbePos, gpuBulletGround
 import { clouds, cloudArr, genClouds } from './clouds.js';
 import { updateHUD } from './hud.js';
 import { ensureAudio } from './audio.js';
-import { drawTrail, buildFxQueries, fxOcc, drawBolts } from './fx.js';
+import { drawTrail, buildFxQueries, fxOcc } from './fx.js';
 import { initAliens, packAlienUniforms, alien } from './aliens.js';
 
 // GPU collision probe readback buffer + grind-shake scratch
 const probeBuf = new Uint8Array(133 * 4);  // px 0-1 craft · 2-17 bullets · 18-81 blast cells · 82-84 bombs · 85-132 fx occlusion
 const fxPosArr = new Float32Array(48 * 3); // overlay occlusion query positions
-const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6) };
+const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6),
+                 bolts: new Float32Array(24), boltN: 0 };
 
 // cursor visibility (v8.0): 100 = native crosshair, 0 = hidden; in between a
 // custom crosshair drawn at that alpha (a native cursor cannot be translucent)
@@ -177,6 +178,9 @@ async function main() {
   gl.uniform1f(U.uMotherMelt, alienU.motherMelt);
   gl.uniform4fv(U.uRelay, alienU.relay);
   gl.uniform1f(U.uRelayMelt, alienU.relayMelt);
+  gl.uniform2fv(U.uAlienHit, alienU.alienHit);
+  gl.uniform4fv(U.uBolts, alienU.bolts);
+  gl.uniform1f(U.uBoltN, alienU.boltN);
   gl.uniform4fv(U.uShipPos, alienU.shipPos);
   gl.uniform1fv(U.uShipLaser, alienU.shipLaser);
   gl.uniform1fv(U.uShipMelt, alienU.shipMelt);
@@ -253,7 +257,6 @@ async function main() {
   for (let i = 0; i < 48; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
 
   drawTrail(camBasis, now, bullets, bombs, impacts);
-  drawBolts(camBasis, now, alien.bolts);
   if (running) requestAnimationFrame(frame);
 }
   setStatus('spinning up the GPU \u2014 first frame \u2026');

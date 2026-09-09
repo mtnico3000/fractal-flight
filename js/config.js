@@ -20,6 +20,7 @@ export const BULLET_RANGE = 1600; // meters of flight before the tracer burns ou
 export const MAXBOMB = 3;
 export const BLAST_R = 100;       // meters: everything poppable inside this radius dies
 export const BLASTC = 64;         // max cells one detonation can query
+export const HULL_BLAST_R = 70;  // meters: visual radius of the air-burst ring on an alien hull
 export const RING_N = 28;         // ring vertices for the ground-conforming blast circle
 export const BOMB_BOOST = 40;     // horizontal speed on top of the plane's own speed
 

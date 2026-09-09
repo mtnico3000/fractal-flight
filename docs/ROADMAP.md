@@ -51,14 +51,14 @@ A2–A6 were built, measured and dropped — see below before rebuilding any of
 them.
 
 0. **Run `node test/run_tests.js` first.** It should print "all suites
-   passed" (32 assertions, 6 files). Then `python serve.py 8734`, press
+   passed" (46 assertions, 7 files). Then `python serve.py 8734`, press
    START, and fly it once.
 1. Read docs/HISTORY.md once (the WHY archive). **Before touching graphics,
    read docs/RESEARCH.md §3** — in particular the entry explaining that the
    whole shimmer hunt was answering the wrong question.
 
 2. ▶ **C2 — CONTINUE the test suite. THIS IS THE NEXT ITEM.**
-   `node test/run_tests.js` is green with **32 assertions across 6 files**:
+   `node test/run_tests.js` is green with **46 assertions across 7 files**:
    `test_aliens.js` (bomb economy, hull states), `test_tune.js` (knob
    invariants), `test_build.js` (the artifact is byte-identical to what
    build.js generates), `test_shader.js` (terrainShape is still the px=0
