@@ -1,0 +1,15 @@
+{
+  "name": "fractal-flight",
+  "private": true,
+  "description": "Dev-only tooling for Fractal Alps. The GAME has no dependencies and never will: test_build.js requires the shipped single-file artifact to fetch nothing, because it runs from a double-clicked file:// page. These are for the test suite alone -- nothing here is loaded by the browser, and `node test/run_tests.js` still works without them (the two suites that need them skip with a note).",
+  "scripts": {
+    "test": "node test/run_tests.js",
+    "mutants": "node test/mutants.js",
+    "build": "node build.js",
+    "check": "node build.js --check"
+  },
+  "devDependencies": {
+    "@shaderfrog/glsl-parser": "^5.3.1",
+    "jsdom": "^25.0.1"
+  }
+}

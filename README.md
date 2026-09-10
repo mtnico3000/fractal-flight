@@ -147,11 +147,24 @@ Conventions worth knowing before editing:
 node test/run_tests.js
 ```
 
-No npm, no framework, no browser — the harness evaluates the real `js/`
-modules with stubbed imports. 46 assertions across 7 files: the alien bomb
-economy and hull states, the bomb-ring geometry, the invasion pacing, the
-tuning-panel invariants, shader-source invariants, the CPU terrain mirror
-against the GLSL it mirrors, README/CLAUDE.md drift, a check that no module
+No framework and no browser — the harness evaluates the real `js/` modules
+with stubbed imports. **54 assertions across 9 files.** Seven of the nine need
+nothing installed; two are dev-only and skip themselves with a note if you have
+not run `npm install`:
+
+```sh
+npm install       # optional: @shaderfrog/glsl-parser + jsdom, for 2 of the 9
+```
+
+The GAME still has zero dependencies and always will — `test_build.js` requires
+the shipped single-file artifact to fetch nothing, because it runs from a
+double-clicked `file://` page. Nothing in `node_modules` reaches the browser.
+
+Covered: the alien bomb economy and hull states, the bomb-ring
+geometry, the invasion pacing, the tuning-panel invariants, shader-source
+invariants, the CPU terrain mirror against the GLSL it mirrors, the shader
+parsed as real GLSL (syntax, misspelled calls, uniform budget), the whole
+module graph booted in a DOM, README/CLAUDE.md drift, a check that no module
 references another module's exports without importing them, and a check that
 the committed single-file build is exactly what `build.js` generates.
 

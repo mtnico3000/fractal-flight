@@ -124,11 +124,17 @@ Key chips in the HUD glow green when a toggle is active.
   of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
-- **uniform budget**: ~267 vec4 slots used (v9.3 added `uAlienHit` and
-  `uBolts[6]`). Desktop fine; weakest mobile GPUs (min guarantee 224) may
-  fail to link since the alien fleet was added. This is why the bomb-hit
-  flare is ONE vec2 for the whole fleet rather than a per-hull array, and why
-  the energy beams upload `(source, head, tail, fade)` instead of endpoints —
+- **uniform budget: 238 vec4 slots — MEASURED, 10 Sept 2026**, by walking
+  the parsed GLSL in `test/test_glsl.js`, which now fails the build above a
+  260 ceiling. The long-standing "~260" in this file was an estimate and so
+  was the "~267" that briefly replaced it; both were wrong. The concern is
+  still real: GLSL ES 3.0 guarantees only **224**, so at 238 the shader may
+  fail to LINK on the weakest target while every desktop is fine. The four
+  biggest consumers are `uBlastCell[64]`=64, `uFxPos[48]`=48,
+  `uRingMats[8]`=24 and `uCloudPos[16]`=16 — pack those into a texture before
+  trimming anything else. This is also why the bomb-hit flare is ONE vec2 for
+  the whole fleet rather than a per-hull array, and why the energy beams
+  upload `(source, head, tail, fade)` instead of endpoints —
   `uShipPos`/`uRelay`/`uMotherPos` already hold the geometry.
 - **fp32 terrain quantization**: don't move MB_CENTER/MB_SCALE without
   updating BOTH shader constants and terrain.js literals.
@@ -302,6 +308,23 @@ node test/run_tests.js        # everything
   above. Verified to go RED on the real `camPos` bug before being called
   green. It earned its keep again on 9 Sept 2026, rejecting a local named
   `U` in fx.js that collides with renderer.js's exported uniform table.
+- `test/test_glsl.js` — the shader as CODE (needs `npm install`). Parses both
+  templates with `@shaderfrog/glsl-parser`, so a syntax error fails in
+  milliseconds instead of costing an 80 s driver compile; asserts that the
+  only unresolved names are the two function-like `#define` macros (`BDE`,
+  `SDE`) and `gl_FragCoord`, which makes a **misspelled function call** a test
+  failure rather than a browser surprise; and measures the uniform budget
+  above. Every other shader check in the repo is a regex over source text, and
+  regexes have been fooled here twice.
+- `test/test_smoke.js` — boots the WHOLE module graph in jsdom (needs
+  `npm install`). Every other suite loads one module with its imports stubbed,
+  so nothing had ever executed the modules together against a DOM — which is
+  the exact shape of the two worst bugs this project has had (`camPos`, and
+  the dead CSS reset). Stops at module evaluation: jsdom has no WebGL2, so
+  nothing past START is reachable. It reuses `build.js`'s own `RE_IMPORT`
+  rather than copying it — a naive `/^import/` mangles main.js's multi-line
+  imports — and also checks every `getElementById` in `js/` resolves against
+  index.html.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every

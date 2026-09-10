@@ -100,6 +100,22 @@ const MUTANTS = [
    'if (b.done && now - b.t0 > b.dur * 1.15) alien.bolts.splice(i, 1);',
    'if (false) alien.bolts.splice(i, 1);', 'test_aliens.js'],
 
+  // --- what only the AST can see (needs npm install) -----------------------
+  // A misspelled call is invisible to every regex in test_shader.js, compiles
+  // to a driver error 80 s into a page load, and is exactly what the parser
+  // reports as an undeclared function.
+  ['a shader function call is misspelled', 'js/shaders.js',
+   'cloudShadow(pos, sun)', 'cloudShadw(pos, sun)', 'test_glsl.js'],
+  ['the uniform budget blows past its ceiling', 'js/shaders.js',
+   'uniform vec4  uBolts[6];', 'uniform vec4  uBolts[60];', 'test_glsl.js'],
+
+  // --- what only a real DOM can see (needs npm install) --------------------
+  // Renaming an id in index.html leaves every module still valid JS. The
+  // module that looks it up gets null and either throws on evaluation or
+  // silently does nothing -- the same shape as the css `<style>` bug.
+  ['an element id is renamed out from under the modules', 'index.html',
+   'id="fx"', 'id="fx2"', 'test_smoke.js'],
+
   // --- tuning + docs drift -------------------------------------------------
   ['a knob default drifts from its live value', 'js/tune.js',
    "shadows:    { label: 'shadows',     v: 1,", "shadows:    { label: 'shadows',     v: 0,", 'test_tune.js'],

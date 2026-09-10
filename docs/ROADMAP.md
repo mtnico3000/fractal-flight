@@ -46,58 +46,67 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.3.** The git branch is still named `v9.2` — the version moved
-on and the branch name did not. Rename it or cut a `v9.3` branch if that
-bothers you; nothing depends on it.
+**Version is v9.3, and so is the branch.** `main` points at it again.
 
 0. **Run the gates.** `node test/run_tests.js` should print "all suites
-   passed" (**46 assertions, 7 files**). Then `python serve.py 8734`, press
+   passed" (**54 assertions, 9 files**; two skip without `npm install`).
+   Then `python serve.py 8734`, press
    START, fly it once.
 1. If you are changing anything in `test/`, also run **`node test/mutants.js`**
    (slow, opt-in, 23/23 caught as of v9.3). A green suite is not evidence:
    two assertions were found passing for the wrong reason on 9 Sept 2026.
    See the header of that file before trusting any test you did not break.
 
-2. ▶ **C2 — the two remaining ports. THIS IS THE NEXT ITEM.**
-   Both need dev dependencies, and that is a **decision for Nico, not a
-   principle**. The often-repeated "no npm" applies to the *shipped artifact*
-   — `test_build.js` requires it to fetch nothing, because it runs from a
-   double-clicked `file://` page. Tooling is already Node (`build.js`). Nico,
-   9 Sept 2026: *"I'm not against node at all."*
-   - **GLSL parse via `@shaderfrog/glsl-parser`** — function-like `#define`
-     macros produce ignorable warnings. Would let `test_shader.js` check the
-     shader as CODE rather than by regex, which is the weakest part of the
-     suite: every shader assertion is currently a regex over source text, and
-     two of them have already been fooled by reading into a neighbouring
-     function.
-   - **A jsdom module-graph smoke load** — stub `matchMedia`; do NOT override
-     Node's `performance`.
+2. ▶ **Coverage still missing. THIS IS THE NEXT ITEM.** `terrain.js` got its
+   test in v9.3 and the module graph now boots in jsdom, but these have no
+   behavioural coverage at all: `flight.js`, `rings.js`, `weapons.js`,
+   `spores.js`, `fx.js`, `math.js`.
+   * **`rings.js` first.** jul's 4 s delayed recycler is the only thing in the
+     world that teleports (a ring moves ~4 km on a ~4 s cadence) and it was a
+     suspect during the v9.2 hiccup hunt that was never cleared. It is also
+     jul's code, so a test there is the most useful thing to hand back in a
+     volley.
+   * `flight.js` next: the auto-level clamp (~49°), the SPACE free-flight
+     path, and the camera terrain clamp all have documented bug history in
+     docs/HISTORY.md and none of it is pinned.
+   * Use `test/harness.js` (stub the imports) and run `node test/mutants.js`
+     afterwards — a new assertion is not trusted until a mutant proves it red.
 
-3. **Coverage still missing.** `terrain.js` got its test in v9.3. Nothing yet
-   for `flight.js`, `rings.js`, `weapons.js`, `spores.js`, `fx.js`, `math.js`.
-   `rings.js` is the interesting one — jul's 4 s delayed recycler is the only
-   thing in the world that teleports, and it was a suspect during the hiccup
-   hunt.
-
-4. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
+3. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
    for Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
    (Musgrave-style octave coupling + a slider; mirror it in `terrain.js` —
    and `test_terrain.js` will now hold you to that).
 
-5. **Push the branch and update the PR to julaub.** `main` is **17 commits
-   ahead of `origin/main`** and nothing has been pushed since v8.0. `origin`
-   is Nico's own fork (mtnico3000); PRs go to julaub. **Ask before pushing —
-   it is a volley.** Not done as of 9 Sept 2026 because it was never asked
-   for.
+4. **Push the branch and update the PR to julaub.** `main` and `v9.3` are
+   **18 commits ahead of `origin/main`** and nothing has been pushed since
+   v8.0. `origin` is Nico's own fork (mtnico3000); PRs go to julaub. **Ask
+   before pushing — it is a volley.** Still not done as of 10 Sept 2026,
+   because it has never been asked for.
+
+### ✅ Landed 10 Sept 2026
+
+- **C2's two remaining ports.** Nico approved the dev dependencies (*"ok for
+  npm for the remaining C2 ports"*). `npm install` brings
+  `@shaderfrog/glsl-parser` and `jsdom`; both suites skip themselves with a
+  note when `node_modules` is absent, so a fresh clone still runs the other
+  seven. Suite is now **54 assertions across 9 files**, 26/26 mutants caught.
+  Beyond ticking the box: the uniform budget stopped being a guess (**238**,
+  not the "~260" carried in CLAUDE.md for months), and a misspelled shader
+  function call is now a test failure instead of an 80 s driver compile error.
+- **Branch renamed `v9.2` → `v9.3`**, and `main` fast-forwarded onto it — it
+  had quietly fallen 3 commits behind while the ROADMAP still claimed "main
+  points at it".
+- **The hull-conforming bomb ring is confirmed good** by Nico, from a
+  screenshot at 103 fps / 1036x905 on the dGPU. That closes the last open
+  visual question from v9.3.
 
 ### Open questions for Nico
 
 - Turbo vs a new adapter (see the top of this file) — one command decides it.
-- npm for the two C2 ports: yes or no?
-- The blue fleet, the hull-conforming bomb rings and the resonant hull
-  detonation all landed in v9.3 with only partial visual confirmation —
-  the beams and the big relay were seen in flight, a bomb ring on a hull was
-  never photographed. Worth a look while flying.
+- **Does the shader still LINK on jul's phone?** 238 uniform slots is above
+  the 224 that GLSL ES 3.0 guarantees. Desktop is fine and the count is now
+  tested, but the mobile half needs a real device — nobody has tried.
+- Push to origin / open the PR to julaub? 18 commits are waiting.
 
 ### ⏸ Parked, with reasons
 
@@ -206,16 +215,18 @@ at a surface with detail far beyond Nyquist, with no AA of any kind
    identifiers). Ends the dual-build maintenance that caused repeated
    patch-drift bugs.
 2. **Port the Node test harnesses (S/M)** — ✅ mostly done. `test/` runs with
-   no npm: 46 assertions across 7 files plus `check_module_refs.py`, and
-   `test/mutants.js` verifies the tests themselves (23/23). Still to port,
-   both needing dev deps: GLSL parse via @shaderfrog/glsl-parser, and a jsdom
-   module-graph smoke load. Flight modes and rings still have no coverage.
-3. **Uniform budget check (S).** ~267 vec4 slots used — v9.3 added
-   `uAlienHit` (1) and `uBolts[6]`. Verify link on the weakest target (jul's
-   phone); the guaranteed mobile minimum is 224, so it may already fail there.
-   If tight: pack alien ship data into a texture instead of uniforms. Both
-   v9.3 additions were already written to be frugal (one vec2 for the whole
-   fleet's hit flare; beams send indices, not endpoints).
+   54 assertions across 9 files plus `check_module_refs.py`, and
+   `test/mutants.js` verifies the tests themselves (26/26). The GLSL parse and
+   jsdom smoke ports landed 10 Sept 2026 and are the only two needing
+   `npm install`; they skip themselves without it. Flight modes and rings
+   still have no coverage — see item 2 in the queue.
+3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **238 vec4
+   slots**, counted from the parsed GLSL by `test_glsl.js`, which fails above
+   a 260 ceiling. The old "~260" was a guess. Still **above the 224 that GLSL
+   ES 3.0 guarantees**, so the shader may fail to LINK on jul's phone while
+   every desktop is fine — that half is untested and needs a real device.
+   Biggest consumers: `uBlastCell[64]`=64, `uFxPos[48]`=48, `uRingMats[8]`=24,
+   `uCloudPos[16]`=16. Pack those into a texture before trimming elsewhere.
 4. **GitHub Pages deploy (S).** Playable URL for the ping-pong, no local
    server.
 

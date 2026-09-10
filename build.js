@@ -346,4 +346,8 @@ if (require.main === module) {
   }
 }
 
-module.exports = { buildSingleFile, artifactName };
+// RE_IMPORT is exported so test/test_smoke.js can replay the modules exactly
+// the way the bundle does. Duplicating the regex there would be a second
+// source of truth for how an import is recognised -- and it has to handle
+// multi-line imports, which a naive /^import/ does not.
+module.exports = { buildSingleFile, artifactName, RE_IMPORT, RE_LEFTOVER };
