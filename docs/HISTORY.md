@@ -578,6 +578,112 @@ Writing `` `t` `` in a GLSL comment ended the JS template early. `build.js`
 named it instantly and `test_shader.js` counted 6 backticks where 4 belong.
 The v9.1 gotcha, catching a fresh instance of itself.
 
+## v9.4 — the marcher, and what measurement kept overturning (10–12 Sept 2026)
+
+The session Nico opened by pointing at a screenshot and saying the thing that
+had bothered him for weeks: *"I think it's a graphic issue with lines like
+mountain ridges, sand-water line, mushroom-tree borders that are 'shifting'
+and moving along when there is movement."* Then, crucially, he stopped the
+usual reflex: *"Don't act yet, I want to discuss this so we know what we're
+doing to fix it."*
+
+**The artifact was real, and it was geometric.** Concentric rings centred on
+the viewer, thirty or forty of them out to the horizon, riding along with the
+camera and making every silhouette crawl. It survived 2x supersampling — which
+is what proved it was not aliasing: A1's LOD fade, the flora range circle and
+the detail-fade knob were each ruled out by a test Nico flew himself.
+
+**What it was:** the terrain hit tolerance `0.01 + 0.0015 * t` is a distance
+along the ray, and converting it to a vertical error divides by the sine of
+the incidence angle. At a grazing 1.5° that is a 38x amplification, so the ray
+stopped a long way above the ground it was supposed to hit — and because `t`
+grows in steps, the stopping error is quantised into shells. The rings were
+iso-surfaces of the tolerance itself.
+
+The fix is one `max`:
+
+```glsl
+float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
+if (dT < tolRay * inc || dP < tolRay) { ... }
+```
+
+Measured across 900 rays through a shoreline at two altitudes: **mean hit
+error down 10.6x, p99 down 16x.** Numbers and method in RESEARCH.md §5.
+
+- 🔬 **The method changed partway through, at Nico's suggestion, and that is
+  what made it work.** *"as these artifacts are quite hard to see well, I'd
+  suggest that you ask me to do the visual tests you want and I do the fly by
+  and screenshots, what do you say?"* Six false-colour debug channels
+  (`uDebugMask`, a bitmask) were built so he could photograph march steps, hit
+  distance, footprint, terrain height, normal turn and colour LOD. The
+  `dbg distance` view is what localised it: *"the concentric line just ahead
+  of the plane, shifts quite a lot in the mountains... I think that's the
+  'creeping' I can see."* Those channels shipped — the whole Debug panel did,
+  on his call: *"we're going to keep the whole debug panel, it's fun to
+  tweak."*
+- 🦄 **Two things that looked like the same bug were not bugs at all.** The
+  wiggly coastline is real fractal geometry: the shoreline's own deviation
+  from a straight line is 8.4 m RMS measured over a 20 m span and 107 m over
+  1 km, because a 2.35% beach slope turns every vertical metre of terrain
+  noise into 43 m of horizontal shoreline movement. And the land/water
+  boundary is not misplaced: **0 of 72,600 pixel rays** classified land vs
+  water differently from a 4000-iteration reference march. What remains is
+  irreducible — one ray per pixel means a boundary flips sub-pixel, and the
+  only cures are more samples or exact geometry. Nico got there himself:
+  *"I'm starting to wonder if I'm chasing something impossible due to
+  inherent design of the game."* Largely, yes — and that framed v10.
+- 🐴 **The horns.** Rounded hull corners grew spikes, and the cause was the
+  same family: a ray nearly tangent to a large flat face needs many tiny
+  steps, and the box march had **48 iterations**. 18.8% of rays that really
+  hit the mothership were running out of budget. Raising both box marches to
+  384 took it to 1.3%. **The fix I proposed first — step relaxation — measured
+  WORSE** (390 misses against 365), so it was killed by its own measurement
+  rather than shipped on plausibility.
+- ⚠️ **Three of my own conclusions were overturned by measuring them, and all
+  three are worth recording because reasoning had been confident:**
+  - I ruled out `terrainNormal`'s epsilon by measuring it on a **flat beach**,
+    where it swings 0%. On a ridge it swings 19.7%. A null result from an
+    unrepresentative sample is not a null result.
+  - I reported a compile-time regression of 212 s from the raised iteration
+    caps, off a single uncontrolled reading. A controlled A/B showed the
+    **original** caps at 243 s — the caps were not the cause and the
+    "regression" did not exist.
+  - ROADMAP **A4** (bisection refinement of the hit point) is in the backlog
+    as a silhouette fix. Implemented and measured here, it improved the hit
+    error by **1.0x** — exactly nothing. Recorded as a null result so nobody
+    builds it again.
+- 🚫 **I broke Nico's live test and he caught it.** To take an A/B reading I
+  temporarily reverted the iteration caps and rebuilt — while he was flying
+  the served tree. His reload picked up the reverted build and the horns came
+  back: *"Did you do a temp change for a test, and then reverted?"* The tree
+  being served is the tree being tested. **Warn before touching it, or use a
+  worktree.** Nothing in the code guards this; it is a process rule.
+- 🎛️ Also shipped: footprint-aware water ripples (the sea's sparkle is a
+  Nyquist crossing between wave wavelength and pixel footprint, faded out by
+  footprint and the specular exponent dropped 260→30 with it — *"the water LOD
+  does fix the sparkling water, very cool... superb"*); energy beams moved
+  from the 2D overlay into the shader so they are depth-tested and no longer
+  draw through mountains; the fleet turned blue; bomb rings that follow the
+  struck hull face instead of billboarding at the camera; rounded hull corners
+  at 45% with collision that follows the fillet; the relay 5x bigger, growing
+  to ~35x and deflating over 2 s with its beam lit; and a melt tail that keeps
+  wrecks on the ground as dark embers for ~116 s instead of blinking out in 8.
+- 🏆 A `HARVESTERS` counter, and `INVADERS DEFEATED` in its place when the
+  whole invasion is gone. The full spreading invasion — 8 harvesters spawning
+  a second relay, 4 relays duplicating the mothership — was **specified, costed
+  and deliberately dropped**: it needs the fleet in a texture instead of
+  ~168 more uniform slots against a 260 ceiling. Nico: *"we drop for now the
+  full invasion with multiple relays and motherships. Document it for later,
+  but let's drop that complexity now."* It is ROADMAP C3, and v10's rasteriser
+  may delete that renderer anyway.
+- 🧪 The suite went from 67 assertions in 9 files to 73 in 10, and the
+  mutation battery from 29 mutants to 36. `test/test_panels.js` is new and was
+  born failing the wrong way: the first version of it passed, and the mutation
+  battery showed its headline mutant **escaping** — the round-trip it drove
+  could never reach the branch that broke, because `armMaster()` prevents it.
+  The assertion was rewritten to test the guard as the defence it is. That is
+  the whole argument for the battery in one incident.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

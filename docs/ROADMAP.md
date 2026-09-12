@@ -46,42 +46,180 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.3, and so is the branch.** `main` points at it again.
+**Version is v9.4, and so is the branch.** `main` points at it. v9.4 is the
+last version of the pure raymarcher: **v10 is a renderer change**, and it was
+Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
-0. **Run the gates.** `node test/run_tests.js` should print "all suites
-   passed" (**54 assertions, 9 files**; two skip without `npm install`).
-   Then `python serve.py 8734`, press
-   START, fly it once.
-1. If you are changing anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, 23/23 caught as of v9.3). A green suite is not evidence:
-   two assertions were found passing for the wrong reason on 9 Sept 2026.
-   See the header of that file before trusting any test you did not break.
+0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
+   (**67 assertions, 10 files**; three skip without `npm install`). Then
+   `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
+   the driver compile** — that is normal here, not a hang.
+1. If you touch anything in `test/`, also run **`node test/mutants.js`**
+   (slow, opt-in, **36/36 caught as of v9.4**). A green suite is not
+   evidence. This is not a formality: the newest suite, `test_panels.js`,
+   passed all six assertions on its first run and the battery caught its
+   headline mutant ESCAPING. Read that file's header before trusting any test
+   you did not personally break.
 
-2. ▶ **Coverage still missing. THIS IS THE NEXT ITEM.** `terrain.js` got its
-   test in v9.3 and the module graph now boots in jsdom, but these have no
-   behavioural coverage at all: `flight.js`, `rings.js`, `weapons.js`,
-   `spores.js`, `fx.js`, `math.js`.
-   * **`rings.js` first.** jul's 4 s delayed recycler is the only thing in the
-     world that teleports (a ring moves ~4 km on a ~4 s cadence) and it was a
-     suspect during the v9.2 hiccup hunt that was never cleared. It is also
-     jul's code, so a test there is the most useful thing to hand back in a
-     volley.
-   * `flight.js` next: the auto-level clamp (~49°), the SPACE free-flight
-     path, and the camera terrain clamp all have documented bug history in
-     docs/HISTORY.md and none of it is pinned.
-   * Use `test/harness.js` (stub the imports) and run `node test/mutants.js`
-     afterwards — a new assertion is not trusted until a mutant proves it red.
+---
 
-3. **B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution
-   for Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
-   (Musgrave-style octave coupling + a slider; mirror it in `terrain.js` —
-   and `test_terrain.js` will now hold you to that).
+### ▶ 2. v10 — the hybrid: fractal DEFINITION, rasterised GEOMETRY
 
-4. **Push the branch and update the PR to julaub.** `main` and `v9.3` are
-   **18 commits ahead of `origin/main`** and nothing has been pushed since
-   v8.0. `origin` is Nico's own fork (mtnico3000); PRs go to julaub. **Ask
-   before pushing — it is a volley.** Still not done as of 10 Sept 2026,
-   because it has never been asked for.
+**This is the next item, and it is a big one.** Nico, 12 Sept 2026, after the
+marcher hunt: *"I'd like to orient this game... towards a multiplayer
+version"*, and *"By the way I checked No Man's Sky, and wow it's beautiful."*
+
+**Why, in one paragraph.** v9.4 fixed the rings (the hit tolerance) and the
+horns (the iteration budget), and then measurement closed the door on the
+rest: the coastline's wiggle is real fractal geometry (8.4 m RMS over 20 m,
+107 m over 1 km), the land/water boundary is placed correctly (**0 of 72 600
+pixel rays** disagree with a 4000-iteration reference), and what remains is
+one ray per pixel deciding a sub-pixel boundary every frame. **There is no
+marcher fix for that** — see docs/RESEARCH.md §5.4–5.5. A rasterised mesh
+gets the three things a marcher cannot have: **MSAA, mipmaps, and a depth
+buffer.** The geometry is computed once per *place* instead of once per
+*pixel per frame*, so it stops moving when the camera does.
+
+**What stays exactly as it is:** the fractal is still the world. It remains
+the *definition* — `terrainShape` keeps generating the heights — so the
+download stays a few hundred KB with no asset pipeline, which is the whole
+reason this project has no bundler. What changes is *when* it is evaluated:
+at chunk-build time, into vertices, instead of per pixel per frame.
+
+**The architectural trap, stated once and plainly.** There are already TWO
+representations of the terrain and keeping them identical is load-bearing:
+`terrainShapeLOD(p, px)` marches, `terrainShape(p)` is the collision
+authority (bit-identical to pre-A1), and `js/terrain.js` mirrors it in fp64.
+A mesh is a **THIRD**, and it is the one the player will see and stand on. If
+the mesh and `terrainShape` disagree by a metre, the ground you hit stops
+being the ground you see — silently, and worst at distance. Decide up front
+which is authoritative. The recommendation: **the mesh becomes the authority
+for rendering AND collision, generated from `terrainShape`**, and the GPU
+probe row (see CLAUDE.md → "The GPU probe row") is retired for terrain rather
+than left half-true. That is a bigger edit than the meshing itself.
+
+**Order of work suggested:**
+  a. One chunk, one LOD, no stitching: mesh a 1 km tile from `terrainShape`
+     on the CPU, draw it with a depth buffer beside the marcher, and compare
+     silhouettes at a still camera. This alone answers whether the flutter
+     goes away, and it is a day's work rather than a rewrite.
+  b. Chunk ring + LOD + seam stitching (skirts are the cheap answer; they
+     hide cracks without matching vertex counts).
+  c. Move collision onto the mesh, delete the terrain half of the probe row,
+     and re-point `test_terrain.js` at whatever becomes authoritative.
+  d. **The fleet becomes instanced meshes** — which is ROADMAP **C3** for
+     free, because instances have no uniform limit. That unblocks the
+     spreading invasion (parked below) at close to zero renderer cost.
+  e. Keep the marcher for the things it is *better* at: clouds, water, and
+     the mandelbulb relay are volumetric or trivially analytic.
+
+**Traps that will bite, all already known:**
+- **The TUNE sliders change the terrain.** `terrain.js` reads live TUNE
+  values, so moving `oceanSlope` or `mountAmp` changes the world — with a
+  mesh that means invalidating and re-meshing every chunk. Cheap to forget,
+  expensive to discover.
+- **Shader compile is 200–240 s** for the marcher. Raster shaders are small,
+  so this gets dramatically better — but do not benchmark a raster path
+  against a marcher figure taken in a different sitting (RESEARCH.md §5.6).
+- `DPR` is capped at 1.0 and the adaptive scaler resizes the buffer, which
+  changes `uPixScale`. Peg the scaler before any A/B.
+- **Do not rebuild the served tree while Nico is flying it.** Use a
+  `git worktree` on another port. This cost a false result in v9.4.
+
+### ▶ 3. Multiplayer — the two decisions that must be made BEFORE v10 code
+
+Both are cheap now and very expensive later. Neither is written down as
+decided, so **ask Nico**:
+
+- **Determinism and seeding.** The world is a pure function today, which is
+  the best possible starting point: two clients running the same code over
+  the same coordinates get the same island with nothing transmitted. But
+  `terrainShape` is fp32 in GLSL and fp64 in `terrain.js`, and fp32 is not
+  bit-portable across GPU vendors. If clients ever compare terrain answers,
+  the **fp64 CPU mirror has to be the authority** and the GPU may only be
+  allowed to draw, never to decide. Also: the island has no seed at all right
+  now — `MB_CENTER`/`MB_SCALE` are constants. One world or many?
+- **Server-authoritative TUNE.** The tuning panels are gameplay-affecting by
+  design ("the tune sliders ARE gameplay" in CLAUDE.md). Two players with
+  different `oceanSlope` are in different worlds, and the Debug panel can
+  change `resolution` and detail fade. In multiplayer the world knobs must
+  come from the host and the client keeps only the cosmetic ones. Deciding
+  which knob is which is a 20-knob triage, best done while the reasons are
+  still fresh.
+
+### ▶ 4. Coverage still missing (carried over, still true)
+
+`terrain.js`, the panels and the module graph now have tests. These have no
+behavioural coverage at all: `flight.js`, `rings.js`, `weapons.js`,
+`spores.js`, `fx.js`, `math.js`.
+  * **`rings.js` first.** jul's 4 s delayed recycler is the only thing in the
+    world that teleports (a ring moves ~4 km on a ~4 s cadence) and it was
+    never cleared as a suspect in the v9.2 hiccup hunt. It is also jul's
+    code, so a test there is the most useful thing to hand back in a volley.
+  * `flight.js` next: the auto-level clamp (~49°), the SPACE free-flight path
+    and the camera terrain clamp all have documented bug history in
+    docs/HISTORY.md and none of it is pinned.
+  * Use `test/harness.js` (stub the imports) and run `node test/mutants.js`
+    afterwards — a new assertion is not trusted until a mutant proves it red.
+
+### 5. B2 / B1 — terrain variety (unchanged, and now cheaper in v10)
+
+**B2 — TerraForge3D biome ports** (mesas + canyons first, MIT attribution for
+Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
+(Musgrave-style octave coupling + a slider; mirror it in `terrain.js`, and
+`test_terrain.js` will hold you to that). Both get cheaper once terrain is
+meshed: a biome that costs ten extra fbm octaves is unaffordable per pixel
+per frame and trivial once per chunk.
+
+### 6. Push the branch
+
+`main` and `v9.4` are **20 commits ahead of `origin/main`**, and nothing has
+been pushed since v8.0. `origin` is Nico's own fork (mtnico3000); PRs go to
+julaub. **Ask before pushing — it is a volley.**
+
+### ✅ Landed 12 Sept 2026 (v9.4)
+
+- **The concentric rings are gone.** They were the hit tolerance divided by
+  the incidence angle, quantised into shells by the march step — not
+  aliasing, which is why they survived supersampling. One `max` cut mean hit
+  error **10.5x** and p99 **16x** for +4.6% iterations. RESEARCH.md §5.1.
+- **The horns on the rounded hulls are gone.** Tangency was exhausting a
+  48-iteration budget on 18.8% of rays that genuinely hit; 384 takes it to
+  1.3%. Step relaxation, the fix proposed first, measured WORSE and was
+  killed by its own measurement. §5.2.
+- **Two suspects cleared by measurement, permanently**: the coastline wiggle
+  (real fractal geometry) and the land/water boundary (0 of 72 600 rays
+  misclassified). §5.4–5.5. **This is what points at v10.**
+- **A4 is a closed null result.** Bisection refinement of the hit point,
+  which sat in section A below as a silhouette fix, was implemented and
+  measured at **1.0x** — exactly no improvement. Do not build it.
+- Water LOD (the sparkle is a Nyquist crossing; shipped on at 0.80 — *"very
+  cool... superb"*), energy beams moved into the shader so they are
+  depth-tested, a blue fleet, hull-conforming bomb rings, rounded hull
+  corners at 45% with matching collision, the relay 5x bigger growing to
+  ~35x and deflating over 2 s, a ~116 s melt tail, and the **HARVESTERS**
+  counter with **INVADERS DEFEATED** in its place.
+- **The Debug panel shipped** (six false-colour channels in a `uDebugMask`
+  bitmask, plus resolution / detail fade / ray tol / water LOD). Built as a
+  diagnostic, kept on Nico's call: *"we're going to keep the whole debug
+  panel, it's fun to tweak."* It is how the rings were localised.
+- Suite **67 assertions / 10 files**, battery **36/36**. New:
+  `test/test_panels.js` (the panels as a real DOM).
+
+### Open questions for Nico
+
+- **Turbo vs a new adapter — Nico owes a reading.** It needs a reboot, so it
+  was deferred: *"I'll do this and report back, as it needs a reboot."* One
+  command decides whether the 80 W cap is the USB-C supply or G-Helper. See
+  the top of this file.
+- **The two multiplayer decisions in item 3** — seeding/determinism, and
+  which TUNE knobs become server-authoritative. v10 should not start without
+  them.
+- **Does the shader still LINK on jul's phone?** **242** uniform slots
+  against the 224 GLSL ES 3.0 guarantees. Desktop is fine and the count is
+  tested, but the mobile half needs a real device. (v10 may retire the
+  question entirely.)
+- Push to origin / open the PR to julaub? 20 commits are waiting.
 
 ### ✅ Landed 10 Sept 2026
 
@@ -214,7 +352,15 @@ The world sparkles and silhouettes crawl because we shoot ONE ray per pixel
 at a surface with detail far beyond Nyquist, with no AA of any kind
 (uJitter is locked to 0), a hit tolerance that grows with distance
 (`0.01 + 0.0015·t`), binary material decisions at the shoreline, and a
-`pow(…, 260)` sun glint (specular fireflies). Fix ladder:
+`pow(…, 260)` sun glint (specular fireflies).
+
+⚠️ **Read this section against docs/RESEARCH.md §5 before acting on it.**
+Two of its five named causes are now fixed (the growing hit tolerance,
+the 260 glint), one is a measured null result (item 4), and the remaining
+one-ray-per-pixel problem was measured to be **irreducible** in this
+renderer — which is why the queue at the top of this file now leads with
+v10 rather than with more of this ladder. Fix ladder as originally
+drafted:
 
 1. **Footprint-aware detail fade (S/M, do first).** Scale fbm octave count /
    amplitude and the color-detail frequencies (rock strata, alienFlora
@@ -222,13 +368,23 @@ at a surface with detail far beyond Nyquist, with no AA of any kind
    Analytic mipmapping: removes most ground sparkle AND reduces GPU cost.
    Mirror-sensitive: terrainShape only (terrain.js mirror keeps full detail —
    gameplay queries want the true surface).
-2. **Soften the razors (S).** Distance-lower the water glint exponent,
-   flatten water/snow normals at range, clamp specular.
+2. ✅ **Soften the razors (S) — SHIPPED 12 Sept 2026** as the `water LOD`
+   knob (on at 0.80). The sparkle is a Nyquist crossing between ripple
+   wavelength and pixel footprint, so the ripple normal AND the specular
+   exponent (260 → 30) fade by FOOTPRINT, not by distance. RESEARCH.md
+   §5.7. Nico: *"the water LOD does fix the sparkling water, very cool...
+   superb."*
 3. **Shoreline band (S).** Blend water/terrain shading over a small
    `|h − WATER_LEVEL|` band scaled by footprint instead of the binary
    mat 1/2 pick.
-4. **Silhouette stabilization (S).** A few bisection steps at hit refine;
-   slower-growing hit tolerance. Helps mountain tops and tree contours.
+4. ~~**Silhouette stabilization (S).**~~ ❌ **CLOSED, 12 Sept 2026 — half
+   shipped, half a measured null result.** The "slower-growing hit
+   tolerance" half was the real bug and is fixed: the tolerance is now
+   divided by the incidence angle, which removed the concentric rings and
+   cut mean hit error 10.5x (RESEARCH.md §5.1). The "few bisection steps at
+   hit refine" half was implemented and measured at **1.0x — exactly no
+   improvement**, because the error was in where the march stops caring,
+   not in the interpolation once it stops. **Do not rebuild it.**
 5. **Still-camera accumulation (M).** When view+craft are ~static (esp.
    OBSERVATION mode), jitter uJitter and average frames in an FBO —
    converges to a perfectly antialiased frame in ~0.5 s; falls back to
@@ -267,20 +423,27 @@ at a surface with detail far beyond Nyquist, with no AA of any kind
    dependency order, strip import/export, rename the few divergent
    identifiers). Ends the dual-build maintenance that caused repeated
    patch-drift bugs.
-2. **Port the Node test harnesses (S/M)** — ✅ mostly done. `test/` runs with
-   54 assertions across 9 files plus `check_module_refs.py`, and
-   `test/mutants.js` verifies the tests themselves (26/26). The GLSL parse and
-   jsdom smoke ports landed 10 Sept 2026 and are the only two needing
-   `npm install`; they skip themselves without it. Flight modes and rings
-   still have no coverage — see item 2 in the queue.
-3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **238 vec4
-   slots**, counted from the parsed GLSL by `test_glsl.js`, which fails above
-   a 260 ceiling. The old "~260" was a guess. Still **above the 224 that GLSL
+2. **Port the Node test harnesses (S/M)** — ✅ **C2 COMPLETE.** `test/` runs
+   **67 assertions across 10 files** plus `check_module_refs.py`, and
+   `test/mutants.js` verifies the tests themselves (**36/36**). Three suites
+   need `npm install` (`test_glsl.js`, `test_smoke.js`, `test_panels.js`)
+   and skip themselves with a note without it, so a bare clone still runs
+   the other seven. Flight modes and rings still have no coverage — see
+   item 4 in the queue.
+3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **242 vec4
+   slots** (238 before the energy beams moved into the shader), counted from
+   the parsed GLSL by `test_glsl.js`, which fails above a 260 ceiling. The old "~260" was a guess. Still **above the 224 that GLSL
    ES 3.0 guarantees**, so the shader may fail to LINK on jul's phone while
    every desktop is fine — that half is untested and needs a real device.
    Biggest consumers: `uBlastCell[64]`=64, `uFxPos[48]`=48, `uRingMats[8]`=24,
    `uCloudPos[16]`=16. Pack those into a texture before trimming elsewhere.
-4. **GitHub Pages deploy (S).** Playable URL for the ping-pong, no local
+4. **C3 — move the fleet from uniforms into a texture (M).** Referenced by
+   name throughout this file and never actually listed here. It is the
+   precondition for the spreading invasion (parked below), which needs
+   ~+168 slots against a 260 ceiling. **In v10 it is nearly free** —
+   instanced meshes have no uniform limit — so do NOT build it against the
+   marcher unless v10 is abandoned.
+5. **GitHub Pages deploy (S).** Playable URL for the ping-pong, no local
    server.
 
 ## D. Parking lot (discussed, not committed)
@@ -288,4 +451,6 @@ at a surface with detail far beyond Nyquist, with no AA of any kind
 - Mandelbulb/Mandelbox flyable landmark variants (negative-scale organic
   family is the visual gold: boxScale ≈ −1.5…−2.8).
 - Alien counterplay escalation (harvesters reacting to being bombed).
-- Multiplayer-ish: pilot-name livery already persists; ghosts someday?
+- ~~Multiplayer-ish: pilot-name livery already persists; ghosts someday?~~
+  → **promoted.** Nico asked for it directly on 12 Sept 2026 and it is now
+  item 3 in the queue at the top, with the two decisions it needs first.

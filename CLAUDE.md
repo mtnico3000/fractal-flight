@@ -124,11 +124,11 @@ Key chips in the HUD glow green when a toggle is active.
   of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
-- **uniform budget: 238 vec4 slots — MEASURED, 10 Sept 2026**, by walking
+- **uniform budget: 242 vec4 slots — MEASURED, 12 Sept 2026**, by walking
   the parsed GLSL in `test/test_glsl.js`, which now fails the build above a
   260 ceiling. The long-standing "~260" in this file was an estimate and so
   was the "~267" that briefly replaced it; both were wrong. The concern is
-  still real: GLSL ES 3.0 guarantees only **224**, so at 238 the shader may
+  still real: GLSL ES 3.0 guarantees only **224**, so at 242 the shader may
   fail to LINK on the weakest target while every desktop is fine. The four
   biggest consumers are `uBlastCell[64]`=64, `uFxPos[48]`=48,
   `uRingMats[8]`=24 and `uCloudPos[16]`=16 — pack those into a texture before
@@ -231,6 +231,51 @@ Key chips in the HUD glow green when a toggle is active.
   `fallAndMelt` lands it in the very frame it dies and it melts in place. The
   mothership (2200 m) and relay do fall. Cost a red test before it was
   understood.
+- 📐 **A hit tolerance measured ALONG the ray is an error budget divided by
+  the incidence angle.** `tolRay = 0.01 + 0.0015 * t` permitted a *vertical*
+  error of `tolRay / sin(incidence)` — a 38x amplification for a ray grazing
+  the ground at 1.5 degrees — and because `t` advances in steps that error
+  quantised into shells. That is what the concentric viewer-centred rings
+  were, for the whole life of the project: iso-contours of the tolerance, not
+  aliasing (they survived 2x supersampling). Fixed with one `max`:
+  `tolRay * max(abs(rd.y), 0.06)`, which cut mean hit error 10.5x and p99 16x
+  for +4.6% iterations. The `0.06` floor stops a near-horizontal ray from
+  demanding unbounded precision. `uRayTol` keeps it A/B-able from the Debug
+  panel. Numbers in docs/RESEARCH.md §5.1.
+- 🐴 **A ray nearly tangent to a big flat face needs a big iteration budget,
+  and running out looks like a SPIKE, not like a miss.** Both box marches had
+  48 iterations; 18.8% of rays that genuinely hit the mothership were hitting
+  the cap and drawing horns on the rounded corners. 384 takes it to 1.3%, and
+  average iterations move only 14.1 → 42.2 because the cost is paid by the few
+  grazing rays — the cap is a ceiling, not a workload. ⚠️ **Step relaxation
+  makes this WORSE** (390 misses vs 365 at the same cap): a relaxed step covers
+  less ground per iteration, so a budget-bound march gets less far. This does
+  NOT apply to the terrain march, which caps out on 0 of 1784 rays — `T_MAX`
+  bounds how grazing a terrain ray can be and still hit. docs/RESEARCH.md §5.2–5.3.
+- 🌊 **The wiggly coastline and the flickering waterline are not bugs.** The
+  shoreline deviates from its own smoothed shape by 8.4 m RMS over 20 m and
+  107 m over 1 km — self-similar, i.e. real fractal geometry — because the
+  beach grade is 2.35%, so every metre of terrain noise moves the waterline
+  43 m sideways. And the boundary is not misplaced: **0 of 72 600 pixel rays**
+  classify land vs water differently from a 4000-iteration reference. One ray
+  per pixel means a boundary flips sub-pixel; the only cures are more samples
+  (the `resolution` knob) or exact geometry (v10). Do not re-open this as a
+  marcher bug. docs/RESEARCH.md §5.4–5.5.
+- 🚧 **The tree being served is the tree being tested.** A temporary revert
+  plus `node build.js`, taken to get an A/B reading while Nico was flying,
+  reached him on his next reload and put the bug he had just confirmed fixed
+  back on his screen — *"Did you do a temp change for a test, and then
+  reverted?"* Nothing in the code can guard this. **Say so before touching a
+  served tree, or take the reading in a `git worktree` on its own port.**
+- 🔬 **A null result from an unrepresentative sample is not a null result.**
+  `terrainNormal`'s epsilon was cleared by measuring the shading swing at a
+  *flat beach* point, where it is 0.0%. On a ridge it is 19.7%. Pick the sample
+  where the effect would be strongest, or the measurement proves nothing.
+- 🕐 **One reading is not a measurement, and shader compiles are the worst
+  case.** A 212 s compile was reported as a regression from the raised
+  iteration caps; a controlled A/B put the *original* caps at 243 s. Driver
+  compiles on this project run 200–240 s and vary by more than most effects
+  being measured, so always take both sides in one sitting.
 
 - 🖼️ **The fx overlay has NO depth buffer, so anything that can pass behind
   terrain does not belong on it.** The alien energy beams were 2D lines on the
@@ -325,6 +370,16 @@ node test/run_tests.js        # everything
   rather than copying it — a naive `/^import/` mangles main.js's multi-line
   imports — and also checks every `getElementById` in `js/` resolves against
   index.html.
+- `test/test_panels.js` — the tuning panels as a real DOM (needs
+  `npm install`). The Debug master is the one control that WRITES to every
+  other knob, and its failure mode is silent data loss — dial a setup in,
+  press DEBUG, setup gone. `test_tune.js` reads the knob objects and never
+  builds a panel, so nothing could see it. Also covers the debug bitmask the
+  shader reads, that all three panels live inside `#panels` (a panel outside
+  the stacking column draws over its neighbour), and that INVADERS DEFEATED
+  only replaces the counter when harvesters AND relays AND motherships are
+  all gone. It inlines `css/style.css` into the jsdom document, because a
+  visibility question asked without the stylesheet answers 'visible' always.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every
@@ -332,13 +387,25 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. 23/23 mutants caught as of v9.3.
+  the predicate it named. **36/36 mutants caught as of v9.4.** It earned its
+  keep again immediately: `test_panels.js` was written, passed all six of
+  its assertions on the first run, and the battery showed its HEADLINE
+  mutant ESCAPING — the UI round-trip it drove could not reach the branch
+  that had actually broken, because `armMaster()` stops that state from
+  arising at all. The assertion was rewritten to test the guard as the
+  second line of defence it is. Write the test, then break the thing it
+  names — a suite that has never been mutated has not been checked.
 
-Still to port: GLSL parse via @shaderfrog/glsl-parser, and a jsdom
-module-graph smoke load. GLSL is checked with
-@shaderfrog/glsl-parser (function-like #define macros produce ignorable
-warnings). jsdom smoke-loads the whole module graph (matchMedia needs a
-stub; don't override Node's `performance`).
+**ROADMAP C2 is complete.** The three npm-dependent suites
+(`test_glsl.js`, `test_smoke.js`, `test_panels.js`) SKIP with an
+explanatory line when `node_modules` is absent, so
+`node test/run_tests.js` still works on a bare clone: the GAME keeps its
+no-dependency promise and only the dev tooling asks for `npm install`
+(@shaderfrog/glsl-parser, jsdom). Traps met on the way: function-like
+`#define` macros produce ignorable parser warnings; jsdom needs a
+`matchMedia` stub and must NOT have Node's `performance` overridden; and
+a jsdom test that asks whether something is VISIBLE has to inline
+`css/style.css` itself.
 
 ## History & roadmap
 

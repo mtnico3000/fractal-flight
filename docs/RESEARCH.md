@@ -1,9 +1,12 @@
-# Research notes — Mandelbox params, terrain variations, shimmer diagnosis
+# Research notes — Mandelbox params, terrain, shimmer, power, the marcher
 
 Full write-up of the research/discussion session (Sept 2026) so the
 reasoning survives alongside the ROADMAP action items. Read this before
 implementing ROADMAP sections A and B — it explains WHY each fix works and
-what was already ruled out.
+what was already ruled out. Section 5 is the v9.4 marcher work, and it is
+also the list of things measurement proved wrong after reasoning had settled
+them: check it before re-deriving anything about hit tolerance, iteration
+budgets or the coastline.
 
 ---
 
@@ -374,3 +377,181 @@ hint; `--force-high-performance-gpu` with a separate `--user-data-dir` is what
 actually moves it (Chrome reuses a running instance and ignores the flag
 otherwise). G-Helper "Ultimate" MUXes the display straight to the dGPU —
 fastest, needs a reboot.
+
+
+## 5. The marcher: rings, horns, and the boundary that was innocent (12 Sept 2026)
+
+Section 3 chased "shimmer" and found a starved GPU. This is the residue that
+survived the resolution fix — and this time it was the code. Everything below
+was measured by replicating the shader's march in JS against `js/terrain.js`
+(the fp64 mirror) or a JS port of `shipDE`, comparing the shipped marcher
+against a high-iteration, low-relaxation reference. The rigs were throwaway;
+the numbers are not, so they live here.
+
+### 5.1 The concentric rings WERE the hit tolerance (fixed)
+
+Symptom: thirty-plus rings centred on the viewer, out to the horizon, riding
+along with the camera and making ridges, shorelines and tree edges crawl.
+**It survived 2x supersampling**, which is what ruled out aliasing.
+
+Cause: `tolRay = 0.01 + 0.0015 * t` is a tolerance measured **along the ray**.
+The error it permits *vertically* is that distance divided by the sine of the
+incidence angle, so a ray grazing the ground at 1.5 degrees carries a **38x**
+amplification. Stop-distance error therefore grows with both range and
+flatness, and because `t` advances in steps the error quantises into shells —
+the rings are iso-contours of the tolerance itself.
+
+Fix (`marchTerrain`, gated on the `ray tol` debug knob so it stays A/B-able):
+
+```glsl
+float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
+if (dT < tolRay * inc || dP < tolRay) { ... }
+```
+
+Measured, real terrain, camera at 1964 m, 2800 rays:
+
+| marcher | mean hit error | p99 | avg iters | lost hits |
+|---|---|---|---|---|
+| shipped (pre-fix) | 28.90 m | 354.3 m | 21.8 | 0 |
+| incidence-aware | **2.74 m** | **22.1 m** | 22.8 | 0 |
+
+**10.5x on the mean, 16x on p99, for +4.6% iterations.** The `0.06` floor is
+what stops a near-horizontal ray from demanding unbounded precision.
+
+### 5.2 The horns on the hull were BUDGET, not tolerance (fixed)
+
+Flying along a rounded mothership corner produced spikes. Same family of
+cause, different mechanism: a ray nearly tangent to a large flat face takes
+many tiny DE steps, and both box marches had **48 iterations**. Nico was at
+ALT 2813 with the hull top at 2800 — 13 m of clearance, so his rays really
+were tangent.
+
+1939 rays through the tangency band (0.02–3 degrees below horizontal),
+counting only rays a 4000-iteration reference confirms hit:
+
+| step | cap | missed a real surface | avg iters |
+|---|---|---|---|
+| `t += d` | 48 (was shipped) | 365 (**18.8%**) | 14.1 |
+| `t += d` | 192 | 167 (8.6%) | 33.8 |
+| `t += d` | **384 (now shipped)** | 25 (**1.3%**) | 42.2 |
+| `t += d` | 768 | 0 (0.0%) | 42.6 |
+| `t += d * 0.55` | 48 | 390 (20.1%) | 20.9 |
+| `t += d * 0.55` | 144 | 326 (16.8%) | 38.8 |
+| `t += d * 0.35` | 192 | 344 (17.7%) | 56.1 |
+
+Three findings worth keeping:
+
+- ⚠️ **Step relaxation, which I proposed as the fix, measures WORSE** — 390
+  misses against 365 at the same cap, and it stays worse at every cap tried.
+  Relaxing the step makes each iteration cover less ground, so a budget-bound
+  march gets *less* far before the cap. Do not reach for relaxation to fix a
+  tangency miss.
+- **Average iterations barely move past 384** (42.2 to 42.6), because the cost
+  is paid only by the few grazing rays; the cap is a ceiling, not a workload.
+  That is what makes 48 to 384 affordable at all.
+- A cheaper idea — bail out at the ray's closest approach to the surface —
+  was implemented and **changed nothing** (365 misses at every `graze`
+  threshold from 0.02 to 0.20). The DE never rises again before the cap is
+  hit, so there is no "past closest approach" to detect. Dropped.
+
+### 5.3 The same fix does NOT transfer to the sea border (measured, negative)
+
+Nico asked directly: *"would you see a way to apply what we did here to the
+beach-sea borders?"* Answer: no, because the terrain march is not
+budget-bound. Same rig, 884–900 rays at two altitudes:
+
+| view | shipped (150 iters, relax 0.55) | cap-outs | mean err |
+|---|---|---|---|
+| high beach, ALT 2142 m | avg 39 iters of 150 | **0 / 884** | 6.68 m |
+| low beach, ALT 226 m | avg 34 iters of 150 | **0 / 900** | 0.36 m |
+
+Raising the cap to 384 or 768 changes not one digit. The terrain marcher has a
+`T_MAX` of 22 km, and that bounds how grazing a terrain ray can be and still
+hit anything: at 226 m altitude the shallowest ray reaching ground inside
+`T_MAX` is 0.54 degrees, and at 2142 m it is 5.54. The hull has no such bound,
+which is exactly why it needed the budget and the beach does not.
+
+### 5.4 The land/water boundary is NOT misplaced (measured, innocent)
+
+Cast a 220x110 grid of real pixel rays across the shoreline, classify each one
+land/water/sky exactly as the shader does (`tW < tT`), and compare against a
+4000-iteration reference march:
+
+| view | pixel rays | misclassified | screen rows affected |
+|---|---|---|---|
+| ALT 226 m, pitch 3 deg | 24 200 | **0** (0.00%) | 0 of 110 |
+| ALT 226 m, pitch 8 deg | 24 200 | **0** (0.00%) | 0 of 110 |
+| ALT 2142 m, pitch 10 deg | 24 200 | **0** (0.00%) | 0 of 110 |
+
+**0 of 72 600.** The marcher puts the boundary where the reference puts it.
+
+### 5.5 The wiggly coastline is real geometry, not an artifact
+
+401 contour samples every 10 m of northing along a 4 km stretch:
+
+| measured over | RMS deviation from its own smoothed shape |
+|---|---|
+| 20 m | 8.4 m |
+| 40 m | 11.9 m |
+| 100 m | 19.5 m |
+| 200 m | 29.8 m |
+| 400 m | 52.2 m |
+| 1000 m | **107.2 m** |
+
+Self-similar wiggle at every scale — the signature of a fractal contour, not
+of a sampling error. The amplifier is the **beach gradient: 2.35%, i.e. 43 m
+of horizontal run per metre of rise.** Every metre of terrain noise moves the
+waterline 43 m sideways. Over this stretch the shoreline's x ranges by 932 m.
+
+⚠️ **What therefore cannot be fixed in v9.** One ray per pixel means a
+boundary flips sub-pixel as the camera moves, and no tolerance change alters
+that. The cures are more samples (the `resolution` knob, section 3) or exact
+geometry with a depth buffer and mipmaps (v10's rasterised hybrid).
+
+### 5.6 Three of my own conclusions, overturned by measuring them
+
+Recorded because reasoning had been confident in all three.
+
+- **`terrainNormal`'s epsilon: ruled out on an unrepresentative sample.** I
+  measured `dot(n, sun)` over t = 800..9000 m at a **flat beach** point, got a
+  **0.0%** swing, and declared the epsilon innocent. At the steepest sampled
+  mountain point (slope 0.940) the same sweep swings **0.271 to 0.468, 19.7%
+  absolute**, with one local extremum — i.e. a band. A null result from the
+  wrong sample is not a null result. (It is still not the rings: a 5 m camera
+  move changes that shading by **0.02%**.)
+- **The compile-time "regression" did not exist.** I reported the raised
+  iteration caps costing 212 s of shader compile, off one uncontrolled
+  reading. A controlled A/B put the **original** caps at **243 s** — the caps
+  were not the cause. One reading is not a measurement; the same trap as the
+  clock-state warning in section 4.
+- **ROADMAP A4 would not have worked.** Bisection refinement of the hit point
+  sits in the backlog as a silhouette fix. Implemented here and measured, it
+  improved the hit error by **1.0x** — exactly nothing, because the error is
+  in *where the march stops caring*, not in the interpolation once it stops.
+  Kept in the roadmap only as a closed null result.
+
+### 5.7 Water sparkle: a Nyquist crossing, not noise
+
+The sea's fireflies appear where the ripple wavelength crosses the pixel
+footprint. Faded by footprint rather than by distance, with the specular
+exponent falling with it (**260 to 30**) so the highlight widens as the waves
+flatten instead of vanishing:
+
+```glsl
+float wfoot = t * uPixScale;
+float wfade = mix(1.0, 1.0 - smoothstep(1.5, 6.0, wfoot), uWaterLOD);
+```
+
+Shipped on at 0.80. Nico: *"the water LOD does fix the sparkling water, very
+cool... superb."*
+
+### 5.8 The spreading invasion: why it is deferred, with the cost
+
+Specified by Nico (8 harvesters spawn a second relay; 4 relays duplicate the
+mothership), then dropped by him once costed. The renderer takes the whole
+fleet as **individual uniforms**; a second mothership plus four relays with
+their harvester slots is roughly **+168 vec4 slots against a measured 242 and
+a project ceiling of 260** (the GLSL ES 3.0 minimum guarantee is 224). It
+needs the fleet moved into a texture first — ROADMAP **C3** — and v10's
+rasteriser may replace that renderer entirely. Do not attempt it by adding
+uniforms.

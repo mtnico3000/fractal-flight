@@ -126,6 +126,26 @@ const MUTANTS = [
   ['an element id is renamed out from under the modules', 'index.html',
    'id="fx"', 'id="fx2"', 'test_smoke.js'],
 
+  // The Debug master is the one control that WRITES to every other knob, and
+  // its failure mode is silent data loss: you dial a setup in, press DEBUG,
+  // and the setup is gone. Only a real DOM exercises it -- test_tune.js reads
+  // the knob objects and never builds the panel.
+  ['the master wipes a first-time setup (the v9.4 bug, restored)', 'js/tune.js',
+   'if (t.v > 0.5) { if (o._user !== undefined) o.v = o._user; }',
+   'if (t.v > 0.5) { o.v = o._user !== undefined ? o._user : o.d; }', 'test_panels.js'],
+  ['touching a slider no longer arms the master', 'js/tune.js',
+   "armMaster();   // or DEBUG would read 'off' while a setting was live", ';', 'test_panels.js'],
+  ['the master moves the model but not the slider it sits under', 'js/tune.js',
+   'paints.push(() => { slider.value = t.v; val.textContent = t.fmt(t.v); });',
+   'paints.push(() => { val.textContent = t.fmt(t.v); });', 'test_panels.js'],
+  ['two debug channels collide on one bitmask bit', 'js/tune.js',
+   "colLOD:  { kind: 'toggle', bit: 32,", "colLOD:  { kind: 'toggle', bit: 2,", 'test_panels.js'],
+  ['the panels leave the stacking column and can overlap again', 'index.html',
+   '<div id="panels">', '<div id="panels"></div>', 'test_panels.js'],
+  ['victory declared while the mothership still floats', 'js/hud.js',
+   "classList.toggle('defeated', harv === 0 && relays === 0 && mothers === 0);",
+   "classList.toggle('defeated', harv === 0);", 'test_panels.js'],
+
   // --- tuning + docs drift -------------------------------------------------
   ['a knob default drifts from its live value', 'js/tune.js',
    "shadows:    { label: 'shadows',     v: 1,", "shadows:    { label: 'shadows',     v: 0,", 'test_tune.js'],
