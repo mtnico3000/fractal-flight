@@ -92,6 +92,32 @@ check('sharp hull corners stay bit-identical', () => {
 // both counter-intuitive, both measured (see the comment in marchAliens). A
 // tangent ray that runs out of budget returns a miss, and the hull vanishes in
 // thin slivers that read as horns along a rounded edge.
+// v9.5. Four things in marchTerrain, each measured on the fp64 mirror before it
+// shipped (RESEARCH.md s6): 150 iterations was exhausted by 49 of 16 500 rays
+// over a beach at 3 degrees, and exhaustion returned -1 -- which the material
+// pass turned into WATER wherever the ray had crossed the water plane, i.e. a
+// spike of sea into the sand that came and went with the camera. The constant
+// 0.0018*t minimum stride stepped over beach berms and landed up to 45 m
+// further along; the secant refine takes the stop residual from 1.2 m to
+// 0.05 m at 4 km. Together they took frame-to-frame land/water/sky flips over
+// the beach from 15 to 4 -- the reference marcher's own parallax count.
+check('the terrain march: budget is a hit, not a hole; refine only while closing', () => {
+  const i = glsl.indexOf('vec2 marchTerrain(');
+  ok(i >= 0, 'marchTerrain() not found');
+  const body = glsl.slice(i, glsl.indexOf('\n}', i));
+  const loop = /for \(int i = 0; i < (\d+); i\+\+\)/.exec(body);
+  ok(loop && Number(loop[1]) >= 384, 'terrain march is down to ' + (loop && loop[1]) +
+     ' iterations; 150 was exhausted by grazing beach rays');
+  ok(/return vec2\(t, \(dP < dT\) \? 4\.0 : 1\.0\);\s*$/.test(body),
+     'a ray that exhausts the budget must return the surface it was crawling along, ' +
+     'not -1 -- that -1 became WATER over the beach');
+  ok(/pdT > dT && pdT < 1e4 && uHitRefine > 0\.5/.test(body),
+     'the hit refine may only extrapolate while the gap is still SHRINKING; a ' +
+     'growing gap is a ray cresting a bump and extrapolating hands it to the far side');
+  ok(/t \+= d \+ t \* uMarchStride;/.test(body),
+     'the minimum stride must be the uMarchStride uniform (0.0009), not the old 0.0018 constant');
+});
+
 check('the hull marches keep their tangency budget', () => {
   const mm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ rd \* t, uMotherHalf\);/.exec(glsl);
   const hm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ ld \* t, uShipHalf\);/.exec(glsl);

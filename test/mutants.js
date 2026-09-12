@@ -47,6 +47,18 @@ const MUTANTS = [
   ['NOISE_MEAN retuned off the measured value', 'js/shaders.js',
    'NOISE_MEAN = 0.49', 'NOISE_MEAN = 0.60', 'test_shader.js'],
 
+  // --- v9.5 terrain march: each of these is a bug that WAS shipped ---------
+  // The first 384 loop in the file is marchTerrain's; the hull marches come
+  // ~400 lines later, so first-occurrence targets the right one.
+  ['terrain march budget cut back to 150 (grazing beach rays exhaust it)', 'js/shaders.js',
+   'i < 384; i++) {', 'i < 150; i++) {', 'test_shader.js'],
+  ['budget exhaustion is a hole again (became WATER over the beach)', 'js/shaders.js',
+   'return vec2(t, (dP < dT) ? 4.0 : 1.0);', 'return vec2(-1.0, 0.0);', 'test_shader.js'],
+  ['the refine extrapolates over a cresting bump', 'js/shaders.js',
+   'pdT > dT && pdT < 1e4 && uHitRefine', 'pdT < 1e4 && uHitRefine', 'test_shader.js'],
+  ['the minimum stride is hard-wired to the old 0.0018 again', 'js/shaders.js',
+   't += d + t * uMarchStride;', 't += d + t * 0.0018;', 'test_shader.js'],
+
   // --- render path: both of these fail silently ----------------------------
   ['fps counter goes back to the clamped physics dt', 'js/main.js',
    'fpsAcc += rawDt; fpsN++; fpsTimer += rawDt;', 'fpsAcc += dt; fpsN++; fpsTimer += dt;', 'test_render.js'],

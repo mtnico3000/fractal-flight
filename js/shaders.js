@@ -16,6 +16,9 @@ uniform vec2 uJitter;
 uniform float uPixScale;
 uniform float uDetailFade;
 uniform float uRayTol;           // 0 = vertical tolerance (old), 1 = along-ray
+uniform float uHitRefine;        // v9.5: 1 = refine the terrain hit onto the surface after the tolerance stop
+uniform float uMarchStride;      // v9.5: minimum stride per unit t (was a constant 0.0018)
+uniform float uTreePersp;        // v9.5: 1 = trees shrink with distance (the v4.6 look), 0 = true size
 uniform float uWaterLOD;         // 0 = un-LOD'd ripples (old), 1 = footprint-aware
 uniform float uBoxRound;         // hull corner fillet, as a fraction of the smallest half-extent
 // Where the melt stops collapsing and starts merely sitting there. MUST match
@@ -328,7 +331,9 @@ vec3 plantEval(vec3 p, float dTerr, float mt) {
   // harvested plants are gone — one texel per cell
   if (texelFetch(uCollected, ivec2(mod(cell, 512.0)), 0).r > 0.5) return vec3(1e5, 0.0, 0.0);
   float s = mix(1.6, uTreeSize, pow(hash(cell + 51.0), mix(5.0, 1.2, uTreeShare))); // fern → tree
-  s *= mix(1.0, 0.35, smoothstep(550.0, 4000.0, mt));   // distance shrink (visual only)
+  // v9.5: the shrink is a form that changes as you fly past it -- exactly the
+  // class of motion Nico asked to remove -- so it is a knob now, default off.
+  s *= mix(1.0, 0.35, smoothstep(550.0, 4000.0, mt) * uTreePersp);   // distance shrink (visual only)
   vec2 ctr = (cell + 0.5) * FCELL + (vec2(hash(cell + 13.0), hash(cell + 37.0)) - 0.5) * 12.0;
   float ly = dTerr;                                // height above ground
   float yn = clamp(ly / s, 0.0, 1.0);
@@ -450,37 +455,49 @@ vec3 terrainNormal(vec2 p, float pixelSize) {
 // reads it, and the collision probe row does not call this function at all.
 vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
   float t = 0.5;
-  float pt = t, pd = 1e5;
-  iters = 150.0;
-  for (int i = 0; i < 150; i++) {
+  float pt = t, pd = 1e5, pdT = 1e5;
+  float dT = 1e5, dP = 1e5;
+  // v9.5 HIT REFINE runs INSIDE this loop, as phases, so terrainShapeLOD has
+  // exactly ONE call site. GLSL inlines every call: a first version with a
+  // separate refine block -- four more inlined copies of the terrain function
+  // -- made the whole shader slower PER ITERATION, +65% frame time for +17%
+  // iterations, and pushed the driver compile to 160 s. Same maths, one copy.
+  int phase = 0;                       // 0 marching, 1 secant probe, 2..4 bisection
+  float lo = 0.0, hi = 0.0, dStop = 0.0;
+  iters = 384.0;
+  for (int i = 0; i < 384; i++) {
     iters = float(i);
     vec3 p = ro + rd * t;
-    if (p.y > 560.0 && rd.y > 0.0) return vec2(-1.0, 0.0); // above the tallest peak, heading up
+    if (phase == 0 && p.y > 560.0 && rd.y > 0.0) return vec2(-1.0, 0.0); // above the tallest peak, heading up
     // A1: sample the terrain at THIS step's footprint. Detail thins with
     // distance along the ray, which is both the shimmer fix and the reason
     // long rays got cheaper rather than more expensive.
-    float dT = p.y - terrainShapeLOD(p.xz, t * uPixScale * uDetailFade);
+    dT = p.y - terrainShapeLOD(p.xz, t * uPixScale * uDetailFade);
+    if (phase == 1) {
+      // The probe. If the extrapolation crossed the surface we now HAVE a
+      // bracket, so bisect it three times; if not, keep it only when closer.
+      if (dT < 0.0) { hi = t; phase = 2; t = 0.5 * (lo + hi); continue; }
+      return vec2((dT < dStop) ? t : lo, 1.0);
+    }
+    if (phase >= 2) {
+      if (dT < 0.0) hi = t; else lo = t;
+      if (phase == 4) return vec2(0.5 * (lo + hi), 1.0);
+      phase++; t = 0.5 * (lo + hi); continue;
+    }
     // 3D flora: only evaluated when the ray is close AND skimming near the
     // ground — cruising altitude pays a single compare per step.
-    float dP = 1e5;
+    dP = 1e5;
     if (t < uFloraRange && dT < 18.0 && dT > -1.0) dP = plantEval(p, dT, t).x;
     float d = min(dT * 0.55, dP);   // relaxed terrain stride, cautious near plants
     // Stop when the surface is within about a pixel ALONG THE RAY, not within
     // a pixel VERTICALLY. dT is a height above the heightfield, so a vertical
     // slop of e leaves the hit e/sin(incidence) short of the true crossing --
     // 6x at 9.5 degrees of depression, 19x at 3. THAT amplification was the
-    // concentric rings centred on the nadir: the march halts early by a
+    // concentric rings centred on the nadir (v9.4): the march halts early by a
     // distance proportional to t, quantised by the discrete step, so the error
     // sawtoothed every ~350 m of ground radius out to the horizon, survived
     // supersampling (it is geometric, not sampling), and swam with the camera
     // because it is keyed on distance FROM the camera.
-    //
-    // Measured on the terrain mirror, 2800 rays from 1964 m: mean hit error
-    // 28.9 m -> 2.74 m, p99 354 m -> 22 m, for +4.6% iterations, with no ray
-    // exhausting the 150-step cap and no hit lost. Note that bisection refine
-    // at the hit -- ROADMAP A4 -- measures 1.0x here, i.e. nothing: the loose
-    // tolerance stops the march BEFORE the surface, so there is no bracket
-    // around the crossing left to refine.
     //
     // dP is already a distance along the ray, so the plant test keeps the
     // isotropic tolerance. The 0.06 floor stops near-horizontal rays from
@@ -489,13 +506,46 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
     if (dT < tolRay * inc || dP < tolRay) {
       float w = clamp(pd / (pd - d), 0.0, 1.0);
-      return vec2(mix(pt, t, w), (dP < dT) ? 4.0 : 1.0);
+      float th = mix(pt, t, w);
+      bool plant = dP < dT;
+      // The tolerance stop leaves the hit ABOVE the surface by up to
+      // tolRay*inc -- 1.2 m mean, 3.2 m p99 at 4 km -- and that height is what
+      // terrainColor keys every altitude band on, what the shadow ray starts
+      // from, and (along the ray) where every texture is sampled. On a 2.35%
+      // beach a metre of it moves the sand/green line 43 m. Secant-extrapolate
+      // along the last two terrain gaps to the crossing, bounded to two more
+      // strides, and let the loop evaluate it (phase 1). Only while the gap is
+      // still SHRINKING: a growing gap is a ray cresting a bump, and
+      // extrapolating forward would hand it to the far side. Measured on the
+      // mirror (RESEARCH.md s6): residual 0.24 -> 0.04 m, and frame-to-frame
+      // land/water/sky flips over a grazing beach 15 -> 4, the reference
+      // marcher's own parallax count, for ~1.7 extra evaluations per pixel.
+      if (!plant && dT > 0.0 && pdT > dT && pdT < 1e4 && uHitRefine > 0.5) {
+        lo = t; dStop = dT;
+        t = min(t + dT * (t - pt) / (pdT - dT), t + 2.0 * (t - pt));
+        phase = 1;
+        continue;
+      }
+      return vec2(th, plant ? 4.0 : 1.0);
     }
-    pt = t; pd = d;
-    t += d + t * 0.0018;
-    if (t > T_MAX) break;
+    pt = t; pd = d; pdT = dT;
+    // The minimum stride is what lets a grazing ray make progress over flat
+    // ground at all. It was a constant 0.0018*t -- 5.4 m at 3 km -- which
+    // stepped clean over beach berms shorter than that and landed the hit up
+    // to 45 m further along (p99, over-the-sea beach view), a different place
+    // every frame. 0.0009 cuts that to 9 m for +11% iterations; the Debug
+    // slider is there so the trade can be flown, not argued.
+    t += d + t * uMarchStride;
+    if (t > T_MAX) return vec2(-1.0, 0.0);
   }
-  return vec2(-1.0, 0.0);
+  // v9.5: a ray that spends its whole budget crawling along a surface is AT
+  // that surface, not in the sky. Returning -1 here turned budget exhaustion
+  // into a hole -- sky, or WATER wherever the ray had already crossed the
+  // water plane, i.e. a spike of sea into the beach -- that came and went
+  // with the camera. Measured: 49 of 16 500 rays over a beach at 3 degrees,
+  // 22 of 22 500 at a ridge. The horns on the hulls were this same bug on
+  // marchAliens. 150 -> 384 makes it rare; this makes it harmless.
+  return vec2(t, (dP < dT) ? 4.0 : 1.0);
 }
 
 // ---------- soft sun shadow (coarse LOD terrain → cheap & stable) ----------
@@ -1347,6 +1397,7 @@ void main() {
   //
   //   1 march steps   2 hit distance   4 pixel footprint
   //   8 terrain height (world-locked)  16 normal turn across a footprint
+  //  64 march budget (ramp; white = exhausted the 384 cap)
   //  32 colour LOD -- the alien-undergrowth fade, smoothstep(3,5,pixelSize),
   //     i.e. a hard viewer-centred ring on the green at t = 1875..3125 m
   int dmask = int(uDebugMask + 0.5);
@@ -1374,6 +1425,12 @@ void main() {
       // exactly the term terrainColor uses to fade the undergrowth out
       float cl = 1.0 - smoothstep(3.0, 5.0, t * uPixScale);
       d += vec3(0.35, 1.0, 1.0) * cl;                                 nch += 1.0;
+    }
+    if ((dmask & 64) != 0) {
+      // v9.5: iterations spent, as a ramp; a ray that hit the 384 cap is WHITE.
+      // The old 'march steps' sawtooth could not tell 150 from 6.
+      float bud = marchIters / 384.0;
+      d += (marchIters >= 383.0) ? vec3(3.0) : vec3(1.0, 0.30, 0.10) * bud;   nch += 1.0;
     }
     col = d / max(nch, 1.0);
     if (mat == 0) col = vec3(0.02);          // leave the sky dark

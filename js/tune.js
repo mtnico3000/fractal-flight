@@ -46,6 +46,10 @@ export const TUNE = {
   fogDens:    { label: 'fog',         v: 0.00012, d: 0.00012, min: 0.00005,max: 0.0009, step: 0.00001, fmt: x => (x*1000).toFixed(2) },
   floraDens:  { label: 'flora density',v: 0.2,    d: 0.2,     min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
   treeSize:   { label: 'tree size',   v: 13,      d: 13,      min: 4,      max: 22,     step: 1,       fmt: x => x.toFixed(0) + 'm' },
+  // v9.5: the v4.6 "exaggerated perspective" shrank every tree to 35% by 4 km,
+  // so a grove's outline changed shape as you flew at it. Off by default now;
+  // this restores the old look in one click.
+  treePersp:  { label: 'tree persp',  v: 0,       d: 0,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'shrink far' : 'true size' },
   treeShare:  { label: 'tree share',  v: 0.55,    d: 0.55,     min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
   treeTiers:  { label: 'fronds',      v: 11,       d: 11,       min: 3,      max: 14,     step: 1,       fmt: x => x.toFixed(0) },
   treeFract:  { label: 'tree fractal',v: 0.45,     d: 0.45,    min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
@@ -112,6 +116,13 @@ export const TUNED = {
                 fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
   waterLOD:   { kind: 'slider', label: 'water LOD',   v: 0.8, d: 0.8, min: 0, max: 1, step: 0.05,
                 fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
+  // v9.5: the two marcher changes that took the beach/ridge flicker to the
+  // reference marcher's own parallax count. Both here so they can be flown
+  // against the old behaviour on the same frame.
+  hitRefine:  { kind: 'slider', label: 'hit refine',  v: 1, d: 1, min: 0, max: 1, step: 1,
+                fmt: x => x > 0.5 ? 'on' : 'off (old)' },
+  stride:     { kind: 'slider', label: 'march stride', v: 0.0009, d: 0.0009, min: 0.0003, max: 0.0018, step: 0.0001,
+                fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (old)' : '') },
 
   steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },
@@ -124,6 +135,8 @@ export const TUNED = {
   normal:  { kind: 'toggle', bit: 16, label: 'normal turn',    v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },
   colLOD:  { kind: 'toggle', bit: 32, label: 'colour LOD',     v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  budget:  { kind: 'toggle', bit: 64, label: 'march budget',   v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },
 };
 
