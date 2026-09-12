@@ -126,6 +126,13 @@ const MUTANTS = [
   ['an element id is renamed out from under the modules', 'index.html',
    'id="fx"', 'id="fx2"', 'test_smoke.js'],
 
+  // The dev server bound IPv6-only on Windows and refused 127.0.0.1 -- the
+  // address CLAUDE.md, the ROADMAP's Chrome command and Nico all use -- while
+  // printing a perfectly healthy banner. Only a real socket can see it.
+  ['serve.py goes back to binding IPv6-only (127.0.0.1 refused)', 'serve.py',
+   'self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)',
+   'pass', 'test_serve.js'],
+
   // The Debug master is the one control that WRITES to every other knob, and
   // its failure mode is silent data loss: you dial a setup in, press DEBUG,
   // and the setup is gone. Only a real DOM exercises it -- test_tune.js reads

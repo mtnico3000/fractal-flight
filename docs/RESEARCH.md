@@ -555,3 +555,64 @@ a project ceiling of 260** (the GLSL ES 3.0 minimum guarantee is 224). It
 needs the fleet moved into a texture first — ROADMAP **C3** — and v10's
 rasteriser may replace that renderer entirely. Do not attempt it by adding
 uniforms.
+
+### Post-reboot readings, 12 Sept 2026 — the MUX is fixed, the POWER is not
+
+Nico moved the machine to **G-Helper `gpu_mode: 2` (Ultimate / MUX)** and
+**`performance_mode: 1` (Turbo)**, and rebooted. Two separate things came out
+of measuring it, and they point opposite ways.
+
+**✅ The GPU-selection problem is gone, and section 3's browser advice is now
+moot.** In Ultimate mode the display is wired straight to the dGPU: the RTX
+reports `display_active: Enabled` and owns the 2560x1600 mode while the Intel
+adapter reports no resolution at all. Every browser renders on the RTX with no
+flags — confirmed from inside the page, which reports
+`ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Laptop GPU ... D3D11)`. So
+`--force-high-performance-gpu` is now harmless but pointless, and the
+"browsers default to the integrated GPU" trap cannot fire while Ultimate is
+set. (It returns the moment the machine goes back to Standard/hybrid.)
+
+**❌ The card is still power-starved, and by more than section 4 assumed.**
+Under the game's real load — 90% utilization at 867x550 — it sat at:
+
+| | reading |
+|---|---|
+| performance state | **P3–P4** |
+| SM clock | **975–1290 MHz** (of a 3105 MHz maximum) |
+| power draw | **25–29 W** |
+| temperature | 49–50 °C (nowhere near thermal) |
+
+And `nvidia-smi -q -d PERFORMANCE` names the reason outright:
+
+```
+Clocks Event Reasons
+    SW Power Cap      : Active        <- this is what pins the clocks
+    HW Thermal Slowdown : Not Active
+```
+
+```
+Current Power Limit : 55.00 W
+Default Power Limit : 80.00 W
+Max Power Limit     : 150.00 W
+```
+
+⚠️ **The enforced TGP is 55 W — BELOW the card's own 80 W default**, not
+merely below the 150 W maximum. That reframes the open question this section
+has carried since 9 Sept. It is not "is the 80 W cap the supply or G-Helper?":
+80 W is just the card's base TGP, and something is holding it to 55. G-Helper
+is not the obvious culprit — its config carries no GPU TGP field at all (only
+the CPU/platform `limit_total`/`limit_fast`/`limit_slow`, all at 80 W) and it
+is already in Turbo. That leaves the supply, or a driver-side policy, and
+**which charger is physically plugged in is the one fact no command here can
+read.** Ask before theorising further.
+
+For scale, against the table earlier in this section: 25–29 W at 975–1290 MHz
+lands in the **USB-C PD band** (13–20 W, 855–1710 MHz), not the barrel-adapter
+one (up to 150 W, up to 2040 MHz). Turbo and Ultimate did not move it out of
+that band.
+
+**Method note, and it cost two failed commands:** `nvidia-smi` rejects
+`timestamp` inside `--query-gpu` on driver 592.00, `-c` is *compute-mode* and
+not a sample count, and **PowerShell splits an unquoted comma-separated
+`--query-gpu=a,b,c` into an array** so the whole option arrives unrecognised.
+Quote it, or sample from bash.

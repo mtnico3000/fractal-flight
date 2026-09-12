@@ -276,6 +276,21 @@ Key chips in the HUD glow green when a toggle is active.
   iteration caps; a controlled A/B put the *original* caps at 243 s. Driver
   compiles on this project run 200–240 s and vary by more than most effects
   being measured, so always take both sides in one sitting.
+- 🌐 **`serve.py` bound IPv6-ONLY and refused `127.0.0.1`** (found
+  12 Sept 2026, when Chrome said "site can't be reached" against a server that
+  was printing a perfectly healthy banner). With no bind argument the stdlib
+  picks the IPv6 wildcard — hence `Serving HTTP on :: port 8734` — and on
+  **Windows `IPV6_V6ONLY` defaults to 1**, so `[::1]` and `localhost` work
+  while `127.0.0.1` is refused. `python -m http.server` does not have this
+  problem because it clears that option in a `DualStackServerMixin` which the
+  stdlib defines INSIDE its own `__main__` block, so `serve.py`'s
+  `http.server.test()` call never inherited it — despite serve.py's docstring
+  claiming to be exactly that "plus one header". On Linux the default is
+  already 0, which is why it stayed hidden for the life of the project. Fixed
+  with a `DualStackServer` ServerClass; `test/test_serve.js` opens a real
+  socket over IPv4 and fails if it regresses. **Lesson: "the server is
+  running" and "the server is reachable at the address in the docs" are two
+  different claims, and only one of them was ever checked.**
 
 - 🖼️ **The fx overlay has NO depth buffer, so anything that can pass behind
   terrain does not belong on it.** The alien energy beams were 2D lines on the
@@ -380,6 +395,14 @@ node test/run_tests.js        # everything
   only replaces the counter when harvesters AND relays AND motherships are
   all gone. It inlines `css/style.css` into the jsdom document, because a
   visibility question asked without the stylesheet answers 'visible' always.
+- `test/test_serve.js` — `serve.py` over a REAL socket. The only suite that
+  opens one, because the only bug it can catch needs one: the dev server bound
+  IPv6-only and refused `127.0.0.1` while looking healthy (see the gotcha
+  above). Asserts IPv4 AND IPv6 both answer 200, and that the two reasons
+  serve.py exists at all survive — `no-store` on modules, and
+  `text/javascript` rather than the registry's `text/plain`. Both of those
+  fail silently in a browser. Uses a random high port so a dev server already
+  running on 8734 cannot make it pass or fail for the wrong reason.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every
@@ -387,7 +410,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **36/36 mutants caught as of v9.4.** It earned its
+  the predicate it named. **37/37 mutants caught as of v9.4.** It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch
