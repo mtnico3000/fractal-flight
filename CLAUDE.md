@@ -124,11 +124,11 @@ Key chips in the HUD glow green when a toggle is active.
   of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
-- **uniform budget: 242 vec4 slots — MEASURED, 12 Sept 2026**, by walking
+- **uniform budget: 245 vec4 slots — MEASURED, 12 Sept 2026**, by walking
   the parsed GLSL in `test/test_glsl.js`, which now fails the build above a
   260 ceiling. The long-standing "~260" in this file was an estimate and so
   was the "~267" that briefly replaced it; both were wrong. The concern is
-  still real: GLSL ES 3.0 guarantees only **224**, so at 242 the shader may
+  still real: GLSL ES 3.0 guarantees only **224**, so at 245 the shader may
   fail to LINK on the weakest target while every desktop is fine. The four
   biggest consumers are `uBlastCell[64]`=64, `uFxPos[48]`=48,
   `uRingMats[8]`=24 and `uCloudPos[16]`=16 — pack those into a texture before
@@ -276,6 +276,45 @@ Key chips in the HUD glow green when a toggle is active.
   iteration caps; a controlled A/B put the *original* caps at 243 s. Driver
   compiles on this project run 200–240 s and vary by more than most effects
   being measured, so always take both sides in one sitting.
+- 🕳️ **Budget exhaustion must be a HIT, never a hole.** `marchTerrain`
+  returned `-1` after its 150 iterations, and the material pass reads `-1`
+  as "no terrain" — so wherever the ray had already crossed the water plane
+  the pixel was drawn as **sea**. That is what the water spikes into the
+  beach were: 49 of 16 500 rays over a beach at 3°, 22 of 22 500 at a ridge,
+  a different set every frame. Same bug as the hull horns, on the other
+  march. Now 384 iterations *and* the fallthrough returns the surface the ray
+  was crawling along. `test_shader.js` guards both. (docs/RESEARCH.md §6)
+- 📏 **The minimum stride hops features shorter than itself.** `t*0.0018` is
+  5.4 m at 3 km; beach berms shorter than that were stepped over and the hit
+  landed up to 45 m further along (p99), hop or no hop flipping with the
+  camera. `uMarchStride` (Debug slider, default 0.9‰) halves it for +4%
+  frame time.
+- 🎯 **The tolerance stop's residual is what every altitude band is keyed
+  on.** `terrainColor(pos, n, pos.y, px)` — the `h` is the *ray's* height at
+  the stop, 1.2 m mean / 3.2 m p99 above the surface at 4 km, and on a 2.35%
+  beach a metre of it moves the sand/green line 43 m. The secant refine in
+  the march takes it to 0.05 m. It only extrapolates while the gap is still
+  *shrinking* — a growing gap is a ray cresting a bump.
+- 🧬 **GLSL inlines every call site, and the terrain function is enormous.**
+  A refine block with four evaluations of `terrainShapeLOD` after the loop
+  cost **+65% frame time for +17% iterations** (and 160 s of compile): five
+  inlined copies made the whole loop slower per iteration. Rewritten as
+  phases *of* the march loop — one call site — the same maths costs +14%.
+  Any future "just evaluate the terrain once more here" is a copy of the
+  biggest function in the file; keep it inside the loop.
+- 🖥️ **An fps reading of ~165 on this machine is the panel's refresh rate,
+  not the shader.** The first A/B read "old 166 fps" — that is vsync. Pin
+  `resolution` at 2× to get under the cap before comparing frame times.
+  Also: observation hover has inertia; a "still" capture within ~2 s of a
+  nudge is measuring the glide, not the shader.
+- 🌳 **Trees change size with distance ON PURPOSE** (v4.6 "exaggerated
+  perspective", 35% at 4 km) — the mushroom-tree borders moving as you fly
+  was a feature. `tree persp` on the world panel, default off since v9.5.
+  The hard frond↔envelope LOD switch at exactly 550 m is still there.
+- 🌑 **The shadow terrain is not the drawn terrain, and at grazing views 12%
+  of sunlit land is wrongly black** (`terrainCheapH`: 2 octaves, 13 escape
+  iterations, no domain warp, against 3/26/warped). Real, ugly, and *static*
+  — it moves 0.1% between frames, so it is not the flutter. Parked.
 - 🌐 **`serve.py` bound IPv6-ONLY and refused `127.0.0.1`** (found
   12 Sept 2026, when Chrome said "site can't be reached" against a server that
   was printing a perfectly healthy banner). With no bind argument the stdlib
@@ -328,7 +367,7 @@ node test/run_tests.js        # everything
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
   live hull is lethal while a falling/melting one is inert.
 - `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
-  in pairs across 46 knobs (20 world + 15 aliens + 11 debug), and a missed `d` only shows when someone presses
+  in pairs across 50 knobs (21 world + 15 aliens + 14 debug), and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
 - `test/test_build.js` — the single file must be byte-identical to what
@@ -338,7 +377,11 @@ node test/run_tests.js        # everything
   page, where every fetch fails silently). Verified to go red both ways —
   editing a module without rebuilding, and hand-editing the artifact.
 - `test/test_shader.js` — shader-source invariants Node cannot get any other
-  way until the GLSL parser lands: `terrainShape` is still the px=0 wrapper,
+  way until the GLSL parser lands. Since the v9.5 marcher: the terrain loop
+  is ≥ 384, budget exhaustion returns the surface (not −1, which became
+  WATER over a beach), the hit refine only extrapolates while the gap is
+  shrinking, and the minimum stride is the `uMarchStride` uniform — four
+  mutants, each verified red. Also: `terrainShape` is still the px=0 wrapper,
   the probe row never calls the LOD variant, faded octaves decay toward the
   measured octave MEAN (toward zero and distant ground sinks as you fly at
   it), and no stray backtick closes the GLSL template. All three mutations
@@ -410,7 +453,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **37/37 mutants caught as of v9.4.** It earned its
+  the predicate it named. **41/41 mutants caught as of v9.4 (+ the v9.5 marcher).** It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch

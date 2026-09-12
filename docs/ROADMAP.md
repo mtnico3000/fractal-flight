@@ -51,12 +51,12 @@ last version of the pure raymarcher: **v10 is a renderer change**, and it was
 Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**71 assertions, 11 files**; three skip without `npm install`, and one
+   (**72 assertions, 11 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **37/37 caught as of v9.4**). A green suite is not
+   (slow, opt-in, **41/41 caught as of v9.4**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -220,6 +220,23 @@ Manager token that `git push` already uses. julaub/main had 2 commits we did
 not have; both are jul's merge commits for PR #1 and #2 and the content diff
 from the merge base is empty, so nothing of his was at risk.
 
+### ✅ Landed 12 Sept 2026, evening — the third marcher pass (uncommitted version bump)
+
+- **The beach/ridge flutter was NOT irreducible, and Nico's hypothesis was
+  right**: budget exhaustion in `marchTerrain` returned −1 and was drawn as
+  WATER over the beach — the hull horns on the other march. Now 384
+  iterations, exhaustion returns the surface, the minimum stride is a Debug
+  knob (0.9‰, was 1.8‰) and a secant refine puts the hit on the surface.
+  Sea scene: holes 49 → 0, frame-to-frame flips 15 → 4 with the reference
+  at 4. **+14% frame time** (after a +65% first version taught us GLSL
+  inlining). RESEARCH.md §6; §5.3 is retracted and §5.4 corrected there.
+- `tree persp` (world panel, default off): trees no longer shrink with
+  distance. `march budget` debug channel: white = a ray hit the cap.
+- **Not yet done: the version bump.** Comments say v9.5; strings and the
+  artifact still say v9.4. Nico's call. ~~Also not yet flown by Nico.~~
+- Two things this found and did NOT fix, parked below: the shadow terrain
+  and the 550 m tree LOD ring.
+
 ### ✅ Landed 12 Sept 2026 (v9.4)
 
 - **The concentric rings are gone.** They were the hit tolerance divided by
@@ -246,7 +263,7 @@ from the merge base is empty, so nothing of his was at risk.
   bitmask, plus resolution / detail fade / ray tol / water LOD). Built as a
   diagnostic, kept on Nico's call: *"we're going to keep the whole debug
   panel, it's fun to tweak."* It is how the rings were localised.
-- Suite **71 assertions / 11 files**, battery **37/37**. New:
+- Suite **72 assertions / 11 files**, battery **41/41**. New:
   `test/test_panels.js` (the panels as a real DOM).
 
 ### Open questions for Nico
@@ -310,6 +327,20 @@ from the merge base is empty, so nothing of his was at risk.
 - Push to origin / open the PR to julaub? 18 commits are waiting.
 
 ### ⏸ Parked, with reasons
+
+- **The shadow terrain is not the drawn terrain (found 12 Sept 2026).**
+  `terrainCheapH` is 2 fbm octaves, 13 escape iterations, no domain warp,
+  against the drawn 3/26/warped, so shadows are cast by a different island:
+  in the grazing over-the-sea view **12.1% of sunlit land is black that would
+  be lit against the true surface**. It is static (0.1% frame-to-frame), so
+  it is not flutter, which is why it was left. Fix is either a closer cheap
+  terrain (26 iterations at least — the coast is where 13 vs 26 diverges) or
+  a start-height bias; measure with the shadow rig in RESEARCH §6.2 first.
+- **Trees pop between two silhouettes at exactly 550 m** (`plantEval`,
+  `mt >= 550.0`: fronds inside, smooth envelope outside) — a ring around the
+  player where every tree changes shape as it crosses. Distinct from the
+  distance *shrink*, which is now the `tree persp` knob. Blend over 450–650 m
+  if it is ever visible enough to matter.
 
 - **The spreading invasion (specified 12 Sept 2026, deferred to v10).** Nico's
   full design, in his words: *"when the harvesters arrive at 8, a new relay
@@ -487,8 +518,8 @@ drafted:
    identifiers). Ends the dual-build maintenance that caused repeated
    patch-drift bugs.
 2. **Port the Node test harnesses (S/M)** — ✅ **C2 COMPLETE.** `test/` runs
-   **71 assertions across 11 files** plus `check_module_refs.py`, and
-   `test/mutants.js` verifies the tests themselves (**37/37**). Three suites
+   **72 assertions across 11 files** plus `check_module_refs.py`, and
+   `test/mutants.js` verifies the tests themselves (**41/41**). Three suites
    need `npm install` (`test_glsl.js`, `test_smoke.js`, `test_panels.js`)
    and skip themselves with a note without it, so a bare clone still runs
    the other seven. Flight modes and rings still have no coverage — see

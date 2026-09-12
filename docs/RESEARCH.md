@@ -3,10 +3,11 @@
 Full write-up of the research/discussion session (Sept 2026) so the
 reasoning survives alongside the ROADMAP action items. Read this before
 implementing ROADMAP sections A and B — it explains WHY each fix works and
-what was already ruled out. Section 5 is the v9.4 marcher work, and it is
-also the list of things measurement proved wrong after reasoning had settled
-them: check it before re-deriving anything about hit tolerance, iteration
-budgets or the coastline.
+what was already ruled out. Section 5 is the v9.4 marcher work and section 6 the
+third pass that overturned two of its conclusions; between them they are the
+list of things measurement proved wrong after reasoning had settled them.
+Check both before re-deriving anything about hit tolerance, iteration
+budgets, the coastline, or what a "still" camera measures.
 
 ---
 
@@ -454,7 +455,13 @@ Three findings worth keeping:
   threshold from 0.02 to 0.20). The DE never rises again before the cap is
   hit, so there is no "past closest approach" to detect. Dropped.
 
-### 5.3 The same fix does NOT transfer to the sea border (measured, negative)
+### 5.3 ~~The same fix does NOT transfer to the sea border~~ — WRONG, see §6
+
+⚠️ **Retracted 12 Sept 2026 (later the same day).** This measured a beach
+*fan* and generalised. Over a beach seen at 3° from over the sea, 49 of
+16 500 rays DO exhaust the budget, and 22 of 22 500 at a ridge — and the
+exhaustion was drawn as water. §6 has the corrected measurement and the fix.
+The text below is kept as the record of the mistake.
 
 Nico asked directly: *"would you see a way to apply what we did here to the
 beach-sea borders?"* Answer: no, because the terrain march is not
@@ -471,7 +478,13 @@ hit anything: at 226 m altitude the shallowest ray reaching ground inside
 `T_MAX` is 0.54 degrees, and at 2142 m it is 5.54. The hull has no such bound,
 which is exactly why it needed the budget and the beach does not.
 
-### 5.4 The land/water boundary is NOT misplaced (measured, innocent)
+### 5.4 The land/water boundary is NOT misplaced (one valid scene of three)
+
+⚠️ **Two of these three scenes were vacuous**: re-checking on 12 Sept
+found the ALT 226 m camera *underground* (residual −43 m on every pixel), so
+both the shipped and the reference march hit at t = 0.5 and trivially agreed.
+The high-beach row is real; the other two are not. §6.1 checks the camera
+is above the terrain in every scene.
 
 Cast a 220x110 grid of real pixel rays across the shoreline, classify each one
 land/water/sky exactly as the shader does (`tW < tT`), and compare against a
@@ -632,3 +645,152 @@ reboot changed which GPU renders, not how much power it may draw.
 not a sample count, and **PowerShell splits an unquoted comma-separated
 `--query-gpu=a,b,c` into an array** so the whole option arrives unrecognised.
 Quote it, or sample from bash.
+
+
+## 6. The flutter, second attempt: what actually moves, measured (12 Sept 2026)
+
+Nico's brief, verbatim: *"a mountain top has a form and it should not change
+its form while you fly by. a sea coast has a line and that line should not
+fluctuate so much. a rounded corner should be rounded, there are no horns or
+spikes there to be shown."* And his hypothesis: the beach spikes and the
+ridge shifting are the same mechanism as the hull horns (§5.2).
+
+**He was right, and §5.3 was wrong to say otherwise.** §5.3 measured the
+terrain march over a *beach fan* and found no budget exhaustion; that was
+then generalised to ridges and the waterline. Same mistake as §5.6's
+flat-beach normal test. Worse: re-checking the §5.4 boundary rig showed the
+camera in two of its three scenes was **underground** (residual −43 m on
+every pixel), so "0 of 72 600 misclassified" rested on one scene, not three.
+The 0 in that one scene stands.
+
+### 6.1 Method
+
+Everything below is the shipped `marchTerrain` replicated line for line on
+the fp64 mirror (relax 0.55, stride `t*0.0018`, cap 150, incidence-aware
+tolerance, clamped secant), cast as a full 2D pixel grid, **twice, with the
+camera moved 2 m** — one frame of flight. "Flutter" is then a number: pixels
+whose land/water/sky class changes between the two frames, *above what a
+near-exact reference march (cap 8000, relax 0.25, stride 0.0001, tolerance
+×0.02) also changes*. The reference's own count is legitimate parallax.
+Every scene checks that the camera is above the terrain first.
+
+### 6.2 What moves and what does not
+
+Four scenes: `high` (ALT 2142, 10° down, 4 km off the coast), `mid`
+(800 m, 14°), `sea` (226 m over the water, 3°, looking back at the beach),
+`ridge` (650 m, 6°, 2.7 km from the steepest sampled point).
+
+| scene | rays out of budget | class flips, shipped (reference) | hit landed >15 m from the reference | sample shift p99 |
+|---|---|---|---|---|
+| high | 0 | 6 (8) | 4 | 11.9 m |
+| mid | 0 | 13 (8) | 2 | 4.1 m |
+| **sea** | **49** | **15 (4)** | 31 | **44.8 m** |
+| **ridge** | **22** | **10 (3)** | 90 | 12.7 m |
+
+Three mechanisms, in order of evidence:
+
+1. **Budget exhaustion becomes a hole, and over a beach the hole is water.**
+   `marchTerrain` returned `-1` after 150 iterations; the material pass
+   reads that as "no terrain", and wherever the ray had already crossed the
+   water plane the pixel is drawn as sea. 49 rays in the grazing beach view,
+   22 at the ridge, a different set every frame. **The horns, exactly** —
+   §5.2's mechanism on the terrain march.
+2. **The minimum stride hops small features.** `t += d + t*0.0018` is 5.4 m
+   at 3 km; a beach berm shorter than that is stepped over and the ray lands
+   up to 45 m further along (p99, sea scene). Hop or no hop flips with the
+   camera.
+3. **The stop residual biases every altitude band.** The tolerance stop
+   leaves the hit above the surface — 1.21 m mean, 3.19 m p99 at 4 km — and
+   `terrainColor(pos, n, pos.y, px)` keys sand/vegetation/rock/snow on that
+   `pos.y`. On a 2.35% beach a metre is 43 m of sand/green line: 4% of beach
+   pixels in the high scene carry a band value >0.25 off the truth. This one
+   is spatially smooth and barely flickers frame to frame (band Δ 0.004 mean,
+   same as the reference) — it *crawls* rather than flickers, which is the
+   remaining ring pattern at steep angles.
+
+Two candidates measured and **cleared**:
+
+- **Texture boil from the residual.** The sand (0.15/m) and vegetation
+  (0.6/m) noise sampled at the hit changes frame to frame by 0.090 and 0.255
+  for the shipped march — and by **exactly the same** for the reference. It
+  is all parallax. The residual pattern is smooth in camera position.
+- **Shadow acne.** The shadow ray starts 1 m above the (too-high) hit and
+  tests a 2-octave, 13-iteration, unwarped terrain that is not the one drawn.
+  In the grazing sea view **12.1% of sunlit land is black that would be lit
+  against the true surface** — real, and ugly — but it moves 0.1% between
+  frames. Static, not flutter. Parked in the ROADMAP.
+
+### 6.3 The sweep, and what ships
+
+| variant (sea scene) | holes | flips (ref 4) | wrong surface | shift p99 | residual | iters/px |
+|---|---|---|---|---|---|---|
+| shipped | 49 | 15 | 31 | 44.8 m | 0.24 m | 32.8 |
+| exhaustion = hit | 0 | 13 | 45 | 135.8 m | 1.18 m | 32.8 |
+| + cap 384 | 0 | 13 | 34 | 75.6 m | 0.25 m | 32.9 |
+| + stride 0.0009 | 0 | 12 | 20 | 9.3 m | 0.16 m | 36.3 |
+| + stride 0.0004 | 0 | 13 | 8 | 7.4 m | 0.17 m | 39.8 |
+| **+ 0.0009 + secant refine** | **0** | **4** | 20 | 6.7 m | 0.07 m | **38.0** |
+| + 0.0004 + secant refine | 0 | 4 | 8 | 4.3 m | 0.04 m | 41.5 |
+| reference | 0 | 4 | 0 | 0 | 0 | 98.5 |
+
+Reading it: making exhaustion a hit removes the holes but a capped ray is
+still crawling far from the surface (shift 136 m), so the cap must also
+rise; **the stride is what kills the hop-throughs** (45 → 9 m); **the refine
+is what kills the flips** (12 → 4, the reference's own count). Ridge: holes
+22 → 0, flips 10 → 4 (ref 3), residual 0.25 → 0.04 m, +18% iterations. High:
+residual 1.11 → 0.05 m, sample shift p99 11.9 → 0.8 m — the 4 km beach band
+bias is gone.
+
+The refine: on a tolerance stop with the gap still shrinking, secant-
+extrapolate along the last two terrain gaps to the crossing (bounded to two
+strides), evaluate there; if it crossed, the bracket is bisected three
+times; if not, keep it only when closer. Never while the gap is *growing* —
+that is a ray cresting a bump, and extrapolation would hand it to the far
+side. ~1.7 extra evaluations per pixel.
+
+### 6.4 On the real GPU: the cost is the compiler's, then it isn't
+
+First version: a refine block after the loop, with its own four terrain
+evaluations. RTX 4090 at the 55 W cap (§4), 677×785, observation hover:
+**old 166 fps → new 100.8** — and 166 is the 165 Hz panel's vsync, so the
+real old frame time is ≤ 6.0 ms against 9.9 ms: **≥ +65% frame time for
++17% iterations**, non-additive (refine alone +25%, stride alone invisible
+under the cap, together +65%). Driver compile 160 s.
+
+GLSL has no calls; every call site is inlined. The block added four more
+copies of `terrainShapeLOD` — the single largest function in the shader —
+and the whole loop got slower per iteration. Rewritten so the probe and the
+bisection are *phases of the march loop itself* (`phase` 0/1/2..4), leaving
+exactly one call site. Same maths, same tests. Then, at 2× supersample
+(1354×1570) to get out from under vsync:
+
+| | fps | frame time |
+|---|---|---|
+| old (refine off, stride 1.8‰) | 10.7 | 93 ms |
+| refine only | 10.5 | +2% |
+| stride only | 10.3 | +4% |
+| **new (refine on, stride 0.9‰)** | **9.4** | **+14%** |
+| reference (stride 0.3‰) | 9.1 | +18% |
+
++14% for the shipped configuration, matching the mirror's +16–18%. Compile
+≤ 140 s. Against the 0.3‰ reference on the same frame with the camera at
+rest, the old march differs on **2× the non-sky pixels** the new one does
+(1.29% vs 0.64%); the new `march budget` debug channel (white = hit the 384
+cap) shows no capped pixel in any view tried.
+
+⚠️ **Two measurement traps met here, recorded so nobody re-meets them:** an
+fps of ~165 on this machine is the panel, not the shader — supersample to
+get a real number; and observation hover has *inertia*, so a "still"
+capture within ~2 s of any nudge is measuring the glide.
+
+### 6.5 The trees were doing it on purpose
+
+`plantEval`: `s *= mix(1.0, 0.35, smoothstep(550.0, 4000.0, mt))` — every
+tree's **size** is a function of its march distance, shrinking to 35% by
+4 km (v4.6, "exaggerated perspective: far groves read as tiny specks that
+visibly grow on approach"). A grove's outline therefore changes shape as you
+fly at it — the third of Nico's three cases, and not a bug. Now the
+`tree persp` knob on the world panel, **default off** (true size); one click
+restores the old look. There is also a hard LOD switch at exactly 550 m
+between the frond silhouette and a smooth envelope — a ring around the
+player where trees change shape — left as is and noted in the ROADMAP.

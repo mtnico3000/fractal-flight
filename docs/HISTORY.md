@@ -684,6 +684,50 @@ error down 10.6x, p99 down 16x.** Numbers and method in RESEARCH.md §5.
   The assertion was rewritten to test the guard as the defence it is. That is
   the whole argument for the battery in one incident.
 
+## The third marcher pass — "fix me that thing" (12 Sept 2026, evening)
+
+Nico, after the v9.4 wrap had declared the beach flutter irreducible: *"I'm
+pretty sure that the same mechanism that made the 'horns' in the rounded
+borders are what I see in the unnatural 'spike' movements of the water on
+the beach. Same for the mountain ridge 'shifting'. In short these are things
+that should not fluctuate... fix me that thing that makes this beautiful 3D
+world have some fluctuations of what should be fixed."*
+
+**He was right and the wrap was wrong.** RESEARCH §5.3 had measured the
+terrain march over a beach *fan*, found no budget exhaustion, and generalised
+that to ridges and the waterline — the same mistake as the flat-beach normal
+test recorded two sections earlier. Re-checking §5.4 found its ALT 226 m
+camera underground in two of three scenes. Measured properly (full pixel
+grids, camera moved one frame, flips counted *above a reference march's own
+parallax*): the terrain march ran out of its 150 iterations on 49 rays over
+a beach at 3° and returned −1, which the material pass drew as **sea**
+wherever the ray had crossed the water plane. Spikes of water into the sand,
+a different set every frame. The horns, exactly.
+
+- 🕳️ **Three movers, each measured**: budget exhaustion as a hole; the
+  0.0018·t minimum stride hopping berms (hit lands up to 45 m further along);
+  the tolerance stop's residual (1.2 m at 4 km) keying every altitude band
+  43 m sideways on a 2.35% beach. Two suspects cleared by the same rig:
+  texture boil (all parallax) and shadow acne (12% of sunlit land wrongly
+  black at grazing views — real, but static). RESEARCH §6.
+- 🔧 **The fix, chosen by sweep**: 384 iterations and exhaustion returns
+  the surface; the stride is a knob at 0.0009; a secant refine onto the
+  surface that only extrapolates while the gap is shrinking. Sea scene flips
+  15 → 4 with the reference at 4; holes 49 → 0; residual 0.24 → 0.07 m.
+- 🧬 **The most useful number of the day was a bad one.** The first version
+  cost **+65% frame time for +17% iterations**. The refine was a block after
+  the loop with four terrain evaluations of its own; GLSL inlines every call,
+  and five copies of the largest function in the shader made the whole loop
+  slower per iteration. As phases *of* the loop — one call site — the same
+  maths costs +14%. Two traps recorded with it: an fps of ~165 here is the
+  165 Hz panel (the first "old" reading was vsync), and observation hover has
+  inertia (a "still" capture right after a nudge is the glide).
+- 🌳 **The trees were doing it on purpose.** `plantEval` shrinks every tree
+  to 35% by 4 km — v4.6's "exaggerated perspective" — which is precisely a
+  form that changes as you fly past. Now `tree persp`, default off.
+- Suite 72 assertions / 11 files; battery 41/41. Version strings left at
+  v9.4 — the bump is Nico's call.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-
