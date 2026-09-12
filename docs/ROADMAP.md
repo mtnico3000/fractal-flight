@@ -261,9 +261,14 @@ from the merge base is empty, so nothing of his was at risk.
   **enforced limit is 55 W — below the card's own 80 W default.** So it was
   never "80 W: supply or G-Helper?" — 80 W is just the base TGP, and
   something is holding it to 55. G-Helper carries no GPU TGP setting at all
-  (only CPU/platform limits, all 80 W) and is already in Turbo. **The one
-  fact no command here can read is which charger is physically plugged in.**
-  ▶ ASK NICO THAT before theorising further. docs/RESEARCH.md §4.
+  (only CPU/platform limits, all 80 W) and is already in Turbo. **Nico
+  confirmed the machine is on USB-C PD, which closes it: the cap is the
+  SUPPLY.** A ~100 W brick covers CPU, chassis and battery charging (15.5 W
+  of it right now) before the GPU sees anything. Nothing in software can fix
+  that — Turbo and Ultimate both failed to move it — so **the barrel adapter
+  remains a hardware purchase blocking any further GPU measurement.** The
+  reboot changed which GPU renders, not how much power it may draw.
+  docs/RESEARCH.md §4.
 - ~~The two multiplayer decisions~~ — **deliberately deferred to the v10
   kickoff** by Nico on 12 Sept 2026, and expanded into an agenda in item 3.
   Do not raise them before then; DO raise all of them at the start of the

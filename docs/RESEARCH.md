@@ -597,19 +597,35 @@ Max Power Limit     : 150.00 W
 ```
 
 ⚠️ **The enforced TGP is 55 W — BELOW the card's own 80 W default**, not
-merely below the 150 W maximum. That reframes the open question this section
-has carried since 9 Sept. It is not "is the 80 W cap the supply or G-Helper?":
-80 W is just the card's base TGP, and something is holding it to 55. G-Helper
-is not the obvious culprit — its config carries no GPU TGP field at all (only
-the CPU/platform `limit_total`/`limit_fast`/`limit_slow`, all at 80 W) and it
-is already in Turbo. That leaves the supply, or a driver-side policy, and
-**which charger is physically plugged in is the one fact no command here can
-read.** Ask before theorising further.
+merely below the 150 W maximum. That reframes the question this section has
+carried since 9 Sept, which was malformed: it was never "is the 80 W cap the
+supply or G-Helper?" — 80 W is just the card's base TGP, and something was
+holding it to 55.
 
-For scale, against the table earlier in this section: 25–29 W at 975–1290 MHz
-lands in the **USB-C PD band** (13–20 W, 855–1710 MHz), not the barrel-adapter
-one (up to 150 W, up to 2040 MHz). Turbo and Ultimate did not move it out of
-that band.
+### ✅ ANSWERED, 12 Sept 2026: it is the SUPPLY, and Turbo cannot fix it
+
+Nico confirmed the machine is on **USB-C PD**. That closes it, and the
+elimination is clean:
+
+- **Not G-Helper.** Its config carries no GPU TGP field at all — only the
+  CPU/platform `limit_total`/`limit_fast`/`limit_slow`, all at 80 W — and it
+  was already in Turbo (`performance_mode: 1`) when the 55 W cap was measured.
+- **Not thermal.** 49–50 °C under sustained load, and `HW Thermal Slowdown`
+  reads Not Active.
+- **Not the browser or the MUX.** Ultimate mode is on, the page renders on the
+  RTX, and the clocks are still pinned.
+- **It is the supply.** A ~100 W USB-C PD brick has to cover the CPU, the
+  chassis and battery charging (measured at 15.5 W of that budget right now)
+  before the GPU sees anything, so the platform hands the card 55 W.
+
+And the measured numbers land squarely in the USB-C band of the table above:
+25–29 W at 975–1290 MHz, against 13–20 W / 855–1710 MHz for USB-C and up to
+150 W / 2040 MHz for the barrel adapter. **Turbo and Ultimate did not move it
+out of that band, and nothing in software can** — there is no power to
+allocate. The 4090 stays at roughly a third of its clock ceiling until the
+barrel adapter is replaced. That makes the adapter a hardware purchase
+blocking any further GPU measurement, exactly as concluded on 9 Sept; the
+reboot changed which GPU renders, not how much power it may draw.
 
 **Method note, and it cost two failed commands:** `nvidia-smi` rejects
 `timestamp` inside `--query-gpu` on driver 592.00, `-c` is *compute-mode* and
