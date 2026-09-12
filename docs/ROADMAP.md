@@ -46,7 +46,7 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.4, and so is the branch.** `main` points at it. v9.4 is the
+**Version is v9.5, and so is the branch.** `main` points at it. v9.5 is the
 last version of the pure raymarcher: **v10 is a renderer change**, and it was
 Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
@@ -220,7 +220,16 @@ Manager token that `git push` already uses. julaub/main had 2 commits we did
 not have; both are jul's merge commits for PR #1 and #2 and the content diff
 from the merge base is empty, so nothing of his was at risk.
 
-### ✅ Landed 12 Sept 2026, evening — the third marcher pass (uncommitted version bump)
+⚠️ **PR #3's head is the branch NAME `v9.4` on origin, and GitHub cannot
+re-point a PR's head.** Local work moved to `v9.5` on 12 Sept 2026. Until
+jul merges, every push must feed BOTH refs, or the PR goes stale while
+`origin/v9.5` moves on:
+
+```sh
+git push origin v9.5 v9.5:v9.4 main
+```
+
+### ✅ Landed 12 Sept 2026, evening — the third marcher pass (v9.5)
 
 - **The beach/ridge flutter was NOT irreducible, and Nico's hypothesis was
   right**: budget exhaustion in `marchTerrain` returned −1 and was drawn as
@@ -232,8 +241,10 @@ from the merge base is empty, so nothing of his was at risk.
   inlining). RESEARCH.md §6; §5.3 is retracted and §5.4 corrected there.
 - `tree persp` (world panel, default off): trees no longer shrink with
   distance. `march budget` debug channel: white = a ray hit the cap.
-- **Not yet done: the version bump.** Comments say v9.5; strings and the
-  artifact still say v9.4. Nico's call. ~~Also not yet flown by Nico.~~
+- **Bumped to v9.5 on Nico's call, and flown by him**: *"it's great the coast
+  issue is fixed, it worked!"* The mountains are a separate, still-open item
+  — his words: *"most are correct and don't change, at some points the ridges
+  fluctuate quite wildly in a zone."* See the queue.
 - Two things this found and did NOT fix, parked below: the shadow terrain
   and the 550 m tree LOD ring.
 
