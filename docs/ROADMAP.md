@@ -171,11 +171,13 @@ Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
 meshed: a biome that costs ten extra fbm octaves is unaffordable per pixel
 per frame and trivial once per chunk.
 
-### 6. Push the branch
+### 6. ✅ Pushed to origin 12 Sept 2026 — the PR to julaub is NOT opened
 
-`main` and `v9.4` are **20 commits ahead of `origin/main`**, and nothing has
-been pushed since v8.0. `origin` is Nico's own fork (mtnico3000); PRs go to
-julaub. **Ask before pushing — it is a volley.**
+`v9.4` and `main` are both on `origin` (mtnico3000/fractal-flight) at
+`f593391`, on Nico's say-so; it was the first push since v8.0. **The volley to
+jul has not been thrown**: there is no `julaub` remote configured and no PR
+exists. Opening one is a separate decision and needs asking. GitHub offers:
+https://github.com/mtnico3000/fractal-flight/pull/new/v9.4
 
 ### ✅ Landed 12 Sept 2026 (v9.4)
 
@@ -219,7 +221,8 @@ julaub. **Ask before pushing — it is a volley.**
   against the 224 GLSL ES 3.0 guarantees. Desktop is fine and the count is
   tested, but the mobile half needs a real device. (v10 may retire the
   question entirely.)
-- Push to origin / open the PR to julaub? 20 commits are waiting.
+- **Open the PR to julaub?** The push to origin is done (item 6); the PR is
+  not, and jul sees nothing until it exists.
 
 ### ✅ Landed 10 Sept 2026
 
