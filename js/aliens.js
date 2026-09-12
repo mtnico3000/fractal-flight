@@ -5,7 +5,7 @@ import { collectedSet } from './spores.js';
 import { HULL_BLAST_R } from './config.js';
 import { bombs, impacts, blastQueue } from './weapons.js';
 import { hullExplosionSound, zapSound, relayBlastSound } from './audio.js';
-import { doCrash } from './hud.js';
+import { doCrash, setFleetCounts, resetFleetCounts } from './hud.js';
 
 // ============ ALIEN INVASION (v9.0) ============
 // A rectangular-mandelbox MOTHERSHIP parks high over the island. Harvester
@@ -76,6 +76,8 @@ export function initAliens() {
   alien.relay.r = alien.relay.baseR;
   alien.relay.y = peak.h + 30 + alien.relay.r;
   alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
+  alien.relay.shrinkT0 = undefined; alien.relay.shrinkFrom = 0; alien.relay.shots = 0;
+  resetFleetCounts();
   alien.ships.length = 0;
   alien.bolts.length = 0;
   spawnHarvester(false); spawnHarvester(false);
@@ -91,8 +93,22 @@ export function initAliens() {
 // ((2 - 1) / 0.02 = 50) so changing the SIZE never silently changes the
 // PACING of the invasion economy -- the growth increment is derived from the
 // pair rather than written as its own magic 0.02.
-const RELAY_GROW = 7;                    // 7 x a 150 m base = ~35 x the old 30 m relay
-const RELAY_STEPS = 50;                  // energy arrivals from base to blast
+// Blast PACING and blast SIZE used to be one number: the relay discharged
+// when it reached RELAY_GROW x its base radius, so the growth-per-shot knob
+// silently controlled the cadence too -- at 1% per shot it needed 600 shots
+// and effectively never fired. They are separate concerns, so they are now
+// separate numbers: the blast is on a SHOT COUNT, and TUNEA.relGrow only
+// decides how far it swells in those shots.
+const RELAY_SHOTS = 50;                  // energy arrivals per discharge, whatever the growth
+const RELAY_GROW = 7;                    // hard ceiling on the swell, as a multiple of base
+const RELAY_SHRINK_MS = 2000;            // the blast deflates it over 2 s, not instantly
+// The melt runs fast to MELT_KNEE (the visible collapse, at the v9.3 rate of
+// 1/8 per second) and then CRAWLS the rest over MELT_TAIL seconds. Before
+// this the whole melt took 8 s, so the ship you had just bombed was gone by
+// the time you circled back to look at it. The wreck now sits mostly-sunk,
+// and inert (hullAlive is false throughout), for well over a minute.
+const MELT_KNEE = 0.78;
+const MELT_TAIL = 110;                   // seconds for that last 22%
 const BOLT_MAX = 6;                      // beams the shader can draw at once
 const HIT_FLASH = 0.6;                   // seconds the flare stays visible
 let hitId = -1, hitT0 = -1e9;            // hull id (matches mal.y), and when
@@ -165,8 +181,7 @@ function alienBombHits(bombs) {
     if (!B) continue;
     // mothership (axis-aligned)
     const m = alien.mother;
-    if (!m.gone && !m.falling &&
-        Math.abs(B.x - m.x) < TUNEA.moWid.v / 2 && Math.abs(B.y - m.y) < TUNEA.moHei.v / 2 + 3 && Math.abs(B.z - m.z) < TUNEA.moLen.v / 2) {
+    if (!m.gone && !m.falling && hullDist(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf()) < 3) {
       bombs[i] = null; m.hp--;
       hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
@@ -187,7 +202,7 @@ function alienBombHits(bombs) {
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = B.x - s.x, oz = B.z - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-      if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(B.y - s.y) < TUNEA.shHei.v / 2 + 3 && Math.abs(lz) < TUNEA.shWid.v / 2 + 3) {
+      if (hullDist(lx, B.y - s.y, lz, shipHalf()) < 3) {
         bombs[i] = null; s.hp--;
         hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
@@ -203,6 +218,30 @@ function alienBombHits(bombs) {
 // (they are spliced out of alien.ships instead), which `!o.gone` handles.
 const hullAlive = o => !o.gone && !o.falling && !(o.melt > 0);
 
+// Signed distance from a point to a ROUNDED box, in the box's own frame.
+// This is the same expression shipDE uses in the shader --
+//   length(max(|l| - (h - r), 0)) - r
+// -- so collision follows the fillet exactly rather than approximating it. At
+// TUNEA.boxRound = 0 the radius is 0 and it reduces to the plain box test the
+// hulls used before, so sharp hulls collide exactly as they always did.
+// `pad` inflates the surface, which is how the bomb tests express their old
+// tolerance: with an SDF, "within 3 m of the hull" is just d < 3.
+function hullDist(lx, ly, lz, half) {
+  const r = Math.min(TUNEA.boxRound.v * Math.min(half[0], Math.min(half[1], half[2])),
+                     Math.min(half[0], Math.min(half[1], half[2])) * 0.98);
+  const qx = Math.max(Math.abs(lx) - (half[0] - r), 0);
+  const qy = Math.max(Math.abs(ly) - (half[1] - r), 0);
+  const qz = Math.max(Math.abs(lz) - (half[2] - r), 0);
+  const out = Math.hypot(qx, qy, qz) - r;
+  if (out > 0) return out;
+  // inside: the largest negative axis distance, as sdBox does
+  return Math.max(Math.abs(lx) - (half[0] - r),
+         Math.max(Math.abs(ly) - (half[1] - r), Math.abs(lz) - (half[2] - r))) - r;
+}
+// half-extents in each hull's own axis order, so the two callers agree
+const motherHalf = () => [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
+const shipHalf   = () => [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
+
 function fallAndMelt(o, halfH, groundAt, dt) {
   // shared down-fall + terrain-melt state machine; returns true when gone
   if (o.falling) {
@@ -212,7 +251,8 @@ function fallAndMelt(o, halfH, groundAt, dt) {
     return false;
   }
   if (o.melt > 0) {
-    o.melt = Math.min(1, o.melt + dt / 8);
+    const rate = (o.melt < MELT_KNEE) ? 1 / 8 : (1 - MELT_KNEE) / MELT_TAIL;
+    o.melt = Math.min(1, o.melt + dt * rate);
     o.y = groundAt + halfH - (2 * halfH + 8) * o.melt;   // sink into the ground
     return o.melt >= 1;
   }
@@ -228,6 +268,11 @@ export function updateAliens(dt, now) {
   if (!r.gone) {
     if (!r.falling && r.melt === 0) {
       r.baseR = TUNEA.relSize.v / 2;
+      if (r.shrinkT0 !== undefined) {
+        const k = (now - r.shrinkT0) / RELAY_SHRINK_MS;
+        if (k >= 1) { r.r = r.baseR; r.shrinkT0 = undefined; }
+        else r.r = r.shrinkFrom + (r.baseR - r.shrinkFrom) * (k * k * (3.0 - 2.0 * k));
+      }
       r.y = r.ground + 30 + r.r;
     } else if (fallAndMelt(r, r.r, r.ground, dt)) { r.gone = true; r.melt = 0; }
   }
@@ -304,11 +349,18 @@ export function updateAliens(dt, now) {
     b.done = true;
     if (b.big) {
       if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
-    } else if (!r.gone && !r.falling) {
-      r.r += r.baseR * (RELAY_GROW - 1) / RELAY_STEPS;
-      if (r.r >= r.baseR * RELAY_GROW) {
-        r.r = r.baseR;
-        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false, ship: null, src: 6 });
+    } else if (!r.gone && !r.falling && r.shrinkT0 === undefined) {
+      r.shots = (r.shots || 0) + 1;
+      // swell, but never past the ceiling even if the knob is wound right up
+      r.r = Math.min(r.r + r.baseR * TUNEA.relGrow.v, r.baseR * RELAY_GROW);
+      if (r.shots >= RELAY_SHOTS) {
+        // Deflate over RELAY_SHRINK_MS rather than snapping back, and give the
+        // bolt the same duration so the beam to the mothership stays lit for
+        // the whole collapse instead of finishing first.
+        r.shots = 0;
+        r.shrinkFrom = r.r;
+        r.shrinkT0 = now;
+        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: RELAY_SHRINK_MS, big: true, done: false, ship: null, src: 6 });
         relayBlastSound();
       }
     }
@@ -330,15 +382,22 @@ export function updateAliens(dt, now) {
   // killbox at ground level for the 8 s it takes to sink. Reported as "the
   // game freezes when a ship goes down"; it was really an instant ALIEN HULL.
   const cp = craft.pos;
-  if (hullAlive(m) && Math.abs(cp[0] - m.x) < TUNEA.moWid.v / 2 && Math.abs(cp[1] - m.y) < TUNEA.moHei.v / 2 && Math.abs(cp[2] - m.z) < TUNEA.moLen.v / 2) doCrash('ALIEN HULL');
+  if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
   if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
   for (const s of alien.ships) {
     if (!hullAlive(s)) continue;
     const ca = Math.cos(s.a), sa = Math.sin(s.a);
     const ox = cp[0] - s.x, oz = cp[2] - s.z;
     const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-    if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(cp[1] - s.y) < TUNEA.shHei.v / 2 && Math.abs(lz) < TUNEA.shWid.v / 2) { doCrash('ALIEN HULL'); break; }
+    if (hullDist(lx, cp[1] - s.y, lz, shipHalf()) < 0) { doCrash('ALIEN HULL'); break; }
   }
+
+  // HUD tally. hullAlive, not object count: a wreck lingers ~116 s after it
+  // dies, and counting objects would hold the numbers above zero long after the
+  // last kill -- so INVADERS DEFEATED would never appear.
+  setFleetCounts(alien.ships.filter(hullAlive).length,
+                 hullAlive(r) ? 1 : 0,
+                 hullAlive(m) ? 1 : 0);
 }
 
 export function packAlienUniforms(out) {
@@ -360,6 +419,7 @@ export function packAlienUniforms(out) {
   }
   out.shipHalf = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
   out.boxParam = [TUNEA.boxScale.v, TUNEA.boxMinR.v * TUNEA.boxMinR.v, TUNEA.boxFold.v, TUNEA.bulbPow.v];
+  out.boxRound = TUNEA.boxRound.v;
   // Energy beams, packed as (source id, head, tail, fade). The ENDPOINTS are
   // not sent: the shader already holds uShipPos / uRelay / uMotherPos, so a
   // beam costs one vec4 instead of six floats -- and reading them live means

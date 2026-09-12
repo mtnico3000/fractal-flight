@@ -290,20 +290,26 @@ export function zapSound() {
 }
 
 export function relayBlastSound() {
-  // relay -> mothership discharge: big rising-falling saw sweep
+  // Relay -> mothership discharge: a rising-falling saw sweep, stretched to
+  // cover the 2 s deflation in aliens.js (RELAY_SHRINK_MS). It used to finish
+  // in 1.25 s while the relay snapped back instantly; now the sound, the beam
+  // and the collapse all run for the same two seconds.
   if (!AC || muted) return;
   const T = AC.currentTime;
   const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
   o.type = 'sawtooth';
   o.frequency.setValueAtTime(70, T);
-  o.frequency.exponentialRampToValueAtTime(950, T + 0.5);
-  o.frequency.exponentialRampToValueAtTime(120, T + 1.1);
-  f.type = 'lowpass'; f.frequency.value = 2400;
+  o.frequency.exponentialRampToValueAtTime(950, T + 0.85);
+  o.frequency.exponentialRampToValueAtTime(110, T + 1.95);
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(2400, T);
+  f.frequency.exponentialRampToValueAtTime(700, T + 2.0);   // closes as it sags
   g.gain.setValueAtTime(0.0001, T);
-  g.gain.exponentialRampToValueAtTime(0.3, T + 0.08);
-  g.gain.exponentialRampToValueAtTime(0.0001, T + 1.2);
+  g.gain.exponentialRampToValueAtTime(0.30, T + 0.10);
+  g.gain.exponentialRampToValueAtTime(0.22, T + 1.2);       // holds through the collapse
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 2.05);
   o.connect(f); f.connect(g); g.connect(AC.destination);
-  o.start(T); o.stop(T + 1.25);
+  o.start(T); o.stop(T + 2.1);
 }
 
 

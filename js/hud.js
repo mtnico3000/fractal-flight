@@ -62,3 +62,29 @@ export function toast(msg, ms) {
   toastTimer = setTimeout(() => { $toast.style.display = 'none'; }, ms || 4000);
 }
 export function hideToast() { $toast.style.display = 'none'; }
+
+// ---- fleet counters (v9.4) -------------------------------------------------
+// Live hull counts beside RINGS and SPORES. Counts what is ALIVE, not what
+// exists: a falling or melting wreck is already dead (hullAlive is false for
+// it) and lingers for ~116 s, so counting objects would leave the tally stuck
+// above zero long after the last kill and the defeated banner would never fire.
+const $harv = document.getElementById('harvCount');
+const $ringsScore = document.getElementById('rings-score');
+let lastFleet = '';
+
+export function setFleetCounts(harv, relays, mothers) {
+  const key = harv + '/' + relays + '/' + mothers;
+  if (key === lastFleet) return;        // DOM writes only when a number moves
+  lastFleet = key;
+  $harv.textContent = harv;
+  // Gated on the WHOLE invasion, not just the harvesters: bomb every harvester
+  // while the mothership still floats overhead and it will simply build more,
+  // so declaring victory then would be wrong. Only the harvester count is
+  // shown -- they are what you actually hunt.
+  $ringsScore.classList.toggle('defeated', harv === 0 && relays === 0 && mothers === 0);
+}
+
+export function resetFleetCounts() {
+  lastFleet = '';
+  $ringsScore.classList.remove('defeated');
+}

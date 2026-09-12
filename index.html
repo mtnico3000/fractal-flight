@@ -35,6 +35,10 @@
   <span id="ringScore">0</span>
   <span class="label spores">SPORES</span>
   <span class="sporeval" id="score">0</span>
+  <span id="fleetCounts">
+    <span class="label alien">HARVESTERS</span><span class="alienval" id="harvCount">0</span>
+  </span>
+  <span id="defeated">INVADERS DEFEATED</span>
 </div>
 <div id="compass">
   <svg viewBox="-50 -50 100 100">
@@ -57,6 +61,7 @@
 </div>
 <div id="toast"></div>
 <div id="crash"><div class="big" id="crashTitle">TERRAIN IMPACT</div><div class="sub">press R to fly again</div></div>
+<div id="panels">
 <div id="tune" class="closed">
   <h2 id="tuneHead">Tuning <span class="caret">▸</span></h2>
   <div class="body" id="tuneBody"></div>
@@ -64,6 +69,11 @@
 <div id="tuneA" class="closed">
   <h2 id="tuneAHead">Aliens <span class="caret">▸</span></h2>
   <div class="body" id="tuneABody"></div>
+</div>
+<div id="tuneD" class="closed">
+  <h2 id="tuneDHead">Debug <span class="caret">▸</span></h2>
+  <div class="body" id="tuneDBody"></div>
+</div>
 </div>
 <div id="info">
   <div id="pilotTag" style="display:none;color:rgba(255,200,130,0.9);font-weight:700;letter-spacing:2px;margin-bottom:4px"></div>

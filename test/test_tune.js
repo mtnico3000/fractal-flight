@@ -8,8 +8,8 @@
 
 const { loadModule, check, eq, ok, summary } = require('./harness');
 
-const { TUNE, TUNEA } = loadModule('tune.js');
-const panels = { TUNE, TUNEA };
+const { TUNE, TUNEA, TUNED } = loadModule('tune.js');
+const panels = { TUNE, TUNEA, TUNED };
 
 console.log('tune');
 
@@ -46,9 +46,10 @@ check('every knob is fully formed (label, range, step, fmt)', () => {
   }
 });
 
-check('the two panels hold the expected number of knobs', () => {
-  eq(Object.keys(TUNE).length, 22, 'TUNE knob count');
-  eq(Object.keys(TUNEA).length, 13, 'TUNEA knob count');
+check('the three panels hold the expected number of knobs', () => {
+  eq(Object.keys(TUNE).length, 20, 'TUNE knob count');
+  eq(Object.keys(TUNEA).length, 15, 'TUNEA knob count');
+  eq(Object.keys(TUNED).length, 11, 'TUNED (debug) knob count');
 });
 
 // Informational, never a failure: a default pinned to a slider end usually

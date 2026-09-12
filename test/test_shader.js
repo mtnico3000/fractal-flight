@@ -64,6 +64,47 @@ check('faded octaves decay toward the octave mean, not toward zero', () => {
 // A backtick inside the GLSL closes the JS template literal early and turns
 // the rest of the shader into stray JS tokens. It cost a debugging round on
 // 6 Sept 2026; build.js parses the bundle now, but naming it here says why.
+// MELT_KNEE lives in BOTH aliens.js (which drives the melt) and shaders.js
+// (which decides how it is coloured). Drift means the pulse would stop at a
+// different point than the melt slows down -- a wreck that goes quiet while
+// still visibly collapsing, or blinks for two minutes. Numeric, not textual.
+check('the melt knee agrees between aliens.js and the shader', () => {
+  const aliens = fs.readFileSync(path.join(__dirname, '..', 'js', 'aliens.js'), 'utf8');
+  const js = /const MELT_KNEE = ([\d.]+);/.exec(aliens);
+  const gl = /const float MELT_KNEE = ([\d.]+);/.exec(glsl);
+  ok(js, 'MELT_KNEE not found in aliens.js');
+  ok(gl, 'MELT_KNEE not found in the shader');
+  ok(Number(js[1]) === Number(gl[1]),
+     'aliens.js says ' + js[1] + ', the shader says ' + gl[1] +
+     ' -- the pulse would stop at a different melt than the collapse does');
+});
+
+check('sharp hull corners stay bit-identical', () => {
+  // uBoxRound = 0 must reduce to the v9.3 expression exactly, or every ship
+  // silently changes shape for anyone who never touches the slider.
+  ok(/float r = min\(uBoxRound \* hmin, hmin \* 0\.98\);/.test(glsl),
+     'the fillet radius should be clamped to the smallest half-extent');
+  ok(/return max\(sdBox\(l, h - r\) - r, mb\);/.test(glsl),
+     'the rounded box must be sdBox(l, h - r) - r, which is exact at r = 0');
+});
+
+// The hull marches need a large iteration ceiling and NO step relaxation --
+// both counter-intuitive, both measured (see the comment in marchAliens). A
+// tangent ray that runs out of budget returns a miss, and the hull vanishes in
+// thin slivers that read as horns along a rounded edge.
+check('the hull marches keep their tangency budget', () => {
+  const mm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ rd \* t, uMotherHalf\);/.exec(glsl);
+  const hm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ ld \* t, uShipHalf\);/.exec(glsl);
+  ok(mm, 'could not find the mothership march loop');
+  ok(hm, 'could not find the harvester march loop');
+  ok(Number(mm[1]) >= 384, 'mothership march is down to ' + mm[1] +
+     ' iterations; below ~384 tangent rays start missing the hull');
+  ok(Number(hm[1]) >= 384, 'harvester march is down to ' + hm[1] + ' iterations');
+  // relaxation measured WORSE here; the steps must stay full length
+  ok(/float d = shipDE\(lo \+ rd \* t, uMotherHalf\);[\s\S]{0,200}?t \+= d;/.test(glsl),
+     'the mothership march must step t += d, not a relaxed fraction');
+});
+
 check('no backtick inside the GLSL templates', () => {
   const ticks = (src.match(/`/g) || []).length;
   ok(ticks === 4, 'expected exactly 4 backticks (two template delimiters), found ' + ticks +

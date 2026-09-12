@@ -69,8 +69,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   pointer-events: none;
 }
 #compass svg { width: 100%; height: 100%; }
-#tune, #tuneA {
-  position: fixed; bottom: 14px; left: 18px; width: 224px;
+#tune, #tuneA, #tuneD {
+  position: static; width: 224px;
   color: rgba(220, 230, 245, 0.85);
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   font-size: 10px; letter-spacing: 0.5px;
@@ -78,16 +78,16 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   border: 1px solid rgba(255, 200, 130, 0.25); border-radius: 6px;
   padding: 8px 10px; user-select: none;
 }
-#tune h2, #tuneA h2 {
+#tune h2, #tuneA h2, #tuneD h2 {
   font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
   color: rgba(255, 200, 130, 0.95); text-transform: uppercase;
   cursor: pointer; display: flex; justify-content: space-between;
 }
-#tune h2 .caret, #tuneA h2 .caret { opacity: 0.7; }
-#tune .body, #tuneA .body { margin-top: 6px; }
-#tune.closed .body, #tuneA.closed .body { display: none; }
-#tune .trow, #tuneA .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-#tune .trow label, #tuneA .trow label { flex: 0 0 74px; opacity: 0.75; }
+#tune h2 .caret, #tuneA h2 .caret, #tuneD h2 .caret { opacity: 0.7; }
+#tune .body, #tuneA .body, #tuneD .body { margin-top: 6px; }
+#tune.closed .body, #tuneA.closed .body, #tuneD.closed .body { display: none; }
+#tune .trow, #tuneA .trow, #tuneD .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#tune .trow label, #tuneA .trow label, #tuneD .trow label { flex: 0 0 74px; opacity: 0.75; }
 #tune .trow input[type=range], #tuneA .trow input[type=range] {
   /* min-width:0 is load-bearing: a flex item defaults to min-width:auto, and a
      range input's intrinsic width (~129px) then refuses to shrink, so the row
@@ -108,8 +108,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   flex: 0 0 52px; text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums; color: rgba(255, 200, 130, 0.9);
 }
-#tune .tbtns, #tuneA .tbtns { display: flex; gap: 6px; margin-top: 6px; }
-#tune .tbtns button, #tuneA .tbtns button {
+#tune .tbtns, #tuneA .tbtns, #tuneD .tbtns { display: flex; gap: 6px; margin-top: 6px; }
+#tune .tbtns button, #tuneA .tbtns button, #tuneD .tbtns button {
   flex: 1; min-width: 0; padding: 3px 0;
   background: rgba(255, 200, 130, 0.12); color: rgba(255, 220, 180, 0.95);
   border: 1px solid rgba(255, 200, 130, 0.35); border-radius: 4px;
@@ -273,8 +273,8 @@ body.touch #tune, body.touch #tuneA { display: none; }
 #startBtn:hover { background: rgba(255, 200, 130, 0.3); }
 @keyframes btnIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
 /* keep the key guide + tuning panel visible ON the start page */
-#hud, #tune, #tuneA { z-index: 16; }
-#tuneA { left: auto; right: 18px; bottom: 130px; border-color: rgba(120, 255, 150, 0.3); }
+#hud, #tune, #tuneA, #tuneD { z-index: 16; }
+#tuneA { border-color: rgba(120, 255, 150, 0.3); }
 #tuneA h2, #tuneA h2 .caret { color: rgba(140, 255, 170, 0.95); }
 #tuneA .trow .val { color: rgba(140, 255, 170, 0.9); }
 #tuneA .tbtns button {
@@ -288,6 +288,70 @@ body.touch #tune, body.touch #tuneA { display: none; }
   font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px;
   padding: 24px; white-space: pre-wrap; z-index: 10;
 }
+
+/* ---- Debug panel (v9.4 diagnostics) -------------------------------------
+   Its own panel rather than more rows in Tuning, and CLICK TOGGLES rather
+   than sliders: these are all binary, and a slider costs a drag plus a look
+   at the readout where a button costs one click. Sits above Tuning on the
+   left so it never fights the Aliens panel on the right. */
+#tuneD { border-color: rgba(150, 190, 255, 0.32); }
+#tuneD h2, #tuneD h2 .caret { color: rgba(165, 200, 255, 0.95); }
+#tuneD .drow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#tuneD .dbtn {
+  flex: 1; min-width: 0; padding: 3px 0; text-align: center;
+  background: rgba(150, 190, 255, 0.10); color: rgba(190, 215, 255, 0.75);
+  border: 1px solid rgba(150, 190, 255, 0.30); border-radius: 4px;
+  font: inherit; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap;
+}
+#tuneD .dbtn:hover { background: rgba(150, 190, 255, 0.20); }
+#tuneD .dbtn.on {
+  background: rgba(150, 190, 255, 0.42); color: rgba(245, 250, 255, 1);
+  border-color: rgba(190, 220, 255, 0.85); font-weight: 700;
+}
+/* the master switch reads as the panel's own power button */
+#tuneD .dbtn.master { letter-spacing: 2px; padding: 4px 0; margin-bottom: 6px; }
+#tuneD .dbtn.master.on {
+  background: rgba(255, 170, 90, 0.45); border-color: rgba(255, 200, 130, 0.9);
+  color: rgba(255, 250, 245, 1);
+}
+#tuneD .dnote { opacity: 0.5; margin-top: 6px; line-height: 1.35; }
+
+/* ---- panel column (v9.4) -------------------------------------------------
+   All three tuning panels live in ONE right-anchored flex column instead of
+   positioning themselves individually. Before this, Tuning and Debug were both
+   anchored bottom-left at fixed offsets, so expanding Debug drew it straight
+   over Tuning -- a bug that only appears once a panel is open, which is why
+   two fixed panels had coexisted fine for versions.
+   column-reverse + bottom anchoring means the stack GROWS UPWARD as panels
+   expand, so they can never overlap whatever anyone opens. Bottom offset
+   clears the ALT/SPD/HDG readout. */
+#panels {
+  position: fixed; right: 18px; bottom: 128px; z-index: 5;
+  display: flex; flex-direction: column-reverse; align-items: flex-end;
+  gap: 8px; pointer-events: none;
+}
+#panels > * { pointer-events: auto; }
+
+/* ---- fleet counters (v9.4) -----------------------------------------------
+   HARV / RELAY / MOTHER sit beside RINGS and SPORES in the same type. They
+   use the Aliens-panel green so the invasion reads as one colour family, and
+   #defeated replaces them in place -- same font, same size -- once every hull
+   is gone, rather than appearing somewhere else on screen. */
+#rings-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
+#rings-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
+#rings-score .alienval {
+  color: rgba(140, 255, 170, 0.95);
+  text-shadow: 0 0 10px rgba(90, 230, 130, 0.6), 0 2px 4px rgba(0,0,0,0.95);
+}
+#rings-score #defeated {
+  display: none; margin-left: 22px;
+  font-size: 28px; font-weight: 700; letter-spacing: 3px;
+  color: rgba(140, 255, 170, 0.95);
+  text-shadow: 0 0 14px rgba(90, 230, 130, 0.85), 0 2px 4px rgba(0,0,0,0.95);
+}
+/* swapped by hud.js: the counters go, the banner takes their place */
+#rings-score.defeated #fleetCounts { display: none; }
+#rings-score.defeated #defeated { display: inline; }
 </style>
 </head>
 <body>
@@ -318,6 +382,10 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <span id="ringScore">0</span>
   <span class="label spores">SPORES</span>
   <span class="sporeval" id="score">0</span>
+  <span id="fleetCounts">
+    <span class="label alien">HARVESTERS</span><span class="alienval" id="harvCount">0</span>
+  </span>
+  <span id="defeated">INVADERS DEFEATED</span>
 </div>
 <div id="compass">
   <svg viewBox="-50 -50 100 100">
@@ -340,6 +408,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
 </div>
 <div id="toast"></div>
 <div id="crash"><div class="big" id="crashTitle">TERRAIN IMPACT</div><div class="sub">press R to fly again</div></div>
+<div id="panels">
 <div id="tune" class="closed">
   <h2 id="tuneHead">Tuning <span class="caret">▸</span></h2>
   <div class="body" id="tuneBody"></div>
@@ -347,6 +416,11 @@ body.touch #tune, body.touch #tuneA { display: none; }
 <div id="tuneA" class="closed">
   <h2 id="tuneAHead">Aliens <span class="caret">▸</span></h2>
   <div class="body" id="tuneABody"></div>
+</div>
+<div id="tuneD" class="closed">
+  <h2 id="tuneDHead">Debug <span class="caret">▸</span></h2>
+  <div class="body" id="tuneDBody"></div>
+</div>
 </div>
 <div id="info">
   <div id="pilotTag" style="display:none;color:rgba(255,200,130,0.9);font-weight:700;letter-spacing:2px;margin-bottom:4px"></div>
@@ -486,7 +560,15 @@ uniform vec3 uSunDir;
 uniform float uFov;
 uniform vec2 uJitter;
 uniform float uPixScale;
-uniform float uDetailFade;    // A1 knob: multiplies the LOD footprint. 0 = full detail everywhere (pre-A1 look), 1 = Nyquist-matched, 2 = aggressive
+uniform float uDetailFade;
+uniform float uRayTol;           // 0 = vertical tolerance (old), 1 = along-ray
+uniform float uWaterLOD;         // 0 = un-LOD'd ripples (old), 1 = footprint-aware
+uniform float uBoxRound;         // hull corner fillet, as a fraction of the smallest half-extent
+// Where the melt stops collapsing and starts merely sitting there. MUST match
+// MELT_KNEE in js/aliens.js -- the JS drives the melt value, this only decides
+// how it is COLOURED, and test_shader.js checks the two agree.
+const float MELT_KNEE = 0.78;
+uniform float uDebugMask;        // bitmask of false-colour diagnostic channels (see main)    // A1 knob: multiplies the LOD footprint. 0 = full detail everywhere (pre-A1 look), 1 = Nyquist-matched, 2 = aggressive
 uniform vec3 uCraftPos;
 uniform vec3 uBulletPos[8];   // live tracer rounds; unused slots parked at y = -9999
 uniform vec3 uBombPos[3];     // falling bombs; unused slots parked at y = -9999
@@ -910,10 +992,14 @@ vec3 terrainNormal(vec2 p, float pixelSize) {
 
 // ---------- terrain raymarch (sphere-traced heightfield + linear refine) ----------
 // returns vec2(t, material): material 1 = terrain, 4 = plant, t<0 = miss
-vec2 marchTerrain(vec3 ro, vec3 rd) {
+// iters is only for the debug views below -- nothing in the render path
+// reads it, and the collision probe row does not call this function at all.
+vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
   float t = 0.5;
   float pt = t, pd = 1e5;
+  iters = 150.0;
   for (int i = 0; i < 150; i++) {
+    iters = float(i);
     vec3 p = ro + rd * t;
     if (p.y > 560.0 && rd.y > 0.0) return vec2(-1.0, 0.0); // above the tallest peak, heading up
     // A1: sample the terrain at THIS step's footprint. Detail thins with
@@ -925,7 +1011,29 @@ vec2 marchTerrain(vec3 ro, vec3 rd) {
     float dP = 1e5;
     if (t < uFloraRange && dT < 18.0 && dT > -1.0) dP = plantEval(p, dT, t).x;
     float d = min(dT * 0.55, dP);   // relaxed terrain stride, cautious near plants
-    if (min(dT, dP) < 0.01 + 0.0015 * t) {
+    // Stop when the surface is within about a pixel ALONG THE RAY, not within
+    // a pixel VERTICALLY. dT is a height above the heightfield, so a vertical
+    // slop of e leaves the hit e/sin(incidence) short of the true crossing --
+    // 6x at 9.5 degrees of depression, 19x at 3. THAT amplification was the
+    // concentric rings centred on the nadir: the march halts early by a
+    // distance proportional to t, quantised by the discrete step, so the error
+    // sawtoothed every ~350 m of ground radius out to the horizon, survived
+    // supersampling (it is geometric, not sampling), and swam with the camera
+    // because it is keyed on distance FROM the camera.
+    //
+    // Measured on the terrain mirror, 2800 rays from 1964 m: mean hit error
+    // 28.9 m -> 2.74 m, p99 354 m -> 22 m, for +4.6% iterations, with no ray
+    // exhausting the 150-step cap and no hit lost. Note that bisection refine
+    // at the hit -- ROADMAP A4 -- measures 1.0x here, i.e. nothing: the loose
+    // tolerance stops the march BEFORE the surface, so there is no bracket
+    // around the crossing left to refine.
+    //
+    // dP is already a distance along the ray, so the plant test keeps the
+    // isotropic tolerance. The 0.06 floor stops near-horizontal rays from
+    // demanding unreachable precision; anything in 0.02..0.10 measures the same.
+    float tolRay = 0.01 + 0.0015 * t;
+    float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
+    if (dT < tolRay * inc || dP < tolRay) {
       float w = clamp(pd / (pd - d), 0.0, 1.0);
       return vec2(mix(pt, t, w), (dP < dT) ? 4.0 : 1.0);
     }
@@ -1211,7 +1319,13 @@ float mandelboxDE(vec3 p) {
 float shipDE(vec3 l, vec3 h) {  // l = local coords, h = half extents
   float hmin = min(h.x, min(h.y, h.z));
   float mb = mandelboxDE(l / h * 1.15) / 1.15 * hmin;   // conservative for the stretch
-  return max(sdBox(l, h), mb);
+  // Rounded corners for free: shrink the box by r, then add r back to the
+  // distance. Same outer dimensions, an r-radius fillet on every edge. This
+  // only works because sdBox above is the EXACT box SDF -- the cheap
+  // max-of-components version cannot be offset like this. At uBoxRound = 0
+  // it reduces to sdBox(l, h) exactly, so sharp stays bit-identical.
+  float r = min(uBoxRound * hmin, hmin * 0.98);
+  return max(sdBox(l, h - r) - r, mb);
 }
 
 float mandelbulbDE(vec3 p) {    // unit bulb, radius ~1.2
@@ -1252,7 +1366,27 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, rd, uMotherHalf + 2.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
-      for (int i = 0; i < 48; i++) {
+      // Budget, not precision. A ray nearly TANGENT to the hull converges
+      // geometrically slowly in sphere tracing, and the corner fillet made
+      // tangency common: a flat face is tangent at one grazing angle, a 90 m
+      // rounded edge is tangent across a whole BAND of angles -- which is
+      // exactly what you fly through when you skim along the hull. Rays that
+      // ran out returned a MISS, so the hull simply was not drawn there, and
+      // the surviving slivers between them read as horns.
+      //
+      // Measured on 1939 rays through that band (0.02..3 deg, camera 13 m off
+      // the top face). Misses: 48 iters 18.8%, 192 8.6%, 384 1.3%, 768 0%.
+      // The AVERAGE plateaus at ~42.6 whatever the cap, because nearly every
+      // ray converges on its own -- the cap only serves the rare tangent one,
+      // which is why 8x the ceiling costs ~3x the average and nothing near it
+      // in the common case.
+      //
+      // And do NOT add step relaxation here. It was the obvious fix and it is
+      // measurably WRONG: 0.55 relax made misses worse at the same cap (390 vs
+      // 365) because the failure is budget, not overshoot -- the shipped march
+      // already agreed with a 0.35-relax reference to ~1 m wherever it
+      // converged. Relaxation just spends iterations to arrive slower.
+      for (int i = 0; i < 384; i++) {
         float d = shipDE(lo + rd * t, uMotherHalf);
         if (d < 0.5 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 0.0; } break; }
         t += d;
@@ -1270,7 +1404,9 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, ld, uShipHalf + 1.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
-      for (int i = 0; i < 40; i++) {
+      // same tangency budget as the mothership above -- harvesters are
+      // smaller but their fillet is proportional, so the band is just as wide
+      for (int i = 0; i < 384; i++) {
         float d = shipDE(lo + ld * t, uShipHalf);
         if (d < 0.15 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 1.0 + float(s); } break; }
         t += d;
@@ -1471,7 +1607,8 @@ void main() {
   vec3 rd = normalize(uCamMat * vec3(uv * uFov, 1.0));
   vec3 sun = normalize(uSunDir);
 
-  vec2 mres = marchTerrain(ro, rd);
+  float marchIters;
+  vec2 mres = marchTerrain(ro, rd, marchIters);
   float tT = mres.x;
   float tW = (rd.y < -1e-4 && ro.y > WATER_LEVEL) ? (WATER_LEVEL - ro.y) / rd.y : -1.0;
   float tC = marchCraft(ro, rd);
@@ -1520,7 +1657,17 @@ void main() {
     float w0 = noise(wp + uTime * 0.25);
     float wx = noise(wp + vec2(0.6, 0.0) + uTime * 0.25) - w0;
     float wz = noise(wp + vec2(0.0, 0.6) + uTime * 0.25) - w0;
-    vec3 n = normalize(vec3(-wx * 1.6, 1.0, -wz * 1.6));
+    // Footprint-aware ripples (v9.4 DIAGNOSTIC). The ripple normal is sampled
+    // ONCE per pixel from an ~8.3 m wavelength field, so past a 4.2 m footprint
+    // -- t = 2.6 km at 1707x876 -- it is undersampled. The footprint grows
+    // smoothly with distance, so the aliasing is radially symmetric: concentric
+    // moire rings centred on the viewer, on water. A1 faded the terrain octaves
+    // and even the snow edge (see noiseLOD in terrainColor) but never touched
+    // the water -- which is why the detail-fade slider does nothing to these,
+    // and why supersampling only pushes the crossing out (2.6 -> 5.2 km).
+    float wfoot = t * uPixScale;
+    float wfade = mix(1.0, 1.0 - smoothstep(1.5, 6.0, wfoot), uWaterLOD);
+    vec3 n = normalize(vec3(-wx * 1.6 * wfade, 1.0, -wz * 1.6 * wfade));
     vec3 rr = reflect(rd, n);
     rr.y = abs(rr.y);
     vec3 refl = skyColor(rr, sun);
@@ -1529,7 +1676,11 @@ void main() {
     float sh = softShadow(pos + vec3(0.0, 0.5, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun);
     col = mix(base, refl, fres);
     vec3 glint = mix(vec3(1.0, 0.80, 0.50), vec3(1.1, 0.45, 0.20), duskAmount(sun));
-    col += glint * pow(clamp(dot(rr, sun), 0.0, 1.0), 260.0) * 3.0 * fres * sh;
+    // A razor-thin highlight riding an undersampled normal is a firefly
+    // factory, so broaden it as the ripples flatten out. Reduces to the
+    // original 260 exactly when uWaterLOD is 0.
+    float gexp = mix(260.0, 30.0, 1.0 - wfade);
+    col += glint * pow(clamp(dot(rr, sun), 0.0, 1.0), gexp) * 3.0 * fres * sh;
     col = applyFog(col, ro, rd, t, sun);
 
   } else if (mat == 4) {
@@ -1633,7 +1784,14 @@ void main() {
     float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
     col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
     col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
-    col = mix(col, vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0)), clamp(melt, 0.0, 1.0) * 0.8);
+    // Melt colour. Up to MELT_KNEE the wreck is molten and PULSES. Past the
+    // knee -- the ~110 s tail where it just lies there -- the pulse dies out
+    // and it settles to dark red-orange embers. A wreck that blinks for two
+    // minutes reads as something still alive; a dead one should go quiet.
+    float mk = clamp((melt - MELT_KNEE) / (1.0 - MELT_KNEE), 0.0, 1.0);
+    vec3 molten = vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0));
+    vec3 embers = vec3(0.26, 0.055, 0.018);
+    col = mix(col, mix(molten, embers, mk), clamp(melt, 0.0, 1.0) * 0.8);
     col = applyFog(col, ro, rd, t, sun);
 
   } else {
@@ -1721,6 +1879,51 @@ void main() {
   }
 
   // filmic-ish tonemap + gamma + gentle vignette
+  // ---- DIAGNOSTIC CHANNELS (v9.4) ----------------------------------------
+  // Six independent toggles, summed, each in its own hue -- so two channels
+  // enabled together show where their bands REGISTER (hues add) and where they
+  // beat against each other.
+  //
+  // Worth knowing while reading them: these are not six independent things.
+  // The march produces t; pixelSize is just t * uPixScale; and height/normal/
+  // colour all derive from those. So "hit distance" and "pixel footprint" are
+  // the SAME quantity at different band widths, and "terrain height" is
+  // world-locked. The artifact lives wherever a CONSUMER of t has a sharp
+  // threshold -- which is what channel 32 exists to show.
+  //
+  //   1 march steps   2 hit distance   4 pixel footprint
+  //   8 terrain height (world-locked)  16 normal turn across a footprint
+  //  32 colour LOD -- the alien-undergrowth fade, smoothstep(3,5,pixelSize),
+  //     i.e. a hard viewer-centred ring on the green at t = 1875..3125 m
+  int dmask = int(uDebugMask + 0.5);
+  if (dmask > 0) {
+    vec3 hp = ro + rd * t;
+    vec3 d = vec3(0.0);
+    float nch = 0.0;
+    if ((dmask & 1) != 0) {
+      d += vec3(1.0, 0.25, 0.25) * fract(marchIters / 12.0);          nch += 1.0;
+    }
+    if ((dmask & 2) != 0) {
+      d += vec3(0.25, 1.0, 0.25) * fract(t / 250.0);                  nch += 1.0;
+    }
+    if ((dmask & 4) != 0) {
+      d += vec3(0.30, 0.45, 1.0) * fract(t * uPixScale);              nch += 1.0;
+    }
+    if ((dmask & 8) != 0) {
+      d += vec3(1.0, 1.0, 0.35) * fract(terrainShape(hp.xz) / 4.0);   nch += 1.0;
+    }
+    if ((dmask & 16) != 0) {
+      float turn = length(terrainNormal(hp.xz, t * uPixScale) - terrainNormal(hp.xz, 0.15));
+      d += vec3(1.0, 0.35, 1.0) * clamp(turn * 4.0, 0.0, 1.0);        nch += 1.0;
+    }
+    if ((dmask & 32) != 0) {
+      // exactly the term terrainColor uses to fade the undergrowth out
+      float cl = 1.0 - smoothstep(3.0, 5.0, t * uPixScale);
+      d += vec3(0.35, 1.0, 1.0) * cl;                                 nch += 1.0;
+    }
+    col = d / max(nch, 1.0);
+    if (mat == 0) col = vec3(0.02);          // leave the sky dark
+  }
   col = 1.0 - exp(-col * 1.15);
   col = pow(col, vec3(0.4545));
   vec2 vuv = gl_FragCoord.xy / uResolution;
@@ -1829,7 +2032,7 @@ async function initRenderer(status, lock) {
   gl.enableVertexAttribArray(locPos);
   gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
 
-  ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
+  ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uRayTol','uWaterLOD','uBoxRound','uDebugMask','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
    'uRingsPos','uRingMats','uLivery','uCockpit','uShadows','uFxPos',
    'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uAlienHit','uBolts','uBoltN','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
     .forEach(n => U[n] = gl.getUniformLocation(prog, n));
@@ -1845,6 +2048,11 @@ const TUNEA = {
   boxFold:  { label: 'box fold',    v: 0.7,   d: 0.7,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
   boxMinR:  { label: 'box min r',   v: 0.8,   d: 0.8,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
   bulbPow:  { label: 'bulb power',  v: 10,    d: 10,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
+  // Corner fillet on the mothership and harvester hulls, as a fraction of
+  // each hull's SMALLEST half-extent -- so it scales with the size sliders
+  // instead of needing retuning every time a ship changes shape. 0 is the
+  // v9.3 hard-edged box, exactly (see shipDE: r = 0 reduces to sdBox(l, h)).
+  boxRound: { label: 'box corners', v: 0.45,  d: 0.45,   min: 0,    max: 1,     step: 0.05, fmt: x => x < 0.025 ? 'sharp' : (100 * x).toFixed(0) + '%' },
   moLen:    { label: 'mother len',  v: 3500,  d: 3500,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
   moWid:    { label: 'mother wid',  v: 3500,  d: 3500,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
   moHei:    { label: 'mother hgt',  v: 400,   d: 400,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
@@ -1853,13 +2061,23 @@ const TUNEA = {
   shWid:    { label: 'ship width',  v: 800,   d: 800,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
   shHei:    { label: 'ship height', v: 120,   d: 120,   min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
   shSpeed:  { label: 'ship speed',  v: 30,    d: 30,    min: 2,    max: 60,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
-  relSize:  { label: 'relay size',  v: 150,   d: 150,   min: 30,   max: 400,   step: 5,    fmt: x => x.toFixed(0) + ' m' },
+  relSize:  { label: 'relay size',  v: 150,   d: 150,   min: 30,   max: 400,   step: 5,    fmt: x => x.toFixed(0) + ' m' },  // How far the relay swells per delivered energy shot, as a fraction of its
+  // BASE radius. This controls SIZE ONLY -- the discharge fires on a fixed
+  // RELAY_SHOTS count (50), so the invasion cadence is the same wherever this
+  // sits. Over those 50 shots: 1% reaches 1.5x base, 12% reaches the 7x
+  // ceiling (which is exactly what v9.3 hard-coded). At 0 the relay never
+  // visibly grows but still discharges on schedule.
+  relGrow:  { label: 'relay growth',v: 0.01,  d: 0.01,  min: 0,    max: 0.12,  step: 0.005, fmt: x => x < 0.0025 ? 'none' : (100 * x).toFixed(1) + '%' },
 };
 
 const TUNE = {
   shadows:    { label: 'shadows',     v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'on' : 'off' },
-  resScale:   { label: 'resolution',  v: 0,     d: 0,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'auto' : x.toFixed(2) + '×' },
-  detailFade: { label: 'detail fade',v: 1,      d: 1,       min: 0,      max: 2,      step: 0.05,    fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
+  // DIAGNOSTIC (v9.4): 0 = the shipped vertical hit tolerance that produced
+  // the nadir-centred rings, 1 = measured along the ray. Here so the two can
+  // be compared on the SAME frame instead of across two builds. Remove once
+  // the call is made.
+  // DIAGNOSTIC (v9.4): 0 = ripples with no LOD at all (old), 1 = normal faded
+  // and glint broadened as the pixel footprint passes the ripple wavelength.
   cursorA:    { label: 'cursor',      v: 15,      d: 15,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
   oceanSlope: { label: 'ocean slope', v: 0.016,   d: 0.016,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },
   oceanMax:   { label: 'ocean depth', v: 107,     d: 107,      min: 20,     max: 140,    step: 1,       fmt: x => x.toFixed(0) },
@@ -1907,6 +2125,169 @@ function copyText(text, btn, label) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => done(true), fallback);
   } else fallback();
+}
+
+// ---- DEBUG panel (v9.4, diagnostic) ---------------------------------------
+// Everything that exists to investigate the viewer-centred artifacts lives
+// here rather than in Tuning, because none of it is world tuning.
+//
+// Three kinds of entry:
+//   master - one click snaps everything to the game's normal defaults, another
+//            gives back whatever was dialled in. That is the A/B.
+//   toggle - a false-colour channel, drawn as a button, summed into uDebugMask.
+//   slider - a real render setting that happens to be under investigation.
+//
+// Reading the channels: they are NOT independent. The march produces t;
+// footprint is just t * uPixScale; height / normal / colour all derive from
+// those. So "hit distance" and "footprint" are the SAME quantity at different
+// band widths, and "terrain height" is world-locked. Concentric rings in those
+// views are them working correctly, not evidence of a bug.
+const TUNED = {
+  master:     { kind: 'master', label: 'DEBUG', v: 0, d: 0, min: 0, max: 1, step: 1,
+                fmt: x => x > 0.5 ? 'on' : 'off' },
+
+  resScale:   { kind: 'slider', label: 'resolution',  v: 0, d: 0, min: 0, max: 2, step: 0.05,
+                fmt: x => x < 0.025 ? 'auto' : x.toFixed(2) + '\u00d7' },
+  detailFade: { kind: 'slider', label: 'detail fade', v: 1, d: 1, min: 0, max: 2, step: 0.05,
+                fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
+  rayTol:     { kind: 'slider', label: 'ray tol',     v: 1, d: 1, min: 0, max: 1, step: 0.05,
+                fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
+  waterLOD:   { kind: 'slider', label: 'water LOD',   v: 0.8, d: 0.8, min: 0, max: 1, step: 0.05,
+                fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
+
+  steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  dist:    { kind: 'toggle', bit: 2,  label: 'hit distance',   v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  foot:    { kind: 'toggle', bit: 4,  label: 'footprint',      v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  height:  { kind: 'toggle', bit: 8,  label: 'terrain height', v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  normal:  { kind: 'toggle', bit: 16, label: 'normal turn',    v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+  colLOD:  { kind: 'toggle', bit: 32, label: 'colour LOD',     v: 0, d: 0, min: 0, max: 1, step: 1,
+             fmt: x => x > 0.5 ? 'on' : 'off' },
+};
+
+// The bitmask the shader reads for the false-colour channels.
+function debugMask() {
+  if (TUNED.master.v < 0.5) return 0;
+  let m = 0;
+  for (const key in TUNED) { const t = TUNED[key]; if (t.bit && t.v > 0.5) m += t.bit; }
+  return m;
+}
+
+// The Debug panel. Channels are BUTTONS -- one click, no drag, no readout to
+// squint at -- because A/B-ing a moving artifact with a slider is unworkable.
+// The master remembers what was dialled in, snaps everything to the game's
+// defaults, and hands it back on the next click.
+function buildDebugPanel(OBJ, panelId, headId, bodyId) {
+  const panel = document.getElementById(panelId);
+  const body = document.getElementById(bodyId);
+  document.getElementById(headId).addEventListener('click', () => {
+    panel.classList.toggle('closed');
+    panel.querySelector('.caret').textContent = panel.classList.contains('closed') ? '\u25b8' : '\u25be';
+  });
+
+  const paints = [];
+  // Touching any debug control means the operator is investigating, so the
+  // master lights up. OFF then always means exactly 'the game's defaults'.
+  let masterPaint = () => {};
+  const armMaster = () => {
+    const m = OBJ.master;
+    if (m && m.v < 0.5) { m.v = 1; masterPaint(); }
+  };
+  for (const key in OBJ) {
+    const t = OBJ[key];
+    const row = document.createElement('div');
+
+    if (t.kind === 'slider') {
+      row.className = 'trow';
+      const label = document.createElement('label');
+      label.textContent = t.label;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = t.min; slider.max = t.max; slider.step = t.step; slider.value = t.v;
+      const val = document.createElement('span');
+      val.className = 'val'; val.textContent = t.fmt(t.v);
+      slider.addEventListener('input', () => {
+        t.v = parseFloat(slider.value); val.textContent = t.fmt(t.v);
+        armMaster();   // or DEBUG would read 'off' while a setting was live
+      });
+      slider.addEventListener('keydown', e => e.preventDefault());   // flight keys keep working
+      paints.push(() => { slider.value = t.v; val.textContent = t.fmt(t.v); });
+      t._slider = slider; t._val = val;
+      row.appendChild(label); row.appendChild(slider); row.appendChild(val);
+      body.appendChild(row);
+      continue;
+    }
+
+    row.className = 'drow';
+    const btn = document.createElement('button');
+    btn.className = 'dbtn' + (t.kind === 'master' ? ' master' : '');
+    btn.textContent = t.label;
+    const paint = () => btn.classList.toggle('on', t.v > 0.5);
+
+    if (t.kind === 'master') {
+      btn.addEventListener('click', () => {
+        t.v = t.v > 0.5 ? 0 : 1;
+        for (const k2 in OBJ) {
+          const o = OBJ[k2];
+          if (o.kind === 'master') continue;
+          // _user is only set by a previous OFF. On the FIRST activation
+          // there is nothing to restore, so leave the value alone --
+          // falling back to o.d here wiped whatever had just been dialled in.
+          if (t.v > 0.5) { if (o._user !== undefined) o.v = o._user; }
+          else { o._user = o.v; o.v = o.d; }
+        }
+        for (const p of paints) p();
+        paint();
+        btn.blur();
+      });
+      masterPaint = paint;
+    } else {
+      btn.addEventListener('click', () => {
+        t.v = t.v > 0.5 ? 0 : 1; paint(); armMaster(); btn.blur();
+      });
+      paints.push(paint);
+    }
+    paint();
+    row.appendChild(btn);
+    body.appendChild(row);
+  }
+
+  // Same RESET / COPY JSON pair the other two panels carry, so a debug setup
+  // can be handed over verbatim instead of described.
+  const btns = document.createElement('div');
+  btns.className = 'tbtns';
+
+  const reset = document.createElement('button');
+  reset.className = 'treset'; reset.textContent = 'RESET';
+  reset.addEventListener('click', () => {
+    for (const k in OBJ) { const o = OBJ[k]; o.v = o.d; o._user = undefined; }
+    for (const p of paints) p();
+    masterPaint();
+    reset.blur();
+  });
+  btns.appendChild(reset);
+
+  const EXPORT_LABEL = 'COPY JSON';
+  const exp = document.createElement('button');
+  exp.className = 'texport'; exp.textContent = EXPORT_LABEL;
+  exp.title = 'copy this panel’s current values to the clipboard as JSON';
+  exp.addEventListener('click', () => {
+    const values = {};
+    for (const k in OBJ) values[k] = OBJ[k].v;
+    copyText(JSON.stringify({ panel: panelId, values }, null, 2), exp, EXPORT_LABEL);
+    exp.blur();
+  });
+  btns.appendChild(exp);
+  body.appendChild(btns);
+
+  const note = document.createElement('div');
+  note.className = 'dnote';
+  note.textContent = 'rings in hit distance / footprint are those views working, not a bug';
+  body.appendChild(note);
 }
 
 function buildPanel(OBJ, panelId, headId, bodyId) {
@@ -1960,6 +2341,7 @@ function buildPanel(OBJ, panelId, headId, bodyId) {
 function buildTunePanel() {
   buildPanel(TUNE, 'tune', 'tuneHead', 'tuneBody');
   buildPanel(TUNEA, 'tuneA', 'tuneAHead', 'tuneABody');
+  buildDebugPanel(TUNED, 'tuneD', 'tuneDHead', 'tuneDBody');
 }
 
 // ==================== js/audio.js ====================
@@ -2253,20 +2635,26 @@ function zapSound() {
 }
 
 function relayBlastSound() {
-  // relay -> mothership discharge: big rising-falling saw sweep
+  // Relay -> mothership discharge: a rising-falling saw sweep, stretched to
+  // cover the 2 s deflation in aliens.js (RELAY_SHRINK_MS). It used to finish
+  // in 1.25 s while the relay snapped back instantly; now the sound, the beam
+  // and the collapse all run for the same two seconds.
   if (!AC || muted) return;
   const T = AC.currentTime;
   const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
   o.type = 'sawtooth';
   o.frequency.setValueAtTime(70, T);
-  o.frequency.exponentialRampToValueAtTime(950, T + 0.5);
-  o.frequency.exponentialRampToValueAtTime(120, T + 1.1);
-  f.type = 'lowpass'; f.frequency.value = 2400;
+  o.frequency.exponentialRampToValueAtTime(950, T + 0.85);
+  o.frequency.exponentialRampToValueAtTime(110, T + 1.95);
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(2400, T);
+  f.frequency.exponentialRampToValueAtTime(700, T + 2.0);   // closes as it sags
   g.gain.setValueAtTime(0.0001, T);
-  g.gain.exponentialRampToValueAtTime(0.3, T + 0.08);
-  g.gain.exponentialRampToValueAtTime(0.0001, T + 1.2);
+  g.gain.exponentialRampToValueAtTime(0.30, T + 0.10);
+  g.gain.exponentialRampToValueAtTime(0.22, T + 1.2);       // holds through the collapse
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 2.05);
   o.connect(f); f.connect(g); g.connect(AC.destination);
-  o.start(T); o.stop(T + 1.25);
+  o.start(T); o.stop(T + 2.1);
 }
 
 function ringSound() {
@@ -2952,6 +3340,32 @@ function toast(msg, ms) {
 }
 function hideToast() { $toast.style.display = 'none'; }
 
+// ---- fleet counters (v9.4) -------------------------------------------------
+// Live hull counts beside RINGS and SPORES. Counts what is ALIVE, not what
+// exists: a falling or melting wreck is already dead (hullAlive is false for
+// it) and lingers for ~116 s, so counting objects would leave the tally stuck
+// above zero long after the last kill and the defeated banner would never fire.
+const $harv = document.getElementById('harvCount');
+const $ringsScore = document.getElementById('rings-score');
+let lastFleet = '';
+
+function setFleetCounts(harv, relays, mothers) {
+  const key = harv + '/' + relays + '/' + mothers;
+  if (key === lastFleet) return;        // DOM writes only when a number moves
+  lastFleet = key;
+  $harv.textContent = harv;
+  // Gated on the WHOLE invasion, not just the harvesters: bomb every harvester
+  // while the mothership still floats overhead and it will simply build more,
+  // so declaring victory then would be wrong. Only the harvester count is
+  // shown -- they are what you actually hunt.
+  $ringsScore.classList.toggle('defeated', harv === 0 && relays === 0 && mothers === 0);
+}
+
+function resetFleetCounts() {
+  lastFleet = '';
+  $ringsScore.classList.remove('defeated');
+}
+
 // ==================== js/input.js ====================
 // All input sources: keyboard, mouse (fire / bomb / sun drag), virtual
 // joystick, touch buttons, and gyroscope tilt. Each source writes into its
@@ -3541,6 +3955,8 @@ function initAliens() {
   alien.relay.r = alien.relay.baseR;
   alien.relay.y = peak.h + 30 + alien.relay.r;
   alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
+  alien.relay.shrinkT0 = undefined; alien.relay.shrinkFrom = 0; alien.relay.shots = 0;
+  resetFleetCounts();
   alien.ships.length = 0;
   alien.bolts.length = 0;
   spawnHarvester(false); spawnHarvester(false);
@@ -3556,8 +3972,22 @@ function initAliens() {
 // ((2 - 1) / 0.02 = 50) so changing the SIZE never silently changes the
 // PACING of the invasion economy -- the growth increment is derived from the
 // pair rather than written as its own magic 0.02.
-const RELAY_GROW = 7;                    // 7 x a 150 m base = ~35 x the old 30 m relay
-const RELAY_STEPS = 50;                  // energy arrivals from base to blast
+// Blast PACING and blast SIZE used to be one number: the relay discharged
+// when it reached RELAY_GROW x its base radius, so the growth-per-shot knob
+// silently controlled the cadence too -- at 1% per shot it needed 600 shots
+// and effectively never fired. They are separate concerns, so they are now
+// separate numbers: the blast is on a SHOT COUNT, and TUNEA.relGrow only
+// decides how far it swells in those shots.
+const RELAY_SHOTS = 50;                  // energy arrivals per discharge, whatever the growth
+const RELAY_GROW = 7;                    // hard ceiling on the swell, as a multiple of base
+const RELAY_SHRINK_MS = 2000;            // the blast deflates it over 2 s, not instantly
+// The melt runs fast to MELT_KNEE (the visible collapse, at the v9.3 rate of
+// 1/8 per second) and then CRAWLS the rest over MELT_TAIL seconds. Before
+// this the whole melt took 8 s, so the ship you had just bombed was gone by
+// the time you circled back to look at it. The wreck now sits mostly-sunk,
+// and inert (hullAlive is false throughout), for well over a minute.
+const MELT_KNEE = 0.78;
+const MELT_TAIL = 110;                   // seconds for that last 22%
 const BOLT_MAX = 6;                      // beams the shader can draw at once
 const HIT_FLASH = 0.6;                   // seconds the flare stays visible
 let hitId = -1, hitT0 = -1e9;            // hull id (matches mal.y), and when
@@ -3630,8 +4060,7 @@ function alienBombHits(bombs) {
     if (!B) continue;
     // mothership (axis-aligned)
     const m = alien.mother;
-    if (!m.gone && !m.falling &&
-        Math.abs(B.x - m.x) < TUNEA.moWid.v / 2 && Math.abs(B.y - m.y) < TUNEA.moHei.v / 2 + 3 && Math.abs(B.z - m.z) < TUNEA.moLen.v / 2) {
+    if (!m.gone && !m.falling && hullDist(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf()) < 3) {
       bombs[i] = null; m.hp--;
       hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
@@ -3652,7 +4081,7 @@ function alienBombHits(bombs) {
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = B.x - s.x, oz = B.z - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-      if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(B.y - s.y) < TUNEA.shHei.v / 2 + 3 && Math.abs(lz) < TUNEA.shWid.v / 2 + 3) {
+      if (hullDist(lx, B.y - s.y, lz, shipHalf()) < 3) {
         bombs[i] = null; s.hp--;
         hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
@@ -3668,6 +4097,30 @@ function alienBombHits(bombs) {
 // (they are spliced out of alien.ships instead), which `!o.gone` handles.
 const hullAlive = o => !o.gone && !o.falling && !(o.melt > 0);
 
+// Signed distance from a point to a ROUNDED box, in the box's own frame.
+// This is the same expression shipDE uses in the shader --
+//   length(max(|l| - (h - r), 0)) - r
+// -- so collision follows the fillet exactly rather than approximating it. At
+// TUNEA.boxRound = 0 the radius is 0 and it reduces to the plain box test the
+// hulls used before, so sharp hulls collide exactly as they always did.
+// `pad` inflates the surface, which is how the bomb tests express their old
+// tolerance: with an SDF, "within 3 m of the hull" is just d < 3.
+function hullDist(lx, ly, lz, half) {
+  const r = Math.min(TUNEA.boxRound.v * Math.min(half[0], Math.min(half[1], half[2])),
+                     Math.min(half[0], Math.min(half[1], half[2])) * 0.98);
+  const qx = Math.max(Math.abs(lx) - (half[0] - r), 0);
+  const qy = Math.max(Math.abs(ly) - (half[1] - r), 0);
+  const qz = Math.max(Math.abs(lz) - (half[2] - r), 0);
+  const out = Math.hypot(qx, qy, qz) - r;
+  if (out > 0) return out;
+  // inside: the largest negative axis distance, as sdBox does
+  return Math.max(Math.abs(lx) - (half[0] - r),
+         Math.max(Math.abs(ly) - (half[1] - r), Math.abs(lz) - (half[2] - r))) - r;
+}
+// half-extents in each hull's own axis order, so the two callers agree
+const motherHalf = () => [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
+const shipHalf   = () => [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
+
 function fallAndMelt(o, halfH, groundAt, dt) {
   // shared down-fall + terrain-melt state machine; returns true when gone
   if (o.falling) {
@@ -3677,7 +4130,8 @@ function fallAndMelt(o, halfH, groundAt, dt) {
     return false;
   }
   if (o.melt > 0) {
-    o.melt = Math.min(1, o.melt + dt / 8);
+    const rate = (o.melt < MELT_KNEE) ? 1 / 8 : (1 - MELT_KNEE) / MELT_TAIL;
+    o.melt = Math.min(1, o.melt + dt * rate);
     o.y = groundAt + halfH - (2 * halfH + 8) * o.melt;   // sink into the ground
     return o.melt >= 1;
   }
@@ -3693,6 +4147,11 @@ function updateAliens(dt, now) {
   if (!r.gone) {
     if (!r.falling && r.melt === 0) {
       r.baseR = TUNEA.relSize.v / 2;
+      if (r.shrinkT0 !== undefined) {
+        const k = (now - r.shrinkT0) / RELAY_SHRINK_MS;
+        if (k >= 1) { r.r = r.baseR; r.shrinkT0 = undefined; }
+        else r.r = r.shrinkFrom + (r.baseR - r.shrinkFrom) * (k * k * (3.0 - 2.0 * k));
+      }
       r.y = r.ground + 30 + r.r;
     } else if (fallAndMelt(r, r.r, r.ground, dt)) { r.gone = true; r.melt = 0; }
   }
@@ -3769,11 +4228,18 @@ function updateAliens(dt, now) {
     b.done = true;
     if (b.big) {
       if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
-    } else if (!r.gone && !r.falling) {
-      r.r += r.baseR * (RELAY_GROW - 1) / RELAY_STEPS;
-      if (r.r >= r.baseR * RELAY_GROW) {
-        r.r = r.baseR;
-        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: 1200, big: true, done: false, ship: null, src: 6 });
+    } else if (!r.gone && !r.falling && r.shrinkT0 === undefined) {
+      r.shots = (r.shots || 0) + 1;
+      // swell, but never past the ceiling even if the knob is wound right up
+      r.r = Math.min(r.r + r.baseR * TUNEA.relGrow.v, r.baseR * RELAY_GROW);
+      if (r.shots >= RELAY_SHOTS) {
+        // Deflate over RELAY_SHRINK_MS rather than snapping back, and give the
+        // bolt the same duration so the beam to the mothership stays lit for
+        // the whole collapse instead of finishing first.
+        r.shots = 0;
+        r.shrinkFrom = r.r;
+        r.shrinkT0 = now;
+        alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z, t0: now, dur: RELAY_SHRINK_MS, big: true, done: false, ship: null, src: 6 });
         relayBlastSound();
       }
     }
@@ -3795,15 +4261,22 @@ function updateAliens(dt, now) {
   // killbox at ground level for the 8 s it takes to sink. Reported as "the
   // game freezes when a ship goes down"; it was really an instant ALIEN HULL.
   const cp = craft.pos;
-  if (hullAlive(m) && Math.abs(cp[0] - m.x) < TUNEA.moWid.v / 2 && Math.abs(cp[1] - m.y) < TUNEA.moHei.v / 2 && Math.abs(cp[2] - m.z) < TUNEA.moLen.v / 2) doCrash('ALIEN HULL');
+  if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
   if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
   for (const s of alien.ships) {
     if (!hullAlive(s)) continue;
     const ca = Math.cos(s.a), sa = Math.sin(s.a);
     const ox = cp[0] - s.x, oz = cp[2] - s.z;
     const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-    if (Math.abs(lx) < TUNEA.shLen.v / 2 && Math.abs(cp[1] - s.y) < TUNEA.shHei.v / 2 && Math.abs(lz) < TUNEA.shWid.v / 2) { doCrash('ALIEN HULL'); break; }
+    if (hullDist(lx, cp[1] - s.y, lz, shipHalf()) < 0) { doCrash('ALIEN HULL'); break; }
   }
+
+  // HUD tally. hullAlive, not object count: a wreck lingers ~116 s after it
+  // dies, and counting objects would hold the numbers above zero long after the
+  // last kill -- so INVADERS DEFEATED would never appear.
+  setFleetCounts(alien.ships.filter(hullAlive).length,
+                 hullAlive(r) ? 1 : 0,
+                 hullAlive(m) ? 1 : 0);
 }
 
 function packAlienUniforms(out) {
@@ -3825,6 +4298,7 @@ function packAlienUniforms(out) {
   }
   out.shipHalf = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
   out.boxParam = [TUNEA.boxScale.v, TUNEA.boxMinR.v * TUNEA.boxMinR.v, TUNEA.boxFold.v, TUNEA.bulbPow.v];
+  out.boxRound = TUNEA.boxRound.v;
   // Energy beams, packed as (source id, head, tail, fade). The ENDPOINTS are
   // not sent: the shader already holds uShipPos / uRelay / uMotherPos, so a
   // beam costs one vec4 instead of six floats -- and reading them live means
@@ -4481,8 +4955,8 @@ async function main() {
   // Above 1 this supersamples -- the browser downsamples the oversized buffer
   // on composite, which is the one antialiasing route with no blur, no
   // ghosting and nothing to tune.
-  const manualRes = TUNE.resScale.v > 0.025;
-  if (manualRes) setRenderScale(TUNE.resScale.v);
+  const manualRes = TUNED.resScale.v > 0.025;
+  if (manualRes) setRenderScale(TUNED.resScale.v);
   else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
   wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
@@ -4521,7 +4995,12 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
-  gl.uniform1f(U.uDetailFade, TUNE.detailFade.v);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uDetailFade, TUNED.detailFade.v);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uRayTol, TUNED.rayTol.v);           // v9.4 A/B: hit tolerance along the ray
+  gl.uniform1f(U.uWaterLOD, TUNED.waterLOD.v);       // v9.4 A/B: footprint-aware water ripples
+  // v9.4 diagnostics: the whole Debug panel packed into one uniform (the
+  // budget is already over the 224-slot mobile guarantee -- see CLAUDE.md)
+  gl.uniform1f(U.uDebugMask, debugMask());
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();
@@ -4546,6 +5025,7 @@ async function main() {
   gl.uniform1f(U.uShipN, alienU.shipN);
   gl.uniform3fv(U.uShipHalf, alienU.shipHalf);
   gl.uniform4fv(U.uBoxParam, alienU.boxParam);
+  gl.uniform1f(U.uBoxRound, alienU.boxRound);       // hull corner fillet
   gl.uniform1f(U.uOceanSlope, TUNE.oceanSlope.v);
   gl.uniform1f(U.uOceanMax,   TUNE.oceanMax.v);
   gl.uniform1f(U.uMassDecay,  TUNE.massDecay.v);

@@ -268,7 +268,7 @@ node test/run_tests.js        # everything
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
   live hull is lethal while a falling/melting one is inert.
 - `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
-  in pairs across 35 knobs, and a missed `d` only shows when someone presses
+  in pairs across 46 knobs (20 world + 15 aliens + 11 debug), and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
 - `test/test_build.js` — the single file must be byte-identical to what

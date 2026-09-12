@@ -5,7 +5,7 @@
 import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD } from './config.js';
 import { craft, camPos, viewPos, viewZoom, sun, probe } from './state.js';
 import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
-import { TUNE, buildTunePanel } from './tune.js';
+import { TUNE, TUNED, debugMask, buildTunePanel } from './tune.js';
 import { initInput, IS_TOUCH } from './input.js';
 import { update, resetFlight, grindAmt } from './flight.js';
 import { initRings, updateRings, packRingData, ringsPosData, ringsMatsData } from './rings.js';
@@ -122,8 +122,8 @@ async function main() {
   // Above 1 this supersamples -- the browser downsamples the oversized buffer
   // on composite, which is the one antialiasing route with no blur, no
   // ghosting and nothing to tune.
-  const manualRes = TUNE.resScale.v > 0.025;
-  if (manualRes) setRenderScale(TUNE.resScale.v);
+  const manualRes = TUNED.resScale.v > 0.025;
+  if (manualRes) setRenderScale(TUNED.resScale.v);
   else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
   wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
@@ -162,7 +162,12 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
-  gl.uniform1f(U.uDetailFade, TUNE.detailFade.v);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uDetailFade, TUNED.detailFade.v);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uRayTol, TUNED.rayTol.v);           // v9.4 A/B: hit tolerance along the ray
+  gl.uniform1f(U.uWaterLOD, TUNED.waterLOD.v);       // v9.4 A/B: footprint-aware water ripples
+  // v9.4 diagnostics: the whole Debug panel packed into one uniform (the
+  // budget is already over the 224-slot mobile guarantee -- see CLAUDE.md)
+  gl.uniform1f(U.uDebugMask, debugMask());
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();
@@ -187,6 +192,7 @@ async function main() {
   gl.uniform1f(U.uShipN, alienU.shipN);
   gl.uniform3fv(U.uShipHalf, alienU.shipHalf);
   gl.uniform4fv(U.uBoxParam, alienU.boxParam);
+  gl.uniform1f(U.uBoxRound, alienU.boxRound);       // hull corner fillet
   gl.uniform1f(U.uOceanSlope, TUNE.oceanSlope.v);
   gl.uniform1f(U.uOceanMax,   TUNE.oceanMax.v);
   gl.uniform1f(U.uMassDecay,  TUNE.massDecay.v);

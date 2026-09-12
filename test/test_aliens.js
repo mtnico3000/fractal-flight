@@ -25,6 +25,7 @@ function fresh() {
   const craft = { pos: [1e6, 1e6, 1e6] };   // far from everything by default
   const crashes = [];
   const blasts = [];
+  const counts = { harv: -1, relays: -1, mothers: -1 };
   const aliens = loadModule('aliens.js', {
     TUNEA,
     HULL_BLAST_R,
@@ -38,10 +39,14 @@ function fresh() {
     zapSound: () => {},
     relayBlastSound: () => { blasts.push(1); },
     doCrash: (why) => crashes.push(why),
+    // the HUD tally: captured so the counts can be asserted, not just stubbed
+    setFleetCounts: (h, r, m) => { counts.harv = h; counts.relays = r; counts.mothers = m; },
+    resetFleetCounts: () => {},
   }, ['HP_MOTHER', 'HP_SHIP', 'HP_RELAY', 'hullAlive', 'bombs', 'craft',
-      'boxFace', 'sphereFace', 'HULL_BLAST_R']);
+      'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
+      'RELAY_SHRINK_MS', 'hullDist']);
   aliens.initAliens();
-  return { aliens, craft, crashes, blasts, TUNEA };
+  return { aliens, craft, crashes, blasts, counts, TUNEA };
 }
 
 // Drop a bomb dead-centre in `target`, one per frame, until its hp runs out.
@@ -246,26 +251,134 @@ check('the relay gets a curved cap, not a flat disc', () => {
   ok(f.maxR <= relay.r * 1.6 + 1e-9, 'the cap must not wrap past the far side');
 });
 
+// --- the HUD tally ----------------------------------------------------------
+// It must count LIVE hulls. Counting objects instead would hold the numbers
+// above zero for the ~116 s a wreck lingers, so INVADERS DEFEATED could never
+// appear -- the banner is gated on all three reaching 0.
+check('the fleet tally counts live hulls, not wrecks', () => {
+  const { aliens, counts } = fresh();
+  aliens.updateAliens(1 / 60, 1000);
+  eq(counts.harv, 2, 'two harvesters at the start');
+  eq(counts.relays, 1, 'one relay');
+  eq(counts.mothers, 1, 'one mothership');
+
+  // kill everything and let the wrecks linger
+  aliens.alien.ships[0].falling = true;
+  aliens.alien.ships[1].melt = 0.5;
+  aliens.alien.relay.melt = 0.5;
+  aliens.alien.mother.falling = true;
+  aliens.updateAliens(1 / 60, 1100);
+  eq(counts.harv, 0, 'a falling and a melting harvester are both dead');
+  eq(counts.relays, 0, 'a melting relay is dead');
+  eq(counts.mothers, 0, 'a falling mothership is dead');
+  ok(aliens.alien.ships.length > 0,
+     'and the wrecks are still PRESENT -- the tally is about liveness, not existence');
+});
+
+// --- rounded hulls: the shape you see is the shape you hit ---------------
+// The hulls got a corner fillet in v9.4 (shipDE: sdBox(l, h - r) - r). The
+// collision test is the SAME expression in JS, so a filleted corner is really
+// empty air rather than an invisible solid block. Two properties matter: the
+// fillet actually removes the corner, and r = 0 still behaves exactly like the
+// plain axis-aligned box test the hulls used before it existed.
+check('collision follows the rounded corners', () => {
+  const { aliens, TUNEA } = fresh();
+  const half = [600, 60, 400];          // a harvester at the default sizes
+  const corner = [599, 59, 399];        // a hair inside the SHARP corner
+
+  TUNEA.boxRound.v = 0;
+  ok(aliens.hullDist(corner[0], corner[1], corner[2], half) < 0,
+     'sharp hull: the corner must be solid');
+
+  TUNEA.boxRound.v = 0.45;
+  ok(aliens.hullDist(corner[0], corner[1], corner[2], half) > 0,
+     'rounded hull: the corner has been filleted away, so it must be empty air');
+
+  // the bulk of the hull is solid either way
+  for (const round of [0, 0.45]) {
+    TUNEA.boxRound.v = round;
+    ok(aliens.hullDist(0, 0, 0, half) < 0, 'the middle is solid at round ' + round);
+    ok(aliens.hullDist(0, 59, 0, half) < 0, 'the middle of a face is solid at round ' + round);
+    ok(aliens.hullDist(601, 0, 0, half) > 0, 'just outside the long face is empty at round ' + round);
+  }
+});
+
+check('a sharp hull collides exactly as it did before the fillet existed', () => {
+  const { aliens, TUNEA } = fresh();
+  TUNEA.boxRound.v = 0;
+  const half = [600, 60, 400];
+  for (const p of [[0, 0, 0], [599, 0, 0], [0, 59, 0], [0, 0, 399],
+                   [601, 0, 0], [0, 61, 0], [0, 0, 401], [599, 59, 399]]) {
+    const plainBox = Math.abs(p[0]) < half[0] && Math.abs(p[1]) < half[1] && Math.abs(p[2]) < half[2];
+    eq(aliens.hullDist(p[0], p[1], p[2], half) < 0, plainBox,
+       'r = 0 must match the plain box test at [' + p.join(', ') + ']');
+  }
+});
+
 // --- the invasion economy's pacing ------------------------------------------
-// The relay's size and the time it takes to blast are separate concerns that
-// share one number. Growing the bulb 5x meant the per-arrival increment had to
-// grow with it, or the blast would simply never arrive. This drives the REAL
-// updateAliens path rather than re-deriving the formula, so a hard-coded
-// increment creeping back in shows up here.
-check('resizing the relay does not change how long it takes to blast', () => {
-  const { aliens, blasts } = fresh();
+// Blast PACING must be independent of both relay SIZE and relay GROWTH. Two
+// earlier versions coupled them and both went wrong: v9.3 tied the cadence to a
+// hard-coded increment, and the first v9.4 attempt tied it to a size threshold,
+// which made a 1%-per-shot growth need 600 shots and effectively never fire.
+// The discharge is now on a shot count. Driven through the REAL updateAliens
+// path, so re-coupling them shows up here.
+check('blast pacing is a fixed shot count, whatever the size and growth knobs', () => {
+  const { aliens, blasts, TUNEA } = fresh();
   const r = aliens.alien.relay;
   const base = r.baseR;
+  const expect = aliens.RELAY_SHOTS;
   let n = 0;
-  while (blasts.length === 0 && n < 400) {
+  while (blasts.length === 0 && n < 4 * expect) {
     // one delivered energy shot per step: t0 far enough back to count as arrived
     aliens.alien.bolts.push({ x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0,
                               t0: 0, dur: 1, big: false, done: false, ship: null, src: 0 });
     aliens.updateAliens(1 / 60, 10000 + n);
     n++;
   }
-  eq(n, 50, 'energy arrivals from base size to relay blast');
-  ok(Math.abs(r.r - base) < 1e-9, 'the relay resets to its base radius after blasting');
+  eq(n, expect, 'energy arrivals per discharge');
+  // it must NOT snap back: the blast deflates it over RELAY_SHRINK_MS, with the
+  // beam to the mothership lit for the same 2 s
+  ok(r.r > base, 'the relay should still be swollen the instant it blasts, got ' + r.r);
+  const bolt = aliens.alien.bolts[aliens.alien.bolts.length - 1];
+  eq(bolt.big, true, 'the blast should fire a big bolt at the mothership');
+  eq(bolt.dur, 2000, 'the bolt must last as long as the collapse, or the beam ends first');
+  // run the clock past the collapse
+  for (let i = 0; i < 60; i++) aliens.updateAliens(1 / 60, 10000 + 4 * expect + 50 * i);
+  ok(Math.abs(r.r - base) < 1e-6, 'the relay should be back to base radius after the shrink, got ' + r.r);
+
+  // and the cadence must not move when the growth knob does -- that coupling is
+  // exactly what broke twice
+  for (const g of [0, 0.005, 0.12]) {
+    const f = fresh();
+    f.TUNEA.relGrow.v = g;
+    let k = 0;
+    while (f.blasts.length === 0 && k < 4 * expect) {
+      f.aliens.alien.bolts.push({ x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0,
+                                  t0: 0, dur: 1, big: false, done: false, ship: null, src: 0 });
+      f.aliens.updateAliens(1 / 60, 30000 + k);
+      k++;
+    }
+    eq(k, expect, 'shots to discharge at relGrow = ' + g);
+  }
+});
+
+// A wreck has to still be there when you circle back. v9.3 melted in 8 s flat,
+// so the ship you had just bombed was gone before you came round.
+check('a melted wreck stays visible for over a minute', () => {
+  const { aliens } = fresh();
+  const s = aliens.alien.ships[0];
+  s.falling = false; s.melt = 1e-4;
+  let t = 0;
+  const step = 1 / 30;
+  // the visible collapse should still be quick
+  // 0.75 is below MELT_KNEE, so this measures the FAST phase only
+  while (s.melt < 0.75 && t < 30) { aliens.updateAliens(step, 20000 + t * 1000); t += step; }
+  ok(t < 12, 'the initial collapse should still take under ~12 s, took ' + t.toFixed(1));
+  const tCollapse = t;
+  while (s.melt < 1 && t < 400) { aliens.updateAliens(step, 20000 + t * 1000); t += step; }
+  ok(t - tCollapse > 60,
+     'the melted state must persist over a minute; it lasted only ' + (t - tCollapse).toFixed(0) + ' s');
+  ok(!aliens.hullAlive(s), 'and it must stay inert for that whole time');
 });
 
 check('spent beams are retired instead of piling up', () => {

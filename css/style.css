@@ -53,8 +53,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   pointer-events: none;
 }
 #compass svg { width: 100%; height: 100%; }
-#tune, #tuneA {
-  position: fixed; bottom: 14px; left: 18px; width: 224px;
+#tune, #tuneA, #tuneD {
+  position: static; width: 224px;
   color: rgba(220, 230, 245, 0.85);
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   font-size: 10px; letter-spacing: 0.5px;
@@ -62,16 +62,16 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   border: 1px solid rgba(255, 200, 130, 0.25); border-radius: 6px;
   padding: 8px 10px; user-select: none;
 }
-#tune h2, #tuneA h2 {
+#tune h2, #tuneA h2, #tuneD h2 {
   font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
   color: rgba(255, 200, 130, 0.95); text-transform: uppercase;
   cursor: pointer; display: flex; justify-content: space-between;
 }
-#tune h2 .caret, #tuneA h2 .caret { opacity: 0.7; }
-#tune .body, #tuneA .body { margin-top: 6px; }
-#tune.closed .body, #tuneA.closed .body { display: none; }
-#tune .trow, #tuneA .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-#tune .trow label, #tuneA .trow label { flex: 0 0 74px; opacity: 0.75; }
+#tune h2 .caret, #tuneA h2 .caret, #tuneD h2 .caret { opacity: 0.7; }
+#tune .body, #tuneA .body, #tuneD .body { margin-top: 6px; }
+#tune.closed .body, #tuneA.closed .body, #tuneD.closed .body { display: none; }
+#tune .trow, #tuneA .trow, #tuneD .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#tune .trow label, #tuneA .trow label, #tuneD .trow label { flex: 0 0 74px; opacity: 0.75; }
 #tune .trow input[type=range], #tuneA .trow input[type=range] {
   /* min-width:0 is load-bearing: a flex item defaults to min-width:auto, and a
      range input's intrinsic width (~129px) then refuses to shrink, so the row
@@ -92,8 +92,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   flex: 0 0 52px; text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums; color: rgba(255, 200, 130, 0.9);
 }
-#tune .tbtns, #tuneA .tbtns { display: flex; gap: 6px; margin-top: 6px; }
-#tune .tbtns button, #tuneA .tbtns button {
+#tune .tbtns, #tuneA .tbtns, #tuneD .tbtns { display: flex; gap: 6px; margin-top: 6px; }
+#tune .tbtns button, #tuneA .tbtns button, #tuneD .tbtns button {
   flex: 1; min-width: 0; padding: 3px 0;
   background: rgba(255, 200, 130, 0.12); color: rgba(255, 220, 180, 0.95);
   border: 1px solid rgba(255, 200, 130, 0.35); border-radius: 4px;
@@ -257,8 +257,8 @@ body.touch #tune, body.touch #tuneA { display: none; }
 #startBtn:hover { background: rgba(255, 200, 130, 0.3); }
 @keyframes btnIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
 /* keep the key guide + tuning panel visible ON the start page */
-#hud, #tune, #tuneA { z-index: 16; }
-#tuneA { left: auto; right: 18px; bottom: 130px; border-color: rgba(120, 255, 150, 0.3); }
+#hud, #tune, #tuneA, #tuneD { z-index: 16; }
+#tuneA { border-color: rgba(120, 255, 150, 0.3); }
 #tuneA h2, #tuneA h2 .caret { color: rgba(140, 255, 170, 0.95); }
 #tuneA .trow .val { color: rgba(140, 255, 170, 0.9); }
 #tuneA .tbtns button {
@@ -272,3 +272,67 @@ body.touch #tune, body.touch #tuneA { display: none; }
   font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px;
   padding: 24px; white-space: pre-wrap; z-index: 10;
 }
+
+/* ---- Debug panel (v9.4 diagnostics) -------------------------------------
+   Its own panel rather than more rows in Tuning, and CLICK TOGGLES rather
+   than sliders: these are all binary, and a slider costs a drag plus a look
+   at the readout where a button costs one click. Sits above Tuning on the
+   left so it never fights the Aliens panel on the right. */
+#tuneD { border-color: rgba(150, 190, 255, 0.32); }
+#tuneD h2, #tuneD h2 .caret { color: rgba(165, 200, 255, 0.95); }
+#tuneD .drow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#tuneD .dbtn {
+  flex: 1; min-width: 0; padding: 3px 0; text-align: center;
+  background: rgba(150, 190, 255, 0.10); color: rgba(190, 215, 255, 0.75);
+  border: 1px solid rgba(150, 190, 255, 0.30); border-radius: 4px;
+  font: inherit; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap;
+}
+#tuneD .dbtn:hover { background: rgba(150, 190, 255, 0.20); }
+#tuneD .dbtn.on {
+  background: rgba(150, 190, 255, 0.42); color: rgba(245, 250, 255, 1);
+  border-color: rgba(190, 220, 255, 0.85); font-weight: 700;
+}
+/* the master switch reads as the panel's own power button */
+#tuneD .dbtn.master { letter-spacing: 2px; padding: 4px 0; margin-bottom: 6px; }
+#tuneD .dbtn.master.on {
+  background: rgba(255, 170, 90, 0.45); border-color: rgba(255, 200, 130, 0.9);
+  color: rgba(255, 250, 245, 1);
+}
+#tuneD .dnote { opacity: 0.5; margin-top: 6px; line-height: 1.35; }
+
+/* ---- panel column (v9.4) -------------------------------------------------
+   All three tuning panels live in ONE right-anchored flex column instead of
+   positioning themselves individually. Before this, Tuning and Debug were both
+   anchored bottom-left at fixed offsets, so expanding Debug drew it straight
+   over Tuning -- a bug that only appears once a panel is open, which is why
+   two fixed panels had coexisted fine for versions.
+   column-reverse + bottom anchoring means the stack GROWS UPWARD as panels
+   expand, so they can never overlap whatever anyone opens. Bottom offset
+   clears the ALT/SPD/HDG readout. */
+#panels {
+  position: fixed; right: 18px; bottom: 128px; z-index: 5;
+  display: flex; flex-direction: column-reverse; align-items: flex-end;
+  gap: 8px; pointer-events: none;
+}
+#panels > * { pointer-events: auto; }
+
+/* ---- fleet counters (v9.4) -----------------------------------------------
+   HARV / RELAY / MOTHER sit beside RINGS and SPORES in the same type. They
+   use the Aliens-panel green so the invasion reads as one colour family, and
+   #defeated replaces them in place -- same font, same size -- once every hull
+   is gone, rather than appearing somewhere else on screen. */
+#rings-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
+#rings-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
+#rings-score .alienval {
+  color: rgba(140, 255, 170, 0.95);
+  text-shadow: 0 0 10px rgba(90, 230, 130, 0.6), 0 2px 4px rgba(0,0,0,0.95);
+}
+#rings-score #defeated {
+  display: none; margin-left: 22px;
+  font-size: 28px; font-weight: 700; letter-spacing: 3px;
+  color: rgba(140, 255, 170, 0.95);
+  text-shadow: 0 0 14px rgba(90, 230, 130, 0.85), 0 2px 4px rgba(0,0,0,0.95);
+}
+/* swapped by hud.js: the counters go, the banner takes their place */
+#rings-score.defeated #fleetCounts { display: none; }
+#rings-score.defeated #defeated { display: inline; }

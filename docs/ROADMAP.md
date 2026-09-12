@@ -110,6 +110,59 @@ untouched by any A-commit). Re-test on real AC.
 
 ### ⏸ Parked, with reasons
 
+- **The spreading invasion (specified 12 Sept 2026, deferred to v10).** Nico's
+  full design, in his words: *"when the harvesters arrive at 8, a new relay
+  appears in another part of the island over another top mountain (not too far
+  so as not to have to go through the whole island). The next harvesters to
+  drop will then go to that relay, up to eight, then next relay further. Once a
+  relay has 8 harvesters this relay is 'complete' and will not get new
+  harvesters... Once there are 4 relays the mothership relays are full, and the
+  mothership 'duplicates' and floats to another part of the island (same
+  altitude), and when it arrives to it's new position it's own relay appears
+  somewhere under it, and two first harvesters of that new mothership drop and
+  start harvesting for that mothership through it's relay. This way if we let
+  the game run alone without bombings, the island should fill itself of
+  harvesters and relays and motherships."*
+
+  **Why it is not in v9.4: it does not fit in the uniform budget, by a wide
+  margin.** The fleet is singular in the shader -- `uMotherPos` is one vec3,
+  `uRelay` one vec4, `uShipPos[6]` six harvesters -- and the budget is already
+  **242 of a 260 ceiling** (above the 224 GLSL ES 3.0 guarantees). The design's
+  steady state is 8 harvesters x 4 relays = 32 per mothership, then motherships
+  multiply:
+
+  | | slots |
+  |---|---|
+  | 4 motherships | ~4 |
+  | 16 relays | ~20 |
+  | 128 harvesters | ~144 |
+  | **added** | **~168, taking the total to ~410** |
+
+  Even the minimal version (1 mothership, 4 relays, 32 harvesters) needs ~+40,
+  i.e. 282 -- over the ceiling. **The fleet has to move from uniforms into a
+  texture first**, which is ROADMAP C3, and that drags in the `mal.y` material
+  encoding (0 mother / 1..6 ships / 7 relay needs a new scheme), a
+  `marchAliens` that loops ~150 objects at up to 384 iterations each,
+  collision / bombs / probe row / fx occlusion (all assume ONE mothership and
+  ONE relay), ~19 alien tests, and a shader compile already over 200 s.
+
+  **In v10 this is nearly free.** Instanced meshes have no uniform limit and no
+  per-pixel march per object, and world-anchored chunk LOD is exactly what a
+  spreading invasion wants. So the renderer half of the work would be thrown
+  away if built now, while the game-logic half carries over untouched -- and
+  the logic is fully testable headlessly, which is how all 19 alien assertions
+  already run.
+
+  Nico's call, 12 Sept 2026: *"we drop for not the full invasion with multiple
+  relays and motherships. Document it for later, but let's drop that complexity
+  now."*
+
+  What v9.4 DOES ship from this: the live **HARVESTERS** counter beside RINGS
+  and SPORES, and **INVADERS DEFEATED** replacing it once the whole invasion is
+  gone. The banner is gated on harvesters AND relay AND mothership all being
+  dead, not just the harvesters -- bomb every harvester while the mothership
+  still floats and it simply builds more, so victory then would be a lie.
+
 - **GPU / adapter warning on the start page.** Nico asked for a "GPU
   selector"; a selector is **not buildable** — no web API enumerates or picks
   an adapter (WebGL's `powerPreference` is a hint, WebGPU refuses enumeration

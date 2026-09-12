@@ -14,7 +14,15 @@ uniform vec3 uSunDir;
 uniform float uFov;
 uniform vec2 uJitter;
 uniform float uPixScale;
-uniform float uDetailFade;    // A1 knob: multiplies the LOD footprint. 0 = full detail everywhere (pre-A1 look), 1 = Nyquist-matched, 2 = aggressive
+uniform float uDetailFade;
+uniform float uRayTol;           // 0 = vertical tolerance (old), 1 = along-ray
+uniform float uWaterLOD;         // 0 = un-LOD'd ripples (old), 1 = footprint-aware
+uniform float uBoxRound;         // hull corner fillet, as a fraction of the smallest half-extent
+// Where the melt stops collapsing and starts merely sitting there. MUST match
+// MELT_KNEE in js/aliens.js -- the JS drives the melt value, this only decides
+// how it is COLOURED, and test_shader.js checks the two agree.
+const float MELT_KNEE = 0.78;
+uniform float uDebugMask;        // bitmask of false-colour diagnostic channels (see main)    // A1 knob: multiplies the LOD footprint. 0 = full detail everywhere (pre-A1 look), 1 = Nyquist-matched, 2 = aggressive
 uniform vec3 uCraftPos;
 uniform vec3 uBulletPos[8];   // live tracer rounds; unused slots parked at y = -9999
 uniform vec3 uBombPos[3];     // falling bombs; unused slots parked at y = -9999
@@ -438,10 +446,14 @@ vec3 terrainNormal(vec2 p, float pixelSize) {
 
 // ---------- terrain raymarch (sphere-traced heightfield + linear refine) ----------
 // returns vec2(t, material): material 1 = terrain, 4 = plant, t<0 = miss
-vec2 marchTerrain(vec3 ro, vec3 rd) {
+// iters is only for the debug views below -- nothing in the render path
+// reads it, and the collision probe row does not call this function at all.
+vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
   float t = 0.5;
   float pt = t, pd = 1e5;
+  iters = 150.0;
   for (int i = 0; i < 150; i++) {
+    iters = float(i);
     vec3 p = ro + rd * t;
     if (p.y > 560.0 && rd.y > 0.0) return vec2(-1.0, 0.0); // above the tallest peak, heading up
     // A1: sample the terrain at THIS step's footprint. Detail thins with
@@ -453,7 +465,29 @@ vec2 marchTerrain(vec3 ro, vec3 rd) {
     float dP = 1e5;
     if (t < uFloraRange && dT < 18.0 && dT > -1.0) dP = plantEval(p, dT, t).x;
     float d = min(dT * 0.55, dP);   // relaxed terrain stride, cautious near plants
-    if (min(dT, dP) < 0.01 + 0.0015 * t) {
+    // Stop when the surface is within about a pixel ALONG THE RAY, not within
+    // a pixel VERTICALLY. dT is a height above the heightfield, so a vertical
+    // slop of e leaves the hit e/sin(incidence) short of the true crossing --
+    // 6x at 9.5 degrees of depression, 19x at 3. THAT amplification was the
+    // concentric rings centred on the nadir: the march halts early by a
+    // distance proportional to t, quantised by the discrete step, so the error
+    // sawtoothed every ~350 m of ground radius out to the horizon, survived
+    // supersampling (it is geometric, not sampling), and swam with the camera
+    // because it is keyed on distance FROM the camera.
+    //
+    // Measured on the terrain mirror, 2800 rays from 1964 m: mean hit error
+    // 28.9 m -> 2.74 m, p99 354 m -> 22 m, for +4.6% iterations, with no ray
+    // exhausting the 150-step cap and no hit lost. Note that bisection refine
+    // at the hit -- ROADMAP A4 -- measures 1.0x here, i.e. nothing: the loose
+    // tolerance stops the march BEFORE the surface, so there is no bracket
+    // around the crossing left to refine.
+    //
+    // dP is already a distance along the ray, so the plant test keeps the
+    // isotropic tolerance. The 0.06 floor stops near-horizontal rays from
+    // demanding unreachable precision; anything in 0.02..0.10 measures the same.
+    float tolRay = 0.01 + 0.0015 * t;
+    float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
+    if (dT < tolRay * inc || dP < tolRay) {
       float w = clamp(pd / (pd - d), 0.0, 1.0);
       return vec2(mix(pt, t, w), (dP < dT) ? 4.0 : 1.0);
     }
@@ -739,7 +773,13 @@ float mandelboxDE(vec3 p) {
 float shipDE(vec3 l, vec3 h) {  // l = local coords, h = half extents
   float hmin = min(h.x, min(h.y, h.z));
   float mb = mandelboxDE(l / h * 1.15) / 1.15 * hmin;   // conservative for the stretch
-  return max(sdBox(l, h), mb);
+  // Rounded corners for free: shrink the box by r, then add r back to the
+  // distance. Same outer dimensions, an r-radius fillet on every edge. This
+  // only works because sdBox above is the EXACT box SDF -- the cheap
+  // max-of-components version cannot be offset like this. At uBoxRound = 0
+  // it reduces to sdBox(l, h) exactly, so sharp stays bit-identical.
+  float r = min(uBoxRound * hmin, hmin * 0.98);
+  return max(sdBox(l, h - r) - r, mb);
 }
 
 float mandelbulbDE(vec3 p) {    // unit bulb, radius ~1.2
@@ -780,7 +820,27 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, rd, uMotherHalf + 2.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
-      for (int i = 0; i < 48; i++) {
+      // Budget, not precision. A ray nearly TANGENT to the hull converges
+      // geometrically slowly in sphere tracing, and the corner fillet made
+      // tangency common: a flat face is tangent at one grazing angle, a 90 m
+      // rounded edge is tangent across a whole BAND of angles -- which is
+      // exactly what you fly through when you skim along the hull. Rays that
+      // ran out returned a MISS, so the hull simply was not drawn there, and
+      // the surviving slivers between them read as horns.
+      //
+      // Measured on 1939 rays through that band (0.02..3 deg, camera 13 m off
+      // the top face). Misses: 48 iters 18.8%, 192 8.6%, 384 1.3%, 768 0%.
+      // The AVERAGE plateaus at ~42.6 whatever the cap, because nearly every
+      // ray converges on its own -- the cap only serves the rare tangent one,
+      // which is why 8x the ceiling costs ~3x the average and nothing near it
+      // in the common case.
+      //
+      // And do NOT add step relaxation here. It was the obvious fix and it is
+      // measurably WRONG: 0.55 relax made misses worse at the same cap (390 vs
+      // 365) because the failure is budget, not overshoot -- the shipped march
+      // already agreed with a 0.35-relax reference to ~1 m wherever it
+      // converged. Relaxation just spends iterations to arrive slower.
+      for (int i = 0; i < 384; i++) {
         float d = shipDE(lo + rd * t, uMotherHalf);
         if (d < 0.5 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 0.0; } break; }
         t += d;
@@ -798,7 +858,9 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, ld, uShipHalf + 1.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
-      for (int i = 0; i < 40; i++) {
+      // same tangency budget as the mothership above -- harvesters are
+      // smaller but their fillet is proportional, so the band is just as wide
+      for (int i = 0; i < 384; i++) {
         float d = shipDE(lo + ld * t, uShipHalf);
         if (d < 0.15 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 1.0 + float(s); } break; }
         t += d;
@@ -999,7 +1061,8 @@ void main() {
   vec3 rd = normalize(uCamMat * vec3(uv * uFov, 1.0));
   vec3 sun = normalize(uSunDir);
 
-  vec2 mres = marchTerrain(ro, rd);
+  float marchIters;
+  vec2 mres = marchTerrain(ro, rd, marchIters);
   float tT = mres.x;
   float tW = (rd.y < -1e-4 && ro.y > WATER_LEVEL) ? (WATER_LEVEL - ro.y) / rd.y : -1.0;
   float tC = marchCraft(ro, rd);
@@ -1048,7 +1111,17 @@ void main() {
     float w0 = noise(wp + uTime * 0.25);
     float wx = noise(wp + vec2(0.6, 0.0) + uTime * 0.25) - w0;
     float wz = noise(wp + vec2(0.0, 0.6) + uTime * 0.25) - w0;
-    vec3 n = normalize(vec3(-wx * 1.6, 1.0, -wz * 1.6));
+    // Footprint-aware ripples (v9.4 DIAGNOSTIC). The ripple normal is sampled
+    // ONCE per pixel from an ~8.3 m wavelength field, so past a 4.2 m footprint
+    // -- t = 2.6 km at 1707x876 -- it is undersampled. The footprint grows
+    // smoothly with distance, so the aliasing is radially symmetric: concentric
+    // moire rings centred on the viewer, on water. A1 faded the terrain octaves
+    // and even the snow edge (see noiseLOD in terrainColor) but never touched
+    // the water -- which is why the detail-fade slider does nothing to these,
+    // and why supersampling only pushes the crossing out (2.6 -> 5.2 km).
+    float wfoot = t * uPixScale;
+    float wfade = mix(1.0, 1.0 - smoothstep(1.5, 6.0, wfoot), uWaterLOD);
+    vec3 n = normalize(vec3(-wx * 1.6 * wfade, 1.0, -wz * 1.6 * wfade));
     vec3 rr = reflect(rd, n);
     rr.y = abs(rr.y);
     vec3 refl = skyColor(rr, sun);
@@ -1057,7 +1130,11 @@ void main() {
     float sh = softShadow(pos + vec3(0.0, 0.5, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun);
     col = mix(base, refl, fres);
     vec3 glint = mix(vec3(1.0, 0.80, 0.50), vec3(1.1, 0.45, 0.20), duskAmount(sun));
-    col += glint * pow(clamp(dot(rr, sun), 0.0, 1.0), 260.0) * 3.0 * fres * sh;
+    // A razor-thin highlight riding an undersampled normal is a firefly
+    // factory, so broaden it as the ripples flatten out. Reduces to the
+    // original 260 exactly when uWaterLOD is 0.
+    float gexp = mix(260.0, 30.0, 1.0 - wfade);
+    col += glint * pow(clamp(dot(rr, sun), 0.0, 1.0), gexp) * 3.0 * fres * sh;
     col = applyFog(col, ro, rd, t, sun);
 
   } else if (mat == 4) {
@@ -1161,7 +1238,14 @@ void main() {
     float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
     col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
     col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
-    col = mix(col, vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0)), clamp(melt, 0.0, 1.0) * 0.8);
+    // Melt colour. Up to MELT_KNEE the wreck is molten and PULSES. Past the
+    // knee -- the ~110 s tail where it just lies there -- the pulse dies out
+    // and it settles to dark red-orange embers. A wreck that blinks for two
+    // minutes reads as something still alive; a dead one should go quiet.
+    float mk = clamp((melt - MELT_KNEE) / (1.0 - MELT_KNEE), 0.0, 1.0);
+    vec3 molten = vec3(1.2, 0.45, 0.08) * (1.2 + 0.5 * sin(uTime * 7.0));
+    vec3 embers = vec3(0.26, 0.055, 0.018);
+    col = mix(col, mix(molten, embers, mk), clamp(melt, 0.0, 1.0) * 0.8);
     col = applyFog(col, ro, rd, t, sun);
 
   } else {
@@ -1249,6 +1333,51 @@ void main() {
   }
 
   // filmic-ish tonemap + gamma + gentle vignette
+  // ---- DIAGNOSTIC CHANNELS (v9.4) ----------------------------------------
+  // Six independent toggles, summed, each in its own hue -- so two channels
+  // enabled together show where their bands REGISTER (hues add) and where they
+  // beat against each other.
+  //
+  // Worth knowing while reading them: these are not six independent things.
+  // The march produces t; pixelSize is just t * uPixScale; and height/normal/
+  // colour all derive from those. So "hit distance" and "pixel footprint" are
+  // the SAME quantity at different band widths, and "terrain height" is
+  // world-locked. The artifact lives wherever a CONSUMER of t has a sharp
+  // threshold -- which is what channel 32 exists to show.
+  //
+  //   1 march steps   2 hit distance   4 pixel footprint
+  //   8 terrain height (world-locked)  16 normal turn across a footprint
+  //  32 colour LOD -- the alien-undergrowth fade, smoothstep(3,5,pixelSize),
+  //     i.e. a hard viewer-centred ring on the green at t = 1875..3125 m
+  int dmask = int(uDebugMask + 0.5);
+  if (dmask > 0) {
+    vec3 hp = ro + rd * t;
+    vec3 d = vec3(0.0);
+    float nch = 0.0;
+    if ((dmask & 1) != 0) {
+      d += vec3(1.0, 0.25, 0.25) * fract(marchIters / 12.0);          nch += 1.0;
+    }
+    if ((dmask & 2) != 0) {
+      d += vec3(0.25, 1.0, 0.25) * fract(t / 250.0);                  nch += 1.0;
+    }
+    if ((dmask & 4) != 0) {
+      d += vec3(0.30, 0.45, 1.0) * fract(t * uPixScale);              nch += 1.0;
+    }
+    if ((dmask & 8) != 0) {
+      d += vec3(1.0, 1.0, 0.35) * fract(terrainShape(hp.xz) / 4.0);   nch += 1.0;
+    }
+    if ((dmask & 16) != 0) {
+      float turn = length(terrainNormal(hp.xz, t * uPixScale) - terrainNormal(hp.xz, 0.15));
+      d += vec3(1.0, 0.35, 1.0) * clamp(turn * 4.0, 0.0, 1.0);        nch += 1.0;
+    }
+    if ((dmask & 32) != 0) {
+      // exactly the term terrainColor uses to fade the undergrowth out
+      float cl = 1.0 - smoothstep(3.0, 5.0, t * uPixScale);
+      d += vec3(0.35, 1.0, 1.0) * cl;                                 nch += 1.0;
+    }
+    col = d / max(nch, 1.0);
+    if (mat == 0) col = vec3(0.02);          // leave the sky dark
+  }
   col = 1.0 - exp(-col * 1.15);
   col = pow(col, vec3(0.4545));
   vec2 vuv = gl_FragCoord.xy / uResolution;
