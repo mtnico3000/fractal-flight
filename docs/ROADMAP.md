@@ -126,10 +126,18 @@ than left half-true. That is a bigger edit than the meshing itself.
 - **Do not rebuild the served tree while Nico is flying it.** Use a
   `git worktree` on another port. This cost a false result in v9.4.
 
-### ▶ 3. Multiplayer — the two decisions that must be made BEFORE v10 code
+### ▶ 3. Multiplayer — the v10 KICKOFF AGENDA (do not answer these early)
 
-Both are cheap now and very expensive later. Neither is written down as
-decided, so **ask Nico**:
+⚠️ **These are deliberately unanswered.** Nico's call, 12 Sept 2026:
+*"keep the multiplayer questions for v10, add these questions for when we
+start working on that."* So do NOT chase answers before v10 starts — but do
+**put this list in front of him in the FIRST message of the v10 session**,
+because every one of these is cheap to decide now and very expensive to
+retrofit. They are recorded here, in his own framing of the goal: *"I'd like
+to orient this game... towards a multiplayer version."*
+
+Work down the list with him before writing renderer code, because the
+answers change what v10 builds:
 
 - **Determinism and seeding.** The world is a pure function today, which is
   the best possible starting point: two clients running the same code over
@@ -146,6 +154,31 @@ decided, so **ask Nico**:
   come from the host and the client keeps only the cosmetic ones. Deciding
   which knob is which is a 20-knob triage, best done while the reasons are
   still fresh.
+- **What IS the second player?** Never discussed, and it sets everything
+  else. Co-op against the same invasion (shared fleet state, so the
+  invasion economy in `aliens.js` needs one owner); competitive on the ring
+  course (`rings.js` spawns are already terrain-seeded, so both players can
+  derive the same course with nothing transmitted); or just ghosts — seeing
+  each other fly with no shared stakes, which is the cheapest by a wide
+  margin and needs no authority decision at all.
+- **Who owns the invasion?** Today `aliens.js` runs the whole economy
+  locally off a local clock. Two clients running it independently will
+  diverge within seconds (harvester spawns, relay growth, blast timing), so
+  either one client is the host for fleet state or it moves to a server.
+  This is the single biggest gameplay-code question and it is independent of
+  the renderer — note that all 19 alien assertions already run headlessly,
+  so whatever is decided is testable without a browser.
+- **What crosses the wire, and how often?** Craft pose is ~7 floats; the
+  fleet is ~10 objects; the terrain is zero bytes because it is a function.
+  That is a tiny budget by multiplayer standards and it is worth knowing
+  before picking a transport — ask Nico whether he wants peer-to-peer
+  (WebRTC, no hosting) or a small server (WebSocket, needs somewhere to
+  run), because the project currently has no backend at all and
+  "no npm, no framework, no bundler" is a stated value.
+- **Does collision stay client-side?** The GPU probe row is the collision
+  authority today and it is bit-exact with what that client renders — which
+  is exactly what an authoritative server cannot trust. Related to the v10
+  question of what becomes authoritative once terrain is a mesh (item 2).
 
 ### ▶ 4. Coverage still missing (carried over, still true)
 
@@ -171,13 +204,20 @@ Jaysmito Mukherjee in the README), then **B1 — multifractal octaves**
 meshed: a biome that costs ten extra fbm octaves is unaffordable per pixel
 per frame and trivial once per chunk.
 
-### 6. ✅ Pushed to origin 12 Sept 2026 — the PR to julaub is NOT opened
+### 6. ✅ Pushed AND the PR is open (12 Sept 2026) — the ball is with jul
 
-`v9.4` and `main` are both on `origin` (mtnico3000/fractal-flight) at
-`f593391`, on Nico's say-so; it was the first push since v8.0. **The volley to
-jul has not been thrown**: there is no `julaub` remote configured and no PR
-exists. Opening one is a separate decision and needs asking. GitHub offers:
-https://github.com/mtnico3000/fractal-flight/pull/new/v9.4
+`v9.4` and `main` are both on `origin` (mtnico3000/fractal-flight), and
+**PR #3 is open against julaub/fractal-flight:main** —
+https://github.com/julaub/fractal-flight/pull/3 — 20 commits, 44 files,
++11 708/−121, reported mergeable/clean. First volley since v7.0.
+
+Notes for whoever picks this up: there is still **no `julaub` remote**
+configured locally (the comparison was done with a one-off
+`git fetch <url> main:refs/remotes/julaub/main`), and **no `gh` CLI on this
+machine** — the PR was opened through the REST API using the Git Credential
+Manager token that `git push` already uses. julaub/main had 2 commits we did
+not have; both are jul's merge commits for PR #1 and #2 and the content diff
+from the merge base is empty, so nothing of his was at risk.
 
 ### ✅ Landed 12 Sept 2026 (v9.4)
 
@@ -214,15 +254,20 @@ https://github.com/mtnico3000/fractal-flight/pull/new/v9.4
   was deferred: *"I'll do this and report back, as it needs a reboot."* One
   command decides whether the 80 W cap is the USB-C supply or G-Helper. See
   the top of this file.
-- **The two multiplayer decisions in item 3** — seeding/determinism, and
-  which TUNE knobs become server-authoritative. v10 should not start without
-  them.
+- ~~The two multiplayer decisions~~ — **deliberately deferred to the v10
+  kickoff** by Nico on 12 Sept 2026, and expanded into an agenda in item 3.
+  Do not raise them before then; DO raise all of them at the start of the
+  v10 session.
 - **Does the shader still LINK on jul's phone?** **242** uniform slots
   against the 224 GLSL ES 3.0 guarantees. Desktop is fine and the count is
   tested, but the mobile half needs a real device. (v10 may retire the
   question entirely.)
-- **Open the PR to julaub?** The push to origin is done (item 6); the PR is
-  not, and jul sees nothing until it exists.
+- ~~Open the PR to julaub?~~ ✅ **Done — PR #3, opened 12 Sept 2026** on
+  Nico's instruction: https://github.com/julaub/fractal-flight/pull/3
+  (`julaub:main ← mtnico3000:v9.4`, 20 commits, 44 files, +11 708/−121,
+  mergeable/clean). **The ball is with jul.** It is the first volley since
+  v7.0 — PR #2 was the last thing merged there — so it carries all of v8,
+  v9, C1 and C2 at once.
 
 ### ✅ Landed 10 Sept 2026
 
