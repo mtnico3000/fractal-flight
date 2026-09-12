@@ -794,3 +794,44 @@ fly at it — the third of Nico's three cases, and not a bug. Now the
 restores the old look. There is also a hard LOD switch at exactly 550 m
 between the frond silhouette and a smooth envelope — a ring around the
 player where trees change shape — left as is and noted in the ROADMAP.
+
+### 6.6 The ridges: what remains is the geometry (after Nico flew v9.5)
+
+Nico: *"it's great the coast issue is fixed, it worked!... the mountains
+still have that thing where most are correct and don't change, at some
+points the ridges fluctuate quite wildly in a zone."*
+
+The class-flip metric of §6.2 is blind to a crest seen against a *farther
+slope* (land→land), so a new one: pixels whose hit **distance** jumps more
+than 50 m for a 2 m camera move — a ray landing on a crest in one frame and
+on the slope behind it in the next, which is a large colour change.
+
+| scene (25 600 px) | OLD v9.4 | **NEW v9.5** | tol ×0.5 | tol ×0.25 | tol ×0.1 | **reference** |
+|---|---|---|---|---|---|---|
+| ridge | 38 | **33** | 41 | 43 | 40 | **41** |
+| ridge2 | 24 | **17** | 22 | 21 | 22 | **22** |
+
+v9.5 is already *below* the near-exact reference. Tightening the tolerance
+moves the count **up, toward the reference** — a smaller tolerance is more
+sensitive to the exact crest height, not less; the tolerance was acting as
+a slight smoothing. The remaining "wrong-surface" pixels on the ridge (84,
+of which **5 tunnelled, 79 stopped early, 0 at a sky silhouette**) are rays
+passing within the tolerance *above* a crest and being captured on it;
+smaller relax makes that worse (86, 90), so it is not long-step tunnelling.
+
+So the marcher's share of the ridge flutter is gone (holes 22 → 0, jumps
+below the reference). What remains is **a crease aligned with the line of
+sight**: one ray per pixel must decide near-crest or far-slope, hundreds of
+metres of depth apart, and the decision is ill-conditioned — a tiny change
+of angle moves it a long way *along* the crest. The coastline's sub-pixel
+wiggle (§5.5), but with a large colour difference, so it shows, and worst
+exactly where ridges run toward the viewer — "a zone".
+
+**Two things this rig cannot see**, either of which could also be
+zone-bound, and each has a one-slider test (ROADMAP queue, item 1b): the
+A1 octave fade (the rig marches px = 0; a crest morphs as an octave crosses
+Nyquist at a distance band) and the plant SDF (the rig has no trees; a
+forested ridge marches through many small SDFs).
+
+Cures for the inherent part: `resolution` 2× averages the straddling rays
+(≈ halves it); v10's mesh has an exact crease and MSAA.

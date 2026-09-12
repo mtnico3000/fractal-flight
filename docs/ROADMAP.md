@@ -64,6 +64,34 @@ Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
 ---
 
+### ▶ 1b. The mountains — Nico's open item after v9.5 (do this with him, not for him)
+
+Nico, having flown v9.5: *"the mountains still have that thing where most
+are correct and don't change, at some points the ridges fluctuate quite
+wildly in a zone, while the rest seems quite ok."*
+
+**What is already known** (RESEARCH.md §6.6): on the fp64 mirror the v9.5
+march has FEWER hit-distance jumps on ridges than a near-exact reference
+(33 vs 41; 17 vs 22), and a tighter tolerance makes it worse, not better.
+So the marcher's share is gone; what the rig can see of the remainder is
+geometry — a crease aligned with the line of sight. But the rig has **no
+trees and no A1 octave fade**, and either could be the "zone". Ask Nico to
+fly the wild zone and change ONE slider at a time:
+
+| slider | if the zone calms | then it is |
+|---|---|---|
+| Debug → `detail fade` → 0 | yes | A1 morphing the crest as an octave crosses Nyquist at that distance band. Fix: a slower fade, or a world-locked footprint. |
+| Tuning → `flora range` → 0 | yes | the plant SDF: a forested ridge marches through many small SDFs. Fix in `plantEval`'s far envelope, or exclude plants from silhouette rays. |
+| Debug → `resolution` → 2 | it roughly halves | inherent one-ray-per-pixel crease boil. No marcher fix; v10. |
+| Debug → `march budget` on | any WHITE pixel | budget still exhausted somewhere — report where. |
+| Debug → `hit refine` off / `march stride` 1.8 | no change | (expected; confirms the marcher is not it) |
+
+Do not build anything before that table has answers. The rig for the
+marcher half is `scratchpad/ridgejump.js`-style: two frames 2 m apart,
+count |Δt| > 50 m against the reference march.
+
+---
+
 ### ▶ 2. v10 — the hybrid: fractal DEFINITION, rasterised GEOMETRY
 
 **This is the next item, and it is a big one.** Nico, 12 Sept 2026, after the
