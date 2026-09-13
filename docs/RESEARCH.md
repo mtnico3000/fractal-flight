@@ -1075,11 +1075,26 @@ Shipped as Debug → `mtn relax`, default 0.55 (v9.5 behaviour) until Nico had
 flown the cost. **He flew it the same evening: at the slider's left end
 (0.25) — its readout clipped by his window edge, which is why he first read
 it as 0.1 — *"the issue is gone"*.** That is the census's own answer, 0.25
-being the only value safe against this island's steepest ground, arrived at
+being the value that leaves only 0.002% of the island unmarchable, arrived at
 independently and by eye. Cost at that end: +108% iterations in his mountain
-view, +6% over the sea. 0.35 removes every swing the crest-band rig can see
-at +53%/+3% and leaves 0.8% of that ridge formally unsafe; whether the eye
-can tell them apart is the next thing to fly. His observation that the
+view, +6% over the sea. **0.25 became the default the same evening, on his
+instruction**; 0.55 stays at the top of the slider as the A/B. 0.35 (0.072%
+unmarchable, +53%) and 0.30 (0.017%, +76%) are the cheaper rungs if the frame
+rate bites on jul's machine.
+
+#### A footnote that cost a week
+
+Nico read the slider's left end as **0.1**. It is 0.25 — the value readout
+was clipped by the edge of his window, because the flex rule that stops a
+`<input type=range>` from refusing to shrink named `#tune` and `#tuneA` and
+**not `#tuneD`**, which grew sliders of its own in v9.4–v9.5. The Debug panel
+had been quietly rendering `0.25` as `0.2`, `snap` as `sna`, and `auto` as
+`aut` for every screenshot in this whole investigation. Fixed 13 Sept:
+`#tuneD` added to all three selectors, panel 224 → 248 px, value column 52 →
+74 px, label 74 → 86 px — sized from the longest string any knob can format.
+Verified in the browser: 0 of 46 rows clip at any slider position. CLAUDE.md
+already carried this exact gotcha from the ALIENS panel; a shared rule has to
+list every panel it protects, or the next panel inherits the bug. His observation that the
 breathing is *"quicker toward the center of the view, and less and less
 toward the edges"* fits the mechanism: moving along the view shifts the
 sample sequence along a central ray by the whole step, along a ray at angle

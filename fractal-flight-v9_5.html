@@ -69,8 +69,15 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   pointer-events: none;
 }
 #compass svg { width: 100%; height: 100%; }
+/* 224 -> 248 px on 13 Sept 2026. border-box, so the content row is 228 px:
+   label 86 + gap 6 + slider >= 56 + gap 6 + value 74. Both column widths are
+   sized from the longest string any knob can format ('flora density' = 13
+   chars, '0.9 per-mille (v9.5)' = 11) at 10px monospace + 0.5px tracking
+   ~= 6.5 px/char. A knob whose value formats longer than that now overflows
+   LEFT over its own slider -- ugly, but on screen. It used to overflow right,
+   off the edge of the display. */
 #tune, #tuneA, #tuneD {
-  position: static; width: 224px;
+  position: static; width: 248px;
   color: rgba(220, 230, 245, 0.85);
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   font-size: 10px; letter-spacing: 0.5px;
@@ -87,25 +94,30 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 #tune .body, #tuneA .body, #tuneD .body { margin-top: 6px; }
 #tune.closed .body, #tuneA.closed .body, #tuneD.closed .body { display: none; }
 #tune .trow, #tuneA .trow, #tuneD .trow { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-#tune .trow label, #tuneA .trow label, #tuneD .trow label { flex: 0 0 74px; opacity: 0.75; }
-#tune .trow input[type=range], #tuneA .trow input[type=range] {
+#tune .trow label, #tuneA .trow label, #tuneD .trow label { flex: 0 0 86px; opacity: 0.75; }
+#tune .trow input[type=range], #tuneA .trow input[type=range], #tuneD .trow input[type=range] {
   /* min-width:0 is load-bearing: a flex item defaults to min-width:auto, and a
      range input's intrinsic width (~129px) then refuses to shrink, so the row
      overflowed the 224px panel and pushed .val off the right edge — invisible
-     on the left-anchored panel, clipped off-screen on the right-anchored one. */
+     on the left-anchored panel, clipped off-screen on the right-anchored one.
+     ⚠️ It happened AGAIN: the Debug panel grew sliders of its own in v9.4/v9.5
+     and #tuneD was in none of these three selectors, so every Debug value was
+     clipped by the screen edge — Nico read `0.25` as `0.1` for a week and the
+     panel looked fine in any screenshot wide enough to hide it. A shared rule
+     must list every panel it protects, or the next panel inherits the bug. */
   flex: 1; min-width: 0; height: 3px; -webkit-appearance: none; appearance: none;
   background: rgba(255, 200, 130, 0.25); border-radius: 2px; outline: none;
 }
-#tune .trow input[type=range]::-webkit-slider-thumb, #tuneA .trow input[type=range]::-webkit-slider-thumb {
+#tune .trow input[type=range]::-webkit-slider-thumb, #tuneA .trow input[type=range]::-webkit-slider-thumb, #tuneD .trow input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; width: 10px; height: 10px;
   border-radius: 50%; background: rgba(255, 200, 130, 0.95); cursor: pointer;
 }
-#tune .trow input[type=range]::-moz-range-thumb, #tuneA .trow input[type=range]::-moz-range-thumb {
+#tune .trow input[type=range]::-moz-range-thumb, #tuneA .trow input[type=range]::-moz-range-thumb, #tuneD .trow input[type=range]::-moz-range-thumb {
   width: 10px; height: 10px; border: none;
   border-radius: 50%; background: rgba(255, 200, 130, 0.95); cursor: pointer;
 }
-#tune .trow .val, #tuneA .trow .val {
-  flex: 0 0 52px; text-align: right; white-space: nowrap;
+#tune .trow .val, #tuneA .trow .val, #tuneD .trow .val {
+  flex: 0 0 74px; text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums; color: rgba(255, 200, 130, 0.9);
 }
 #tune .tbtns, #tuneA .tbtns, #tuneD .tbtns { display: flex; gap: 6px; margin-top: 6px; }
@@ -2260,21 +2272,22 @@ const TUNED = {
   // Hard-ray flips 84 -> 14 for +13-22% iterations; 0.0001 buys little more.
   stride:     { kind: 'slider', label: 'march stride', v: 0.0002, d: 0.0002, min: 0.0001, max: 0.0018, step: 0.0001,
                 fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (v9.4)' : x > 0.00085 && x < 0.00095 ? ' (v9.5)' : '') },
-  // 13 Sept 2026, afternoon: the step is 0.55 x the vertical gap, and the safe
-  // factor is cos(slope), so that is a safe step only under 56.6 deg (0.35 ->
-  // 69.5, 0.25 -> 75.5; the island's steepest ground is 74.2). From BELOW a
-  // ridge the sample lands past the thin crest and its top comes and goes
-  // with the camera -- Nico's horns and floating pieces, on his ALT 127 series
-  // (RESEARCH s6.9: 30 px, 55 of 86 columns; 0.35 -> 4 px, 0). The stride
-  // floor was the lever from above; this is the lever from below. 0.35 is
-  // safe for 70 deg faces and costs +53% iterations in mountain views; keyed
-  // on the mountain mass, the sea and beach frames pay +3%. Default is the
-  // v9.5 behaviour until Nico has flown the cost. The bottom of the range is
-  // 0.20 (safe to 78.5 deg) because `peak height` at its own maximum needs
-  // 0.22 -- a tuning slider must not be able to build a world the marcher
-  // cannot render. docs/MARCHING.md R1-R2, test/test_march.js.
-  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.20, max: 0.55, step: 0.05,
-                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.325 && x < 0.375 ? ' (safe)' : '') },
+  // 13 Sept 2026: the step is `relax x the vertical gap`, and the safe factor
+  // is cos(slope) -- so 0.55 is a safe step only under 56.6 deg, and it could
+  // not step safely on 2.6% of this island. From BELOW a ridge the ray crosses
+  // the crest BODY (4-10 m thick along the ray) with a step of up to 9.7 m, so
+  // the crest was found or missed by sample phase alone: Nico's horns and
+  // floating pieces. He flew the slider to its left end and reported "the
+  // issue is gone!", so 0.25 (safe to 75.5 deg, 0.002% of the island left
+  // unmarchable) is the default from 13 Sept 2026, at +108% march iterations
+  // in a mountain view and +6% over the sea -- the relaxation is keyed on the
+  // mountain mass, so frames without mountains barely pay. 0.55 is kept at the
+  // top of the range as the v9.5 A/B, and the bottom is 0.20 (safe to 78.5)
+  // because `peak height` at its own maximum needs 0.22: a tuning slider must
+  // not be able to build a world the marcher cannot render.
+  // docs/MARCHING.md R1-R2, test/test_march.js, RESEARCH s6.9.
+  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.25, d: 0.25, min: 0.20, max: 0.55, step: 0.05,
+                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.225 && x < 0.275 ? ' (safe)' : '') },
   // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
   // mothership" to tell what moves from what is drawn. Hidden = hulls, beams
   // and their collisions are gone; the invasion economy keeps running under

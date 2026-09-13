@@ -168,7 +168,15 @@ Key chips in the HUD glow green when a toggle is active.
   a 244px panel and pushed the value readout out of the panel. Invisible on
   the left-anchored TUNING panel (overflow spills into the screen), fatal on
   the right-anchored ALIENS one (spills off-screen). `min-width: 0` on the
-  input is the fix.
+  input is the fix. 🔁 **It happened AGAIN on 13 Sept 2026**: the rule named
+  `#tune` and `#tuneA`, the Debug panel grew sliders of its own in v9.4–v9.5,
+  and `#tuneD` was in none of the three selectors — so every Debug value was
+  clipped by the screen edge, and Nico spent a week reading `0.25` as `0.1`
+  and `snap` as `sna` in his own screenshots. **A shared rule must list every
+  panel it protects, or the next panel silently inherits the bug.** The panels
+  are now 248 px with a 74 px value column and an 86 px label column, sized
+  from the longest string any knob can format; verified in the browser as
+  0 of 46 rows clipping at any slider position.
 - **A downed hull is inert**, via `hullAlive()` in aliens.js — no bomb hits
   and no ALIEN HULL crash while falling, melting or gone. Without it the ship
   you just bombed kills you on its way down (you are by definition beside it)

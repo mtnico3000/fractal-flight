@@ -798,6 +798,35 @@ cost. His *"quicker toward the center of the view"* fits: moving along the
 view shifts the sample sequence along a central ray by the whole step, along
 an edge ray by cos θ of it. RESEARCH §6.9.
 
+**13 Sept, evening — the rules, and the default.** Nico: *"we spent way too
+much time on this... I'd like a documentation for further dev to have a very
+clear way of not having this problem again. What are the rules we need to
+apply when creating terrain so that the camera never has those glitches?"*
+**docs/MARCHING.md** is the answer: six bugs (hull horns, concentric rings,
+sea spikes into the beach, the flickering waterline, breathing peaks, morphing
+tree crowns) are ONE mechanism — a raymarcher knows only the points it
+sampled, it chose them by walking out from the camera, so a feature thinner
+than the local sample spacing is found or missed depending on where the camera
+stands, and flips cyclically as it moves. Four quantities decide it (spacing,
+acceptance, termination, and the field itself) and every one has shipped a bug
+here. Eight rules, two checklists, the known-dead levers, the open violations,
+and the honest limit. Writing it needed a slope census of the world, which
+produced three surprises: the safe step is `gap·cos(slope)` and 0.55 could not
+step safely on **2.6% of the island**; the measured max slope **does not
+converge** (72.9° at a 200 m grid, 80.9° at 30 m), so a fractal has no
+measurable Lipschitz constant; and the steepest ground belongs to `mass =
+exp(-wde·0.0011)`, where `wde` is a Mandelbrot distance **estimate** with
+median |∇| 0.64 and max **23.5** — 85° of ground out of an expression in which
+nothing looks steep. Two plausible levers died on measurement: rounding the
+ridge crease changes the max slope by 0.0° (and moves terrain 77 m), and the
+LOD fade does not gentle distant terrain (the steepness is low-frequency).
+`test/slope_census.js` re-derives it all in 1.2 s and `test/test_march.js`
+guards it — the guard immediately found that the `peak height` slider could
+build a world no relaxation setting could render, so the relax range now
+reaches 0.20. Then Nico: *"make the css to show the whole numbers, and set
+default to 0,25"* — both done, and the CSS bug turned out to be why he had
+read 0.25 as 0.1 all week (RESEARCH §6.9 footnote).
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

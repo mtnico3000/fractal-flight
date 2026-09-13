@@ -102,12 +102,18 @@ measured slope census of this world, and the levers already known dead.
 `test/test_march.js` makes the rules enforceable. **Read it before touching
 terrain, march or any SDF.**
 
-▶ **The open question, and it is Nico's:** relax 0.25 leaves 0.002% of the
-island unmarchable and costs **+108% march iterations** in a mountain view;
-0.35 leaves 0.072% at **+53%**; 0.30 leaves 0.017% at +76%. The default still
-ships at 0.55, which leaves **2.6%** — that is the bug, knowingly left in for
-A/B. Fly 0.35 and 0.30 at the same spot and see whether the eye can tell them
-from 0.25; the winner becomes the default (jul's GPU pays it too).
+✅ **ANSWERED 13 Sept 2026 — `mtn relax` defaults to 0.25.** Nico's call after
+flying it: *"The mtn relax setting does the job! ... the issue is gone!"*
+0.25 leaves 0.002% of the island unmarchable (0.55 left 2.6%), and costs
+**+108% march iterations in a mountain view**, +6% over the sea. `mtn relax`
+stays a slider with 0.55 at the top, so the v9.5 behaviour is one drag away.
+
+▶ **The one thing to watch: frame rate on jul's machine.** Nico was at 40–47
+fps at 1707×932 before this; the mountain-view cost roughly doubles the march.
+If it bites, 0.35 (0.072% unmarchable, +53%) and 0.30 (0.017%, +76%) are the
+cheaper safe-ish rungs — fly them at the same spot and see whether the eye can
+tell. Changing the default means editing `test/test_march.js`'s safety
+assertion and MARCHING.md §7 with the number it costs.
 
 ▶ **Then the known rule violations, MARCHING.md §7 — fixes, not
 investigations:** `plantEval`'s 550 m frond→envelope switch is hard AND keyed

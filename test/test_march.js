@@ -57,14 +57,16 @@ check('the relaxation slider can still reach a safe step for this terrain', () =
      ', but the slider stops at ' + TUNED.relaxMtn.min + ' -- extend its range or bound the terrain gradient');
 });
 
-check('the default relaxation leaves only the known thin tail unmarchable', () => {
-  // 13 Sept 2026: 0.55 cannot step safely on 2.6% of the island, which is
-  // exactly the "certain ridges" Nico kept finding. This assertion is not a
-  // demand that the default be SAFE -- that is a live decision about frame
-  // cost (ROADMAP) -- it is a demand that the number stay KNOWN.
+check('the DEFAULT relaxation is safe on this terrain', () => {
+  // 0.55 could not step safely on 2.6% of the island -- exactly the "certain
+  // ridges" Nico kept finding. He flew the slider to 0.25 (0.002%) and the
+  // glitch went, so that is the default from 13 Sept 2026. This is a real
+  // guard now, not a bookkeeping one: moving the default back up for frame
+  // rate must be a deliberate edit here, with the number it costs written in.
   const bad = 100 * s.overFrac(TUNED.relaxMtn.d);
-  ok(bad < 6, 'relax ' + TUNED.relaxMtn.d + ' cannot step safely on ' + bad.toFixed(2) +
-     '% of the island (was 2.6%); a terrain term made the world steeper');
+  ok(bad < 0.05, 'the default relax ' + TUNED.relaxMtn.d + ' cannot step safely on ' +
+     bad.toFixed(3) + '% of the island (0.25 gives 0.002%, 0.35 gives 0.072%, 0.55 gives 2.6%) -- ' +
+     'either lower the default or, if this is a deliberate speed trade, update this test and docs/MARCHING.md s7');
   eq(TUNED.relaxMtn.max, 0.55, 'the slider top must stay at the v9.5 behaviour, for A/B');
 });
 
