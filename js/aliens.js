@@ -1,4 +1,4 @@
-import { TUNEA } from './tune.js';
+import { TUNEA, TUNED } from './tune.js';
 import { craft } from './state.js';
 import { terrainShapeJ } from './terrain.js';
 import { collectedSet } from './spores.js';
@@ -382,14 +382,18 @@ export function updateAliens(dt, now) {
   // killbox at ground level for the 8 s it takes to sink. Reported as "the
   // game freezes when a ship goes down"; it was really an instant ALIEN HULL.
   const cp = craft.pos;
-  if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
-  if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
-  for (const s of alien.ships) {
-    if (!hullAlive(s)) continue;
-    const ca = Math.cos(s.a), sa = Math.sin(s.a);
-    const ox = cp[0] - s.x, oz = cp[2] - s.z;
-    const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-    if (hullDist(lx, cp[1] - s.y, lz, shipHalf()) < 0) { doCrash('ALIEN HULL'); break; }
+  // A hidden hull (Debug 'invasion') must not kill you either: what you
+  // cannot see cannot be flown around.
+  if (TUNED.invasion.v > 0.5) {
+    if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
+    if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
+    for (const s of alien.ships) {
+      if (!hullAlive(s)) continue;
+      const ca = Math.cos(s.a), sa = Math.sin(s.a);
+      const ox = cp[0] - s.x, oz = cp[2] - s.z;
+      const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
+      if (hullDist(lx, cp[1] - s.y, lz, shipHalf()) < 0) { doCrash('ALIEN HULL'); break; }
+    }
   }
 
   // HUD tally. hullAlive, not object count: a wreck lingers ~116 s after it
@@ -402,14 +406,18 @@ export function updateAliens(dt, now) {
 
 export function packAlienUniforms(out) {
   const m = alien.mother, r = alien.relay;
-  out.motherPos = m.gone ? [0, -99999, 0] : [m.x, m.y, m.z];
+  // Debug 'invasion' hidden: every hull parks at y = -99999 (the shader's own
+  // "not here" convention), no lasers, no beams, no hit flash. The economy
+  // underneath keeps ticking so the counters stay honest.
+  const hide = TUNED.invasion.v < 0.5;
+  out.motherPos = (m.gone || hide) ? [0, -99999, 0] : [m.x, m.y, m.z];
   out.motherHalf = [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
   out.motherMelt = m.melt;
-  out.relay = r.gone ? [0, -99999, 0, 1] : [r.x, r.y, r.z, r.r];
+  out.relay = (r.gone || hide) ? [0, -99999, 0, 1] : [r.x, r.y, r.z, r.r];
   out.relayMelt = r.melt;
-  out.shipN = alien.ships.length;
+  out.shipN = hide ? 0 : alien.ships.length;
   for (let i = 0; i < SHIP_MAX; i++) {
-    const s = alien.ships[i];
+    const s = hide ? null : alien.ships[i];
     out.shipPos[i * 4] = s ? s.x : 0;
     out.shipPos[i * 4 + 1] = s ? s.y : -99999;
     out.shipPos[i * 4 + 2] = s ? s.z : 0;
@@ -417,6 +425,7 @@ export function packAlienUniforms(out) {
     out.shipLaser[i] = (s && !s.falling && !s.melt && !s.deploying) ? 1 : 0;
     out.shipMelt[i] = s ? s.melt : 0;
   }
+  if (hide) { out.boltN = 0; out.alienHit = [0, 0]; return; }
   out.shipHalf = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
   out.boxParam = [TUNEA.boxScale.v, TUNEA.boxMinR.v * TUNEA.boxMinR.v, TUNEA.boxFold.v, TUNEA.bulbPow.v];
   out.boxRound = TUNEA.boxRound.v;

@@ -127,6 +127,14 @@ export const TUNED = {
   // Hard-ray flips 84 -> 14 for +13-22% iterations; 0.0001 buys little more.
   stride:     { kind: 'slider', label: 'march stride', v: 0.0002, d: 0.0002, min: 0.0001, max: 0.0018, step: 0.0001,
                 fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (v9.4)' : x > 0.00085 && x < 0.00095 ? ' (v9.5)' : '') },
+  // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
+  // mothership" to tell what moves from what is drawn. Hidden = hulls, beams
+  // and their collisions are gone; the invasion economy keeps running under
+  // it. Same switch for jul's rings, the one other thing that moves by itself.
+  invasion:   { kind: 'slider', label: 'invasion',    v: 1, d: 1, min: 0, max: 1, step: 1,
+                fmt: x => x > 0.5 ? 'on' : 'hidden' },
+  ringsOn:    { kind: 'slider', label: 'rings',       v: 1, d: 1, min: 0, max: 1, step: 1,
+                fmt: x => x > 0.5 ? 'on' : 'hidden' },
 
   steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },
