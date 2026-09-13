@@ -3,7 +3,7 @@
 WebGL2 raymarched flight game over a Mandelbrot-shaped island. No meshes, no
 textures: every pixel sphere-traces a procedural world each frame. Two-player
 "ping-pong" development between Nico (mtnico3000) and jul (julaub) — code
-volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.5.
+volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.6.
 
 ## Builds — IMPORTANT
 
@@ -15,7 +15,7 @@ ROADMAP C1 on 6 Sept 2026.
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
   message instead of loading.
-- **Single-file** (`fractal-flight-v9_5.html`): a GENERATED ARTIFACT. **Never
+- **Single-file** (`fractal-flight-v9_6.html`): a GENERATED ARTIFACT. **Never
   edit it.** It is the double-click build jul and everyone else actually
   plays, so it ships in the repo even though it is generated.
 
@@ -308,11 +308,13 @@ Key chips in the HUD glow green when a toggle is active.
   the lever, not the floor.** The safe step for a heightfield marched by its
   VERTICAL gap is `gap × cos(slope)` = `gap / sqrt(1 + |∇h|²)` — **not**
   `gap / tan(slope)`, which is what this entry said until the slope census
-  was run. So 0.55 is safe only under **56.6°**, 0.35 under 69.5°, 0.25 under
-  75.5°, and **this island's steepest ground is 74.2°** — 0.25 is the only
-  provably safe value. Measured: 2.5% of the island is too steep for 0.55,
-  but 16.4% of the ridge Nico flew and 29.3% of the face he was looking at —
-  hence *certain* ridges.
+  was run. So 0.55 is safe only under **56.6°**, 0.35 under 69.5°, 0.30 under
+  72.5°, 0.25 under 75.5°. ⚠️ There is no "provably safe" value: a fractal's
+  measured max slope **does not converge** (72.9° on a 200 m grid, 80.9° on a
+  30 m one), so the number that matters is the fraction of the island a step
+  cannot march — **2.589% at 0.55**, 0.072% at 0.35, 0.017% at 0.30, 0.002%
+  at 0.25. That 2.6% is *certain ridges*: 16.4% of the ridge Nico flew and
+  29.3% of the face he was looking at are too steep for 0.55.
   Level or from above, a ray grazes the crest and the stride floor decides
   (§6.7); from below it crosses the crest body, the last gap in front of the
   face is tens of metres (it just crossed a valley), and the step lands past
@@ -322,9 +324,11 @@ Key chips in the HUD glow green when a toggle is active.
   secant-predicted step cap did nothing (the gap is not shrinking toward the
   crest). Priced at +53% iterations in mountain views, so `uRelaxMtn` is keyed
   on the mountain `mass` inside `terrainShapeLOD` (an `out` overload; sea and
-  beach frames +3%). Debug `mtn relax`, default 0.55 until Nico has flown the
-  cost. And once the relaxation varies along the ray, the crossing must be
-  interpolated from the GAPS (`pdT/(pdT − dT)`), not the steps. RESEARCH §6.9.
+  beach frames +5%). Debug `mtn relax`, **default 0.30 since 13 Sept 2026**
+  (Nico's call after flying 0.25: same fix, +76% instead of +108%); 0.55 sits
+  at the top of the slider as the A/B. And once the relaxation varies along
+  the ray, the crossing must be interpolated from the GAPS (`pdT/(pdT − dT)`),
+  not the steps. **The whole family is written up in docs/MARCHING.md.**
 - 🔗 **A refine bounded in strides breaks when the stride shrinks.** The
   secant extrapolation was capped at two strides; at a 0.0002 floor the last
   stride near a stop is short and two of it could not reach the crossing on
@@ -569,4 +573,4 @@ v2→v4.6 built the world/weapons/probe; v5 merged jul's rings + went
 modular; v5-v6 restored arcade feel + start page; v7 camera suite +
 shadows + fx occlusion; v8 view toggles with exact memory; v9 alien
 invasion + observation mode; C1 ended the dual-maintenance (`build.js`).
-Current: v9.5.
+Current: v9.6.

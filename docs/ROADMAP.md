@@ -46,17 +46,23 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.5, and so is the branch.** `main` points at it. v9.5 is the
-last version of the pure raymarcher: **v10 is a renderer change**, and it was
-Nico's call after the marcher hunt proved the residual flutter is not a bug.
+**Version is v9.6; the branch is still named `v9.5`.** (The branch name lags
+the version on purpose — PR #3's head branch on origin is named `v9.4`. See
+the push note at the bottom.) v9.6 is the last version of the pure
+raymarcher: **v10 is a renderer change**, and it was Nico's call after the
+marcher hunt proved the residual flutter is not a bug.
+
+📐 **Read `docs/MARCHING.md` before touching terrain, the march, or any SDF.**
+Six bugs over six weeks were one mechanism; that file is the law, eight rules
+and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**74 assertions, 12 files**; three skip without `npm install`, and one
+   (**79 assertions, 13 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **42/42 caught as of v9.5**). A green suite is not
+   (slow, opt-in, **45 mutants as of v9.6**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -64,95 +70,67 @@ Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
 ---
 
-### ✅ 1b. The mountains — ANSWERED 13 Sept 2026 (the stride floor), residue stated below
+### ✅ 1b. The camera-keyed glitches — CLOSED 13 Sept 2026, and written up
 
-Nico's screenshots showed the peak **cycling** pointy → rounded → pointy as
-he advanced one tap at a time, and a cycle is not parallax. A 1D rig that
-slides the camera 40 m on the 36 hardest rays found the shipped march losing
-and re-finding the crest 56 times; the cause is the minimum stride floor
-shaving the centimetre-scale clip a ray takes off a sharp crest tip. Nine
-candidates measured and killed on the way (RESEARCH §6.7). Default
-`march stride` 0.0009 → **0.0002**: hard-ray flips 84 → 19, +16–23%
-iterations; the refine bound fixed alongside. **Not zero**: the rest needs a
-4× march or v10. The table below is kept because the sliders still
-discriminate what the rig cannot see (trees, the A1 fade).
+Six bugs, one mechanism, now documented once instead of re-derived: **
+`docs/MARCHING.md`**. The last two fixes, both in v9.6:
 
-**13 Sept afternoon, residue after the stride fix — Nico flew it:** *"Putting
-the invasion and rings to none, does nothing, those peaks that shift, still
-shift. I know it's not related to other elements of the game... it's
-something around the camera view, and the terrain itself."* Measured at his
-exact camera (RESEARCH §6.8): shipped march = reference to 1 px on every
-column; GPU = fp64 to ≤3 px at his peak, constant offset; the chase camera
-is 0.34° from rest 1.5 s after a tap and swings for ~6 s after R. **Flown by
-Nico (17:05):** `freeze` stable, `snap` still breathing — the camera is
-cleared, the render owns it. His ALT 127 series, looking UP at a ridge,
-reproduced on the fp64 mirror: the step is 0.55 × the VERTICAL gap and the
-safe factor is cos(slope), so 0.55 covers only 56.6° while 16.4% of that
-ridge is steeper; from below, the ray crosses a crest 4–10 m thick along the
-ray with a step of up to 9.7 m — 30 px of horns and floating pieces
-(RESEARCH §6.9). **Fixed and FLOWN**: Debug → `mtn relax`, and Nico at the
-slider's left end (0.25): *"the issue is gone!"*
+- **From above / level**, a ray grazes a crest tip and the *minimum stride*
+  decides whether the centimetre clip is caught. `march stride` 0.0009 →
+  0.0002; hard-ray flips 84 → 19 (RESEARCH §6.7, nine dead ends listed).
+- **From below**, the ray crosses the crest *body* — 4–10 m thick along the
+  ray — with a step of up to 9.7 m, because the step is `relax × the vertical
+  gap` and the safe factor is `cos(slope)`: 0.55 covers only 56.6° and could
+  not march 2.589% of this island. `mtn relax`, keyed on the mountain `mass`,
+  **defaults to 0.30** (0.017% unmarchable, +76% iterations in a mountain
+  view, +5% over the sea). Nico, flying it: *"the issue is gone!"*
+  RESEARCH §6.8–6.9.
 
-**📐 The rules are now written down: `docs/MARCHING.md`.** Six bugs hunted
-separately over six weeks — hull horns, concentric rings, sea spikes into the
-beach, the flickering waterline, breathing peaks, morphing tree crowns — were
-ONE mechanism. That file has the law, eight rules, two checklists, the
-measured slope census of this world, and the levers already known dead.
-`node test/slope_census.js` re-derives every number in 1.2 s;
-`test/test_march.js` makes the rules enforceable. **Read it before touching
-terrain, march or any SDF.**
-
-✅ **ANSWERED 13 Sept 2026 — `mtn relax` defaults to 0.25.** Nico's call after
-flying it: *"The mtn relax setting does the job! ... the issue is gone!"*
-0.25 leaves 0.002% of the island unmarchable (0.55 left 2.6%), and costs
-**+108% march iterations in a mountain view**, +6% over the sea. `mtn relax`
-stays a slider with 0.55 at the top, so the v9.5 behaviour is one drag away.
-
-▶ **The one thing to watch: frame rate on jul's machine.** Nico was at 40–47
-fps at 1707×932 before this; the mountain-view cost roughly doubles the march.
-If it bites, 0.35 (0.072% unmarchable, +53%) and 0.30 (0.017%, +76%) are the
-cheaper safe-ish rungs — fly them at the same spot and see whether the eye can
-tell. Changing the default means editing `test/test_march.js`'s safety
-assertion and MARCHING.md §7 with the number it costs.
-
-▶ **Then the known rule violations, MARCHING.md §7 — fixes, not
-investigations:** `plantEval`'s 550 m frond→envelope switch is hard AND keyed
-per SAMPLE, so a tree straddling it is drawn half detailed, half blob and the
-boundary sweeps as you fly (this is the tree half of Nico's report, R7); the
-plant hit tolerance has no incidence factor and no refine, fattening every
-tree by `tolRay/0.45` — 1 m at 300 m, 3.3 m at 1 km (R6). Also: the
-`peak height` slider can build a world no relaxation can render (at 800 the
-island needs 0.22 and 7.3% is unmarchable at the default). Run the mutation
-battery: 45 mutants now.
-
-#### the original discrimination table (still valid for anything that survives the stride fix)
-
-Nico, having flown v9.5: *"the mountains still have that thing where most
-are correct and don't change, at some points the ridges fluctuate quite
-wildly in a zone, while the rest seems quite ok."*
-
-**What is already known** (RESEARCH.md §6.6): on the fp64 mirror the v9.5
-march has FEWER hit-distance jumps on ridges than a near-exact reference
-(33 vs 41; 17 vs 22), and a tighter tolerance makes it worse, not better.
-So the marcher's share is gone; what the rig can see of the remainder is
-geometry — a crease aligned with the line of sight. But the rig has **no
-trees and no A1 octave fade**, and either could be the "zone". Ask Nico to
-fly the wild zone and change ONE slider at a time:
-
-| slider | if the zone calms | then it is |
-|---|---|---|
-| Debug → `detail fade` → 0 | yes | A1 morphing the crest as an octave crosses Nyquist at that distance band. Fix: a slower fade, or a world-locked footprint. |
-| Tuning → `flora range` → 0 | yes | the plant SDF: a forested ridge marches through many small SDFs. Fix in `plantEval`'s far envelope, or exclude plants from silhouette rays. |
-| Debug → `resolution` → 2 | it roughly halves | inherent one-ray-per-pixel crease boil. No marcher fix; v10. |
-| Debug → `march budget` on | any WHITE pixel | budget still exhausted somewhere — report where. |
-| Debug → `hit refine` off / `march stride` 1.8 | no change | (expected; confirms the marcher is not it) |
-
-Do not build anything before that table has answers. The rig for the
-marcher half is `scratchpad/ridgejump.js`-style: two frames 2 m apart,
-count |Δt| > 50 m against the reference march.
+Also shipped for the hunt and worth keeping: Debug `obs camera`
+(`snap`/`freeze` — a camera that does not glide, which is how the camera was
+finally cleared as the cause), `invasion` and `rings` (hide everything that
+moves by itself), `test/slope_census.js` (re-derives the whole census in
+1.2 s) and `test/test_march.js` (fails if a terrain edit outruns the
+relaxation slider).
 
 ---
 
+### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
+
+Nico, 13 Sept: *"certain trees... a tree that should have a fixed contour,
+even with parallax, should not get a different form, but some do."* Both
+causes are known, both are rule violations from MARCHING.md §7, and neither
+needs an investigation — only the work and a GPU cost measurement.
+
+1. **The 550 m frond→envelope switch is hard AND keyed per SAMPLE** (R7).
+   `plantEval` picks the detailed silhouette or the smooth envelope from the
+   *sample's* march distance, so one tree straddling 550 m is drawn half
+   detailed and half blob, and that boundary sweeps through it as you fly.
+   Fix: key the switch on the TREE CELL's distance (so a tree is never split)
+   and cross-fade it over a band instead of snapping — and pick the distance
+   from the pixel footprint, the way A1 fades terrain octaves, rather than a
+   fixed 550 m. ⚠️ Measure the GPU cost first: fronds beyond 550 m is exactly
+   the work the LOD exists to avoid.
+2. **The plant hit tolerance has no incidence factor and no refine** (R6).
+   `dP < tolRay` with the 0.45 Lipschitz margin fattens every tree by
+   `tolRay/0.45` — 1 m at 300 m, 3.3 m at 1 km — and its edge jitters ±1 px
+   with the sample phase. The terrain march already solves both
+   (`tolRay * max(abs(rd.y), 0.06)` and the secant refine); the plant branch
+   was simply never given them.
+
+Hand Nico a build with `flora range` at its default and ask for the same
+one-tap-at-a-time series he flew for the peaks — the tell is identical: a
+contour that CYCLES rather than growing monotonically.
+
+### ▶ 1d. Watch the frame rate at the new default
+
+`mtn relax` 0.30 roughly doubles the march in mountain-heavy frames (+76%).
+Nico was at 40–47 fps at 1707×932 before it. If it bites — on his machine or
+jul's — 0.35 (0.072% unmarchable, +53%) is the next rung, and `resolution` is
+the other lever. Changing the default means editing `test/test_march.js`'s
+safety assertion and MARCHING.md §7 with the number it costs.
+
+---
 ### ▶ 2. v10 — the hybrid: fractal DEFINITION, rasterised GEOMETRY
 
 **This is the next item, and it is a big one.** Nico, 12 Sept 2026, after the

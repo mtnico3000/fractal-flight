@@ -133,16 +133,17 @@ export const TUNED = {
   // the crest BODY (4-10 m thick along the ray) with a step of up to 9.7 m, so
   // the crest was found or missed by sample phase alone: Nico's horns and
   // floating pieces. He flew the slider to its left end and reported "the
-  // issue is gone!", so 0.25 (safe to 75.5 deg, 0.002% of the island left
-  // unmarchable) is the default from 13 Sept 2026, at +108% march iterations
-  // in a mountain view and +6% over the sea -- the relaxation is keyed on the
-  // mountain mass, so frames without mountains barely pay. 0.55 is kept at the
-  // top of the range as the v9.5 A/B, and the bottom is 0.20 (safe to 78.5)
-  // because `peak height` at its own maximum needs 0.22: a tuning slider must
-  // not be able to build a world the marcher cannot render.
+  // issue is gone!", then set the shipping default one rung up: **0.30**,
+  // safe to 72.5 deg, leaving 0.017% of the island unmarchable against 2.6%
+  // at 0.55, for +76% march iterations in a mountain view and +5% over the
+  // sea (0.25 was 0.002% at +108%). The relaxation is keyed on the mountain
+  // mass, so frames without mountains barely pay. 0.55 is kept at the top of
+  // the range as the v9.5 A/B, and the bottom is 0.20 (safe to 78.5) because
+  // `peak height` at its own maximum needs 0.22: a tuning slider must not be
+  // able to build a world the marcher cannot render.
   // docs/MARCHING.md R1-R2, test/test_march.js, RESEARCH s6.9.
-  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.25, d: 0.25, min: 0.20, max: 0.55, step: 0.05,
-                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.225 && x < 0.275 ? ' (safe)' : '') },
+  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.30, d: 0.30, min: 0.20, max: 0.55, step: 0.05,
+                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.275 && x < 0.325 ? ' (safe)' : '') },
   // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
   // mothership" to tell what moves from what is drawn. Hidden = hulls, beams
   // and their collisions are gone; the invasion economy keeps running under

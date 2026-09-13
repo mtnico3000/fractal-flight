@@ -1019,11 +1019,14 @@ And the terrain, sampled at 1 m (28 453 land points, 5 108 on that ridge):
 | the ridge ahead of his camera | 47.4° | 67.8° | 72.5° | **16.4%** |
 | the west face of that crest | 54.6° | 61.9° | 65.1° | **29.3%** |
 
-That is the answer to *"why certain ridges and not others"*: 97.5% of the
-island is gentle enough that 0.55 is a safe step and nothing moves. The
-island's steepest ground is 74.2°, so **0.25 is the only value that is
-provably safe everywhere on this world** — which is exactly where Nico's
-slider ended up when he found it by eye.
+That is the answer to *"why certain ridges and not others"*: 97.4% of the
+island is gentle enough that 0.55 is a safe step and nothing moves.
+
+⚠️ This table samples on a 60 m grid. A denser sweep (docs/MARCHING.md §3.2, `test/slope_census.js`) shows the
+**max does not converge** — so "the island's steepest ground is 74.2°" is a
+lower bound, not a bound, and there is no provably safe relaxation. The
+honest statistic is the fraction of land a given step cannot march: 2.589%
+at 0.55, 0.072% at 0.35, 0.017% at 0.30, 0.002% at 0.25.
 
 Rig: his exact snap camera (15.70 m behind, 8.52 m up, 10.564° down) at his
 twelve positions (x 2159 → 2070, z 3192), his 1707×932 buffer, the crest band
@@ -1077,10 +1080,10 @@ flown the cost. **He flew it the same evening: at the slider's left end
 it as 0.1 — *"the issue is gone"*.** That is the census's own answer, 0.25
 being the value that leaves only 0.002% of the island unmarchable, arrived at
 independently and by eye. Cost at that end: +108% iterations in his mountain
-view, +6% over the sea. **0.25 became the default the same evening, on his
-instruction**; 0.55 stays at the top of the slider as the A/B. 0.35 (0.072%
-unmarchable, +53%) and 0.30 (0.017%, +76%) are the cheaper rungs if the frame
-rate bites on jul's machine.
+view, +6% over the sea. **The shipping default is 0.30**, one rung up, on his
+instruction the same evening — 0.017% unmarchable at +76%/+5%, i.e. a third
+less cost for 0.015 points of coverage. 0.55 stays at the top of the slider
+as the A/B, and 0.35 (0.072%, +53%) is the next rung if the frame rate bites.
 
 #### A footnote that cost a week
 

@@ -91,8 +91,8 @@ justify an unsafe step. `test/test_march.js` pins the formula for that reason.
 | **0.55** (the v9.5 bug, kept at the slider top for A/B) | 56.6° | **2.589%** |
 | 0.45 | 63.3° | 0.643% |
 | 0.35 | 69.5° | 0.072% |
-| 0.30 | 72.5° | 0.017% |
-| **0.25 — the default since 13 Sept 2026** | 75.5° | **0.002%** |
+| **0.30 — the default since 13 Sept 2026** | 72.5° | **0.017%** |
+| 0.25 | 75.5° | 0.002% |
 | 0.20 (slider floor) | 78.5° | 0.001% |
 
 That last column *is* the bug, quantified: 2.6% of the island could not be
@@ -301,13 +301,14 @@ one. The reusable pattern is in RESEARCH §6.7–6.9.
 Honest list, so nobody rediscovers them the hard way:
 
 - ~~`mtn relax` ships at 0.55~~ — **resolved 13 Sept 2026.** Nico flew the
-  slider to its left end and reported *"the issue is gone!"*, so **0.25 is
-  the default**: 0.002% of the island left unmarchable, at +108% march
-  iterations in a mountain view and +6% over the sea (the relaxation is keyed
-  on the mountain `mass`, so frames without mountains barely pay). 0.55 stays
-  at the top of the slider as the v9.5 A/B. `test/test_march.js` now asserts
-  the DEFAULT is safe, so trading it back for frame rate is a deliberate edit
-  with a number attached.
+  slider to its left end (*"the issue is gone!"*) and then set the shipping
+  default one rung up: **0.30**. It leaves 0.017% of the island unmarchable
+  against 2.589% at 0.55, and costs +76% march iterations in a mountain view
+  and +5% over the sea, where 0.25 cost +108%/+6% for 0.015 points more
+  coverage. The relaxation is keyed on the mountain `mass`, so frames without
+  mountains barely pay. 0.55 stays at the top of the slider as the v9.5 A/B.
+  `test/test_march.js` asserts the DEFAULT is safe, so trading it back for
+  frame rate is a deliberate edit with a number attached.
 - **The `peak height` tuning slider can create a world no relaxation setting
   can fix**: at its maximum (800) the island needs relax 0.22 and 7.3% of it
   is unmarchable at the default. The sliders are gameplay-affecting and there
