@@ -500,6 +500,16 @@ node test/run_tests.js        # everything
   live (15.7 m back, 8.5 m up, 10.56° down) and to the springs' own
   fixed-point equations, so it cannot drift from what the springs do. One
   mutant (12 rounds → 1) verified red.
+- `test/test_march.js` — **the march and the terrain are not independent.**
+  The march steps `relax × the vertical gap`, which is a safe step only up to
+  `acos(relax)`; steepen the world and rays start crossing ridges without
+  sampling inside them. Asserts the safe-step formula (`cos`, not `1/tan` —
+  the first write-up had it wrong), that the shipped terrain's slope
+  percentiles have not moved, that the `mtn relax` slider can still reach a
+  safe value, and that the Mandelbrot `mass` field is still the gradient
+  outlier it was measured to be. Verified red by raising `peak height` to its
+  own maximum. Runs in 0.1 s. `test/slope_census.js` (not a suite) prints the
+  full derivation in 1.2 s — run it after ANY terrain change.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every
@@ -532,6 +542,14 @@ a jsdom test that asks whether something is VISIBLE has to inline
 Full version-by-version chronicle with the WHY behind every design decision
 and every bug post-mortem: **docs/HISTORY.md** (read it before touching
 flight/camera/rings/aliens — most "weird" code guards a documented bug).
+⚠️ **Before touching the terrain, the march, or any SDF in the world, read
+docs/MARCHING.md.** Six bugs hunted separately over six weeks — hull horns,
+concentric rings, sea spikes into the beach, the flickering waterline,
+breathing peaks, morphing tree crowns — were ONE mechanism: a feature thinner
+than the marcher's local sample spacing is found or missed depending on where
+the camera stands, and flips cyclically as it moves. That file has the law,
+eight rules, two checklists, the measured slope census of this world, and the
+levers that are already known dead. It is the highest-value page in docs/.
 Research notes (shimmer diagnosis + fix rationale, terrain-variation
 papers, TerraForge3D findings, Mandelbox parameter guide):
 **docs/RESEARCH.md** — required reading for ROADMAP sections A and B.

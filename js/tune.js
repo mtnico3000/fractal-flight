@@ -136,8 +136,11 @@ export const TUNED = {
   // floor was the lever from above; this is the lever from below. 0.35 is
   // safe for 70 deg faces and costs +53% iterations in mountain views; keyed
   // on the mountain mass, the sea and beach frames pay +3%. Default is the
-  // v9.5 behaviour until Nico has flown the cost.
-  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.25, max: 0.55, step: 0.05,
+  // v9.5 behaviour until Nico has flown the cost. The bottom of the range is
+  // 0.20 (safe to 78.5 deg) because `peak height` at its own maximum needs
+  // 0.22 -- a tuning slider must not be able to build a world the marcher
+  // cannot render. docs/MARCHING.md R1-R2, test/test_march.js.
+  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.20, max: 0.55, step: 0.05,
                 fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.325 && x < 0.375 ? ' (safe)' : '') },
   // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
   // mothership" to tell what moves from what is drawn. Hidden = hulls, beams

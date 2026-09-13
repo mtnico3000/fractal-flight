@@ -93,15 +93,31 @@ ray with a step of up to 9.7 m — 30 px of horns and floating pieces
 (RESEARCH §6.9). **Fixed and FLOWN**: Debug → `mtn relax`, and Nico at the
 slider's left end (0.25): *"the issue is gone!"*
 
-▶ **The open question, and it is Nico's:** 0.25 is the only value provably
-safe on this island (steepest ground 74.2°) and costs **+108% march
-iterations** in a mountain view; 0.35 clears every swing the crest-band rig
-can see at **+53%**, and 0.30 at +76%. Fly 0.35 and 0.30 at the same spot and
-see whether the eye can tell them from 0.25 — then the winner becomes the
-default (jul's GPU pays it too) instead of a slider at 0.55. Then the trees: the 550 m
-frond→envelope switch keyed per SAMPLE (splits a tree) and the plant stop
-tolerance without a refine — same law (the §6.8 review in HISTORY). Run the
-mutation battery: 44 mutants now.
+**📐 The rules are now written down: `docs/MARCHING.md`.** Six bugs hunted
+separately over six weeks — hull horns, concentric rings, sea spikes into the
+beach, the flickering waterline, breathing peaks, morphing tree crowns — were
+ONE mechanism. That file has the law, eight rules, two checklists, the
+measured slope census of this world, and the levers already known dead.
+`node test/slope_census.js` re-derives every number in 1.2 s;
+`test/test_march.js` makes the rules enforceable. **Read it before touching
+terrain, march or any SDF.**
+
+▶ **The open question, and it is Nico's:** relax 0.25 leaves 0.002% of the
+island unmarchable and costs **+108% march iterations** in a mountain view;
+0.35 leaves 0.072% at **+53%**; 0.30 leaves 0.017% at +76%. The default still
+ships at 0.55, which leaves **2.6%** — that is the bug, knowingly left in for
+A/B. Fly 0.35 and 0.30 at the same spot and see whether the eye can tell them
+from 0.25; the winner becomes the default (jul's GPU pays it too).
+
+▶ **Then the known rule violations, MARCHING.md §7 — fixes, not
+investigations:** `plantEval`'s 550 m frond→envelope switch is hard AND keyed
+per SAMPLE, so a tree straddling it is drawn half detailed, half blob and the
+boundary sweeps as you fly (this is the tree half of Nico's report, R7); the
+plant hit tolerance has no incidence factor and no refine, fattening every
+tree by `tolRay/0.45` — 1 m at 300 m, 3.3 m at 1 km (R6). Also: the
+`peak height` slider can build a world no relaxation can render (at 800 the
+island needs 0.22 and 7.3% is unmarchable at the default). Run the mutation
+battery: 45 mutants now.
 
 #### the original discrimination table (still valid for anything that survives the stride fix)
 

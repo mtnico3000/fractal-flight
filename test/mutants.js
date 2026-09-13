@@ -194,6 +194,13 @@ const MUTANTS = [
   // --- the from-below crest straddle (13 Sept 2026, afternoon) -------------
   ['the step relaxation is hard-wired to 0.55 again (crest horns from below)', 'js/shaders.js',
    'float d = min(dT * relax, dP);', 'float d = min(dT * 0.55, dP);', 'test_shader.js'],
+
+  // --- the march/terrain contract (13 Sept 2026) ---------------------------
+  // A tuning slider must not be able to build a world the marcher cannot
+  // render: at `peak height` 800 the island needs relax 0.22 and 7.3% of it
+  // is unmarchable at the default. test_march.js is the only thing watching.
+  ['the relaxation slider can no longer reach a safe step', 'js/tune.js',
+   "label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.20", "label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.45", 'test_march.js'],
 ];
 
 function mutate(src, find, repl, all) {
