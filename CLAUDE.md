@@ -328,6 +328,14 @@ Key chips in the HUD glow green when a toggle is active.
   of sunlit land is wrongly black** (`terrainCheapH`: 2 octaves, 13 escape
   iterations, no domain warp, against 3/26/warped). Real, ugly, and *static*
   — it moves 0.1% between frames, so it is not the flutter. Parked.
+- 🚰 **Never pipe `node test/mutants.js` through `tail` inside a `&&` chain.**
+  HISTORY's "Lessons" already says piping tests through `tail` masked a
+  failure once; on 13 Sept 2026 it happened again, worse: the battery
+  crashed on a transient write failure to `js/aliens.js`, the pipe returned
+  `tail`'s exit code, the chain went on to `git push`, and the working tree
+  was left with a MUTANT in it. The push was of the clean commit, by luck.
+  Run the battery on its own line, or redirect to a file and check `$?`;
+  and it now retries a failed write and restores on any uncaught exception.
 - 🌐 **`serve.py` bound IPv6-ONLY and refused `127.0.0.1`** (found
   12 Sept 2026, when Chrome said "site can't be reached" against a server that
   was printing a perfectly healthy banner). With no bind argument the stdlib
@@ -466,7 +474,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **41/41 mutants caught as of v9.5.** It earned its
+  the predicate it named. **42/42 mutants caught as of v9.5.** It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch

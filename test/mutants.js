@@ -29,7 +29,19 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const write = (f, s) => fs.writeFileSync(path.join(ROOT, f), s);
+// A write can fail transiently on Windows (EBUSY/EPERM while another process
+// has the file open -- it happened once, 13 Sept 2026, on js/aliens.js). A
+// failed RESTORE would leave a mutant on disk, so retry a few times before
+// giving up, and let the uncaughtException handler below restore everything.
+const write = (f, s) => {
+  for (let attempt = 0; ; attempt++) {
+    try { return fs.writeFileSync(path.join(ROOT, f), s); }
+    catch (e) {
+      if (attempt >= 5) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * (attempt + 1));
+    }
+  }
+};
 
 // [label, file, find, replace, test, all?]. `find` must appear at least once.
 // Only the FIRST occurrence is replaced by default, so a mutant can target one
@@ -202,6 +214,12 @@ if (dirty) {
 const originals = new Map(targets.map(f => [f, read(f)]));
 const restoreAll = () => { for (const [f, s] of originals) { try { write(f, s); } catch {} } };
 process.on('SIGINT', () => { restoreAll(); process.exit(130); });
+// Any crash mid-run must put the sources back before the process dies.
+process.on('uncaughtException', e => {
+  try { restoreAll(); } catch (e2) { console.error('RESTORE FAILED — check `git status`:', e2.message); }
+  console.error('mutation battery crashed:', e && e.stack || e);
+  process.exit(2);
+});
 
 console.log('mutation battery — every row must go RED\n');
 console.log('%s %s', 'MUTANT'.padEnd(58), 'RESULT');

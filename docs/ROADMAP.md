@@ -56,7 +56,7 @@ Nico's call after the marcher hunt proved the residual flutter is not a bug.
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **41/41 caught as of v9.4**). A green suite is not
+   (slow, opt-in, **42/42 caught as of v9.5**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -315,7 +315,7 @@ git push origin v9.5 v9.5:v9.4 main
   bitmask, plus resolution / detail fade / ray tol / water LOD). Built as a
   diagnostic, kept on Nico's call: *"we're going to keep the whole debug
   panel, it's fun to tweak."* It is how the rings were localised.
-- Suite **72 assertions / 11 files**, battery **41/41**. New:
+- Suite **72 assertions / 11 files**, battery **42/42**. New:
   `test/test_panels.js` (the panels as a real DOM).
 
 ### Open questions for Nico
@@ -571,7 +571,7 @@ drafted:
    patch-drift bugs.
 2. **Port the Node test harnesses (S/M)** — ✅ **C2 COMPLETE.** `test/` runs
    **72 assertions across 11 files** plus `check_module_refs.py`, and
-   `test/mutants.js` verifies the tests themselves (**41/41**). Three suites
+   `test/mutants.js` verifies the tests themselves (**42/42**). Three suites
    need `npm install` (`test_glsl.js`, `test_smoke.js`, `test_panels.js`)
    and skip themselves with a note without it, so a bare clone still runs
    the other seven. Flight modes and rings still have no coverage — see
