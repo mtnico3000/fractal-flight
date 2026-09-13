@@ -284,11 +284,24 @@ Key chips in the HUD glow green when a toggle is active.
   a different set every frame. Same bug as the hull horns, on the other
   march. Now 384 iterations *and* the fallthrough returns the surface the ray
   was crawling along. `test_shader.js` guards both. (docs/RESEARCH.md §6)
-- 📏 **The minimum stride hops features shorter than itself.** `t*0.0018` is
-  5.4 m at 3 km; beach berms shorter than that were stepped over and the hit
-  landed up to 45 m further along (p99), hop or no hop flipping with the
-  camera. `uMarchStride` (Debug slider, default 0.9‰) halves it for +4%
-  frame time.
+- 📏 **The minimum stride is the lever for BOTH the beach and the peaks.**
+  `t*0.0018` (5.4 m at 3 km) stepped over beach berms; 0.0009 fixed that.
+  Then Nico's peaks "breathing" as he advanced — pointy, rounded, pointy, in
+  a loop — turned out to be the same floor shaving the centimetre-scale clip a
+  ray takes off a sharp crest tip: 0.4 m at 450 m steps over it or not
+  depending on the camera. A 1D rig (slide the camera 40 m along the view on
+  the 36 hardest rays) put the shipped floor at 84 flips and **0.0002 at 19**,
+  for +16–23% iterations. Relax was NOT the lever — 0.15 with the old floor
+  still flipped 52 times — and neither was along-ray sample phase (15 flips in
+  2 916 when sliding *along* a ray; the sequence re-converges), which killed a
+  world-anchored lattice idea by measurement. `uMarchStride` default 0.2‰,
+  slider down to 0.1‰. docs/RESEARCH.md §6.7 has the nine dead ends.
+- 🔗 **A refine bounded in strides breaks when the stride shrinks.** The
+  secant extrapolation was capped at two strides; at a 0.0002 floor the last
+  stride near a stop is short and two of it could not reach the crossing on
+  a shallow beach — residual 0.05 → 0.34 m at 4 km, silently. The bound is
+  `max(2 strides, tolRay)`; `tolRay` is exactly the along-ray distance a
+  within-tolerance gap can still need. Pinned with a mutant.
 - 🎯 **The tolerance stop's residual is what every altitude band is keyed
   on.** `terrainColor(pos, n, pos.y, px)` — the `h` is the *ray's* height at
   the stop, 1.2 m mean / 3.2 m p99 above the surface at 4 km, and on a 2.35%

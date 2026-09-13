@@ -835,3 +835,75 @@ forested ridge marches through many small SDFs).
 
 Cures for the inherent part: `resolution` 2× averages the straddling rays
 (≈ halves it); v10's mesh has an exact crease and MSAA.
+
+### 6.7 The peaks that breathe: the crest clip, and the stride floor (13 Sept 2026)
+
+Nico, with 18 screenshots one arrow-tap apart: *"the peak is not a peak
+anymore and shifts down, then back up to a pointy peak... as in a loop...
+This makes the peaks 'flutter' and like rise and fall with regularity when
+flying over."* That word — **loop** — is what cracked it. Parallax is
+monotonic: approaching a peak can only make it progressively more or less
+pointed. Something that cycles with distance travelled is the march.
+
+§6.6 had measured whole frames at one camera position and found v9.5 at
+reference level. A peak tip is a handful of pixels, and the effect is
+temporal; the frame metric could not see it. So a 1D rig: find the rays a
+frame flags (hit >50 m beyond the reference at a real cliff, 350 m out),
+then **slide the camera 40 m in 0.5 m steps** and record every variant's hit
+against the reference's. The shipped march loses and re-finds the crest
+**56 times across 12 rays** — a square wave with a period of ~8 m — while the
+reference never loses it once. One ray: `ship 551 549 548…` against
+`ref 457 455 453 546…`: the reference sees the crest at 457 m for the first
+metres, the shipped march sails through to the slope behind at 551.
+
+#### What it is not (each measured, each dead)
+
+| candidate | result | verdict |
+|---|---|---|
+| straight-line crossing on a wall (bisect the bracket instead) | 0 change | the crest is never bracketed |
+| step too long for the slope (relax 0.30) | misses ÷2, flips unchanged, +57% | partial, and flips are what you see |
+| step cap in metres (4–8 m) | flips barely move, **3–7× cost** | no |
+| adaptive Lipschitz step from the last two samples | helps 2 of 3 cliffs, +3% | the crease steepens *after* the samples that estimate it |
+| near-surface relax floor (0.12–0.20 when gap < 25–40 m) | misses ÷2, flips unchanged | no |
+| midpoint tunnel check when steep | misses 222→135, flips 84→79, +5% | not enough |
+| **along-ray sample phase** (the obvious theory) | sliding the camera *along* a hard ray: **15 flips in 2 916** | **not the mechanism** — the sample sequence re-converges on the surface within a few steps |
+| world-anchored sample lattice (so a missed crest stays missed) | misses 222→389–806, flips worse | wrong, because the above was wrong |
+| rounding the ridge crease (`sqrt(x²+ε²)` for `\|x\|`) | affected rays ÷3, but those still flip; mountains move up to 23 m | not for a partial result |
+| relax 0.15 with the shipped stride floor | **still 52 flips** — the reference differs from it only in the floor | **the floor is the lever** |
+
+The flips come from the ray shifting *sideways* across the crest as the
+camera advances (off-axis pixels), which is real ray motion — the reference
+handles it with zero flips because it always catches the clip. The clip a
+ray takes off a sharp crest tip is centimetres to a metre along the ray, and
+the **minimum stride** (`t·0.0009` = 0.4 m at 450 m) steps over it or not
+depending on where the camera is.
+
+#### The stride floor, priced
+
+| relax / stride floor | hard rays: misses | flips | mean err | cliff frame | beach | ridge |
+|---|---|---|---|---|---|---|
+| 0.55 / 0.0009 (v9.5) | 209 | 52 | 41 m | 41.6 | 27.5 | 35.6 |
+| 0.55 / 0.0004 | 117 | 24 | 28 m | +13% | +9% | +12% |
+| **0.55 / 0.0002 (ships)** | **86** | **19** | **7.5 m** | **+23%** | **+16%** | **+21%** |
+| 0.55 / 0.0001 | 74 | 15 | 8 m | +30% | +21% | +28% |
+| 0.35 / 0.0002 | 21 | 13 | 5 m | +82% | +74% | +81% |
+| reference | 0 | 0 | 0 | 4.1× | 4.0× | 4.1× |
+
+(Against the v9.5 build as it actually shipped — the old refine bound — the
+hard-ray flips were 84; the new default's 19 is a 4.4× reduction.)
+
+#### The regression the smaller floor exposed
+
+At 0.0002 the high-beach residual went **0.05 → 0.34 m** and the hit shift
+p99 0.8 → 7.1 m. The refine's extrapolation was bounded to *two strides*,
+and with a short last stride that could not reach the crossing on a shallow
+beach. `tolRay` is exactly the along-ray distance a within-tolerance gap can
+still need, so the bound is now `max(2·stride, tolRay)`: residual 0.07 m,
+shift 0.9 m, and the sea scene's wrong-surface count halves (20 → 10) with
+no holes. Pinned in `test_shader.js` with a mutant.
+
+#### What remains, stated plainly
+
+19 flips on the hardest 36 rays is not 0. The remainder needs the
+reference-class march (4× the frame) or exact geometry (v10). The
+`march stride` Debug slider now reaches 0.1‰ for anyone who wants 15 at +30%.

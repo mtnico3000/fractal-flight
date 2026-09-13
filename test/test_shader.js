@@ -115,7 +115,13 @@ check('the terrain march: budget is a hit, not a hole; refine only while closing
      'the hit refine may only extrapolate while the gap is still SHRINKING; a ' +
      'growing gap is a ray cresting a bump and extrapolating hands it to the far side');
   ok(/t \+= d \+ t \* uMarchStride;/.test(body),
-     'the minimum stride must be the uMarchStride uniform (0.0009), not the old 0.0018 constant');
+     'the minimum stride must be the uMarchStride uniform, not a constant');
+  // 13 Sept 2026: with the stride floor at 0.0002 the last step before a stop
+  // is short, and a refine bounded to TWO of it could not reach the crossing
+  // on a shallow beach -- residual 0.05 -> 0.34 m at 4 km, silently. tolRay is
+  // exactly the along-ray distance a within-tolerance gap can still need.
+  ok(/t \+ max\(2\.0 \* \(t - pt\), tolRay\)\)/.test(body),
+     'the refine extrapolation must be bounded by max(two strides, tolRay), not two strides alone');
 });
 
 check('the hull marches keep their tangency budget', () => {

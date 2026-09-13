@@ -522,7 +522,12 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
       // marcher's own parallax count, for ~1.7 extra evaluations per pixel.
       if (!plant && dT > 0.0 && pdT > dT && pdT < 1e4 && uHitRefine > 0.5) {
         lo = t; dStop = dT;
-        t = min(t + dT * (t - pt) / (pdT - dT), t + 2.0 * (t - pt));
+        // Bounded to two strides OR one tolRay, whichever is larger: with a
+        // small stride floor the last step near a stop is short, and two of
+        // it could not reach the crossing on a shallow beach (residual 0.05 ->
+        // 0.34 m at 4 km when the floor went to 0.0002). tolRay is exactly the
+        // along-ray distance a within-tolerance gap can still need.
+        t = min(t + dT * (t - pt) / (pdT - dT), t + max(2.0 * (t - pt), tolRay));
         phase = 1;
         continue;
       }
@@ -533,8 +538,13 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     // ground at all. It was a constant 0.0018*t -- 5.4 m at 3 km -- which
     // stepped clean over beach berms shorter than that and landed the hit up
     // to 45 m further along (p99, over-the-sea beach view), a different place
-    // every frame. 0.0009 cuts that to 9 m for +11% iterations; the Debug
-    // slider is there so the trade can be flown, not argued.
+    // every frame. 0.0009 cut that to 9 m. Then the peaks: a ray shaving the
+    // tip of a sharp ridge is below the surface for centimetres, and a floor
+    // of 0.4 m (0.0009 at 450 m) steps over that clip or not depending on
+    // where the camera is -- the crest "breathes" as you advance. Measured on
+    // 36 such rays over a 40 m slide: misses 222 -> 22 and flips 84 -> 14 at
+    // 0.0002, for +13-22% iterations; relax was not the lever (0.15 with the
+    // old floor still flipped 52 times). RESEARCH.md s6.7. Debug slider.
     t += d + t * uMarchStride;
     if (t > T_MAX) return vec2(-1.0, 0.0);
   }

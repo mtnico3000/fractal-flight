@@ -726,7 +726,26 @@ a different set every frame. The horns, exactly.
   to 35% by 4 km — v4.6's "exaggerated perspective" — which is precisely a
   form that changes as you fly past. Now `tree persp`, default off.
 - Suite 72 assertions / 11 files; battery 41/41. Version strings left at
-  v9.4 — the bump is Nico's call.
+  v9.4 — the bump is Nico's call. (Bumped to v9.5 the next morning.)
+
+**13 Sept, the peaks.** Nico flew v9.5: *"it's great the coast issue is
+fixed, it worked!"* — and then sent 18 screenshots of a peak that went
+pointy → rounded → pointy *in a loop* as he advanced one arrow-tap at a
+time. *"I am 99% positive that it's the same glitch as the beach one, and
+the rounded borders one."* He was right a fourth time, and the word "loop"
+was the key: parallax is monotonic, a cycle is the march. Five frame-level
+hypotheses were tested and cleared first (march accuracy at cliff feet,
+sub-metre roughness of the mountain front, fp32 precision, shadow flicker,
+crease sharpness); a 1D camera-slide rig on the 36 hardest rays then found
+the shipped march losing and re-finding the crest 56 times where the
+reference never did. Nine remedies measured; the one that scaled was the
+**minimum stride floor** — 0.0009 → 0.0002, flips 84 → 19, +16–23%
+iterations — and the theory everyone (including the rig's author) believed
+first, along-ray sample phase, measured at 15 flips in 2 916 and took a
+world-anchored-lattice idea down with it. A refine-bound regression the
+smaller floor exposed (beach residual 0.05 → 0.34 m) was caught by the rig
+before it shipped and pinned with a mutant. Also today: a POS readout and a
+URL teleport, so the next glitch travels as a link. RESEARCH §6.7.
 
 ## Lessons that shaped the tooling
 

@@ -64,7 +64,20 @@ Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
 ---
 
-### ▶ 1b. The mountains — Nico's open item after v9.5 (do this with him, not for him)
+### ✅ 1b. The mountains — ANSWERED 13 Sept 2026 (the stride floor), residue stated below
+
+Nico's screenshots showed the peak **cycling** pointy → rounded → pointy as
+he advanced one tap at a time, and a cycle is not parallax. A 1D rig that
+slides the camera 40 m on the 36 hardest rays found the shipped march losing
+and re-finding the crest 56 times; the cause is the minimum stride floor
+shaving the centimetre-scale clip a ray takes off a sharp crest tip. Nine
+candidates measured and killed on the way (RESEARCH §6.7). Default
+`march stride` 0.0009 → **0.0002**: hard-ray flips 84 → 19, +16–23%
+iterations; the refine bound fixed alongside. **Not zero**: the rest needs a
+4× march or v10. The table below is kept because the sliders still
+discriminate what the rig cannot see (trees, the A1 fade).
+
+#### the original discrimination table (still valid for anything that survives the stride fix)
 
 Nico, having flown v9.5: *"the mountains still have that thing where most
 are correct and don't change, at some points the ridges fluctuate quite

@@ -58,6 +58,8 @@ const MUTANTS = [
    'pdT > dT && pdT < 1e4 && uHitRefine', 'pdT < 1e4 && uHitRefine', 'test_shader.js'],
   ['the minimum stride is hard-wired to the old 0.0018 again', 'js/shaders.js',
    't += d + t * uMarchStride;', 't += d + t * 0.0018;', 'test_shader.js'],
+  ['the refine bound drops tolRay (beach residual 0.05 -> 0.34 m, silently)', 'js/shaders.js',
+   't + max(2.0 * (t - pt), tolRay))', 't + 2.0 * (t - pt))', 'test_shader.js'],
 
   // --- render path: both of these fail silently ----------------------------
   ['fps counter goes back to the clamped physics dt', 'js/main.js',
