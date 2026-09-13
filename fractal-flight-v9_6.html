@@ -2182,28 +2182,28 @@ const TUNE = {
   // DIAGNOSTIC (v9.4): 0 = ripples with no LOD at all (old), 1 = normal faded
   // and glint broadened as the pixel footprint passes the ripple wavelength.
   cursorA:    { label: 'cursor',      v: 15,      d: 15,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
-  oceanSlope: { label: 'ocean slope', v: 0.016,   d: 0.016,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },
-  oceanMax:   { label: 'ocean depth', v: 107,     d: 107,      min: 20,     max: 140,    step: 1,       fmt: x => x.toFixed(0) },
-  massDecay:  { label: 'coast width', v: 0.0011, d: 0.0011, min: 0.001,  max: 0.01,   step: 0.0001,  fmt: x => x.toFixed(4) },
-  mountAmp:   { label: 'peak height', v: 460,     d: 460,     min: 100,    max: 800,    step: 10,      fmt: x => x.toFixed(0) },
-  snowLine:   { label: 'snow line',   v: 245,     d: 245,     min: 60,     max: 400,    step: 5,       fmt: x => x.toFixed(0) },
+  oceanSlope: { label: 'ocean slope', v: 0.029,   d: 0.029,    min: 0.004,  max: 0.06,   step: 0.001,   fmt: x => x.toFixed(3) },
+  oceanMax:   { label: 'ocean depth', v: 59,      d: 59,       min: 20,     max: 140,    step: 1,       fmt: x => x.toFixed(0) },
+  massDecay:  { label: 'coast width', v: 0.001,  d: 0.001,  min: 0.001,  max: 0.01,   step: 0.0001,  fmt: x => x.toFixed(4) },
+  mountAmp:   { label: 'peak height', v: 350,     d: 350,     min: 100,    max: 800,    step: 10,      fmt: x => x.toFixed(0) },
+  snowLine:   { label: 'snow line',   v: 220,     d: 220,     min: 60,     max: 400,    step: 5,       fmt: x => x.toFixed(0) },
   snowyPct:   { label: 'snowy peaks', v: 10,      d: 10,      min: 0,      max: 100,    step: 5,       fmt: x => x.toFixed(0) + '%' },
-  fogDens:    { label: 'fog',         v: 0.00012, d: 0.00012, min: 0.00005,max: 0.0009, step: 0.00001, fmt: x => (x*1000).toFixed(2) },
-  floraDens:  { label: 'flora density',v: 0.2,    d: 0.2,     min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
-  treeSize:   { label: 'tree size',   v: 13,      d: 13,      min: 4,      max: 22,     step: 1,       fmt: x => x.toFixed(0) + 'm' },
+  fogDens:    { label: 'fog',         v: 0.00022, d: 0.00022, min: 0.00005,max: 0.0009, step: 0.00001, fmt: x => (x*1000).toFixed(2) },
+  floraDens:  { label: 'flora density',v: 0.25,   d: 0.25,    min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
+  treeSize:   { label: 'tree size',   v: 14,      d: 14,      min: 4,      max: 22,     step: 1,       fmt: x => x.toFixed(0) + 'm' },
   // v9.5: the v4.6 "exaggerated perspective" shrank every tree to 35% by 4 km,
   // so a grove's outline changed shape as you flew at it. Off by default now;
   // this restores the old look in one click.
-  treePersp:  { label: 'tree persp',  v: 0,       d: 0,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'shrink far' : 'true size' },
+  treePersp:  { label: 'tree persp',  v: 1,       d: 1,       min: 0,      max: 1,      step: 1,       fmt: x => x > 0.5 ? 'shrink far' : 'true size' },
   treeShare:  { label: 'tree share',  v: 0.55,    d: 0.55,     min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
   treeTiers:  { label: 'fronds',      v: 11,       d: 11,       min: 3,      max: 14,     step: 1,       fmt: x => x.toFixed(0) },
   treeFract:  { label: 'tree fractal',v: 0.45,     d: 0.45,    min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
-  floraRange: { label: 'flora range', v: 6000,    d: 6000,    min: 150,    max: 6000,   step: 50,      fmt: x => x.toFixed(0) },
+  floraRange: { label: 'flora range', v: 5950,    d: 5950,    min: 150,    max: 6000,   step: 50,      fmt: x => x.toFixed(0) },
   juliaRe:    { label: 'flora c·re',  v: 0.22,    d: 0.22,    min: -1.0,   max: 0.4,    step: 0.01,    fmt: x => x.toFixed(2) },
-  juliaIm:    { label: 'flora c·im',  v: 1.00,    d: 1.00,    min: -1.0,   max: 1.0,    step: 0.01,    fmt: x => x.toFixed(2) },
+  juliaIm:    { label: 'flora c·im',  v: 1,       d: 1,       min: -1.0,   max: 1.0,    step: 0.01,    fmt: x => x.toFixed(2) },
   bombAngle:  { label: 'bomb angle',  v: 3,       d: 3,       min: -45,    max: 45,     step: 1,       fmt: x => x.toFixed(0) + '°' },
-  cloudCount: { label: 'cloud count', v: 11,       d: 11,       min: 0,      max: 16,     step: 1,       fmt: x => x.toFixed(0) },
-  cloudSize:  { label: 'cloud size',  v: 250,     d: 250,     min: 60,     max: 280,    step: 5,       fmt: x => x.toFixed(0) + ' m' },
+  cloudCount: { label: 'cloud count', v: 16,       d: 16,       min: 0,      max: 16,     step: 1,       fmt: x => x.toFixed(0) },
+  cloudSize:  { label: 'cloud size',  v: 280,     d: 280,     min: 60,     max: 280,    step: 5,       fmt: x => x.toFixed(0) + ' m' },
 };
 
 // Copy text to the clipboard, with a fallback: navigator.clipboard needs a

@@ -86,23 +86,32 @@ safe relaxation = cos(θ_max) = 1 / sqrt(1 + L²),   L = |∇h|
 to 6% at 70° and 14% at 56° — close enough to look right, wrong enough to
 justify an unsafe step. `test/test_march.js` pins the formula for that reason.
 
-| relaxation | safe up to | fraction of this island it CANNOT step safely |
-|---|---|---|
-| **0.55** (the v9.5 bug, kept at the slider top for A/B) | 56.6° | **2.589%** |
-| 0.45 | 63.3° | 0.643% |
-| 0.35 | 69.5° | 0.072% |
-| **0.30 — the default since 13 Sept 2026** | 72.5° | **0.017%** |
-| 0.25 | 75.5° | 0.002% |
-| 0.20 (slider floor) | 78.5° | 0.001% |
+⚠️ **The last column depends on the TUNING SLIDERS**, because they shape the
+world — `peak height`, `coast width`, `ocean slope`. The figures below are at
+the shipped defaults as of v9.6 (`peak height` 350, `coast width` 0.001);
+`node test/slope_census.js` always reports the live ones. The right-hand
+column shows the v9.5 world (`peak height` 460) for comparison — the same
+relaxation was **twice as unsafe** there.
 
-That last column *is* the bug, quantified: 2.6% of the island could not be
-marched safely, and 2.6% of an island is exactly "certain ridges, always the
-same ones".
+| relaxation | safe up to | CANNOT step safely (v9.6 world) | (v9.5 world) |
+|---|---|---|---|
+| **0.55** (the v9.5 bug, kept at the slider top for A/B) | 56.6° | **1.302%** | 2.589% |
+| 0.45 | 63.3° | 0.224% | 0.643% |
+| 0.35 | 69.5° | 0.016% | 0.072% |
+| **0.30 — the default since 13 Sept 2026** | 72.5° | **0.004%** | 0.017% |
+| 0.25 | 75.5° | 0.001% | 0.002% |
+| 0.20 (slider floor) | 78.5° | 0.001% | 0.001% |
+
+That last column *is* the bug, quantified: on the world it was found in, 2.6%
+of the island could not be marched safely — and 2.6% of an island is exactly
+"certain ridges, always the same ones".
 
 ### 3.2 The steepness has a heavy tail, and the tail does not converge
 
-113 297 land points, gradient at 0.5 m: median **16.7°**, p90 45.0°, p99
-61.5°, p99.9 68.7°, max 80.9°. Almost all of this world is gentle. And:
+103 352 land points, gradient at 0.5 m: median **15.7°**, p90 40.7°, p99
+57.9°, p99.9 65.5°, max 79.7°. Almost all of this world is gentle. And
+(these grid figures were taken on the v9.5 world, where the max was 80.9°;
+the shape of the result is what matters, not the last digit):
 
 | grid step | land points | max slope found |
 |---|---|---|
@@ -125,17 +134,20 @@ Freeze one factor at a time at the ten steepest points (census section 3):
 - **Nine of ten are the ridged fbm's crease.** `1 - |2n-1|` — `abs()` is a
   crease generator, and a crease is where a Lipschitz constant lives. Freeze
   the ridge term and 74° collapses to 0–20°.
-- **The very steepest is `mass`.** `mass = exp(-wde · 0.0011)` multiplies a
-  460 m mountain amplitude, so it lands on the terrain as
-  `0.506 × mass × |∇wde|` metres per metre. And `wde` is a **Mandelbrot
-  distance *estimate***: a true distance function is 1-Lipschitz, this one has
-  median `|∇| = 0.64` but reaches **23.5** on filaments. At `|∇wde| = 1` that
-  is 26.8° of ground; at 23.5 it is **85.2°**. It exceeds 1.5 on 0.78% of land
+- **The very steepest is `mass`.** `mass = exp(-wde · massDecay)` multiplies
+  the mountain amplitude, so it lands on the terrain as
+  `mountAmp × massDecay × mass × |∇wde|` metres per metre — 0.350 at the v9.6
+  defaults, 0.506 at v9.5's. And `wde` is a **Mandelbrot distance
+  *estimate***: a true distance function is 1-Lipschitz, this one has median
+  `|∇| = 0.56` but reaches **23.5** on filaments. At `|∇wde| = 1` that is
+  19.3° of ground; at 23.5 it is **83.1°**. It exceeds 1.5 on 0.85% of land
   and 3.0 on 0.02% — a thin set, which is why the glitch was always local.
 
-Nothing in `exp(-wde · 0.0011) × 460` *looks* steep. That is the trap: **a
+Nothing in `exp(-wde · 0.001) × 350` *looks* steep. That is the trap: **a
 gentle-looking multiplier times a large amplitude is a cliff**, and neither
-factor looks guilty on its own.
+factor looks guilty on its own. Note both offending factors are on TUNING
+SLIDERS (`peak height`, `coast width`): the world's marchability is something
+a player can change.
 
 ### 3.4 Two plausible levers that are dead — do not re-try them
 
@@ -302,10 +314,11 @@ Honest list, so nobody rediscovers them the hard way:
 
 - ~~`mtn relax` ships at 0.55~~ — **resolved 13 Sept 2026.** Nico flew the
   slider to its left end (*"the issue is gone!"*) and then set the shipping
-  default one rung up: **0.30**. It leaves 0.017% of the island unmarchable
-  against 2.589% at 0.55, and costs +76% march iterations in a mountain view
-  and +5% over the sea, where 0.25 cost +108%/+6% for 0.015 points more
-  coverage. The relaxation is keyed on the mountain `mass`, so frames without
+  default one rung up: **0.30**. On the v9.5 world that left 0.017% of the
+  island unmarchable against 2.589% at 0.55, for +76% march iterations in a
+  mountain view and +5% over the sea, where 0.25 cost +108%/+6% for 0.015
+  points more coverage. On the gentler v9.6 world it is 0.004% against
+  1.302%. The relaxation is keyed on the mountain `mass`, so frames without
   mountains barely pay. 0.55 stays at the top of the slider as the v9.5 A/B.
   `test/test_march.js` asserts the DEFAULT is safe, so trading it back for
   frame rate is a deliberate edit with a number attached.

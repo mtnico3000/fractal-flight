@@ -312,9 +312,12 @@ Key chips in the HUD glow green when a toggle is active.
   72.5°, 0.25 under 75.5°. ⚠️ There is no "provably safe" value: a fractal's
   measured max slope **does not converge** (72.9° on a 200 m grid, 80.9° on a
   30 m one), so the number that matters is the fraction of the island a step
-  cannot march — **2.589% at 0.55**, 0.072% at 0.35, 0.017% at 0.30, 0.002%
-  at 0.25. That 2.6% is *certain ridges*: 16.4% of the ridge Nico flew and
-  29.3% of the face he was looking at are too steep for 0.55.
+  cannot march. On the v9.5 world where the bug was found: **2.589% at 0.55**,
+  0.072% at 0.35, 0.017% at 0.30. That 2.6% is *certain ridges* — 16.4% of the
+  ridge Nico flew and 29.3% of the face he was looking at were too steep for
+  0.55. ⚠️ **The TUNING sliders move this**: v9.6's gentler defaults
+  (`peak height` 460 → 350) halve it to 1.302% / 0.016% / 0.004%. Never quote
+  these from memory — `node test/slope_census.js` measures the live world.
   Level or from above, a ray grazes the crest and the stride floor decides
   (§6.7); from below it crosses the crest body, the last gap in front of the
   face is tens of metres (it just crossed a valley), and the step lands past

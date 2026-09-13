@@ -42,9 +42,11 @@ check('the shipped terrain is no steeper than when the relaxation was chosen', (
   ok(pts.length > 8000, 'expected ~10k land points on a 100 m grid, got ' + pts.length);
   // Measured 13 Sept 2026. Bands are wide enough for retuning, tight enough
   // that a new terrain TERM moves them.
+  // The bands are wide because the TUNING sliders shape the world: `peak
+  // height` 460 -> 350 in v9.6 moved p99 from 61.4 to 57.9 legitimately.
   const p99 = deg(s.q(0.99)), p999 = deg(s.q(0.999));
-  ok(p99 > 55 && p99 < 68, 'p99 slope is ' + p99.toFixed(1) + '°, was 61.4° -- the world changed shape');
-  ok(p999 > 62 && p999 < 75, 'p99.9 slope is ' + p999.toFixed(1) + '°, was 68.0° -- the world changed shape');
+  ok(p99 > 50 && p99 < 68, 'p99 slope is ' + p99.toFixed(1) + '°, was 57.9° at the v9.6 defaults (61.4° at v9.5) -- the world changed shape');
+  ok(p999 > 58 && p999 < 75, 'p99.9 slope is ' + p999.toFixed(1) + '°, was 65.5° at the v9.6 defaults (68.0° at v9.5) -- the world changed shape');
 });
 
 check('the relaxation slider can still reach a safe step for this terrain', () => {
@@ -59,9 +61,10 @@ check('the relaxation slider can still reach a safe step for this terrain', () =
 
 check('the DEFAULT relaxation is safe on this terrain', () => {
   // 0.55 could not step safely on 2.6% of the island -- exactly the "certain
-  // ridges" Nico kept finding. He flew the slider to 0.25 (0.002%), the
-  // glitch went, and he set the shipping default one rung up at 0.30
-  // (0.017%, and +76% march iterations instead of +108%). This is a real
+  // ridges" Nico kept finding. He flew the slider to 0.25, the glitch went,
+  // and he set the shipping default one rung up at 0.30 (+76% march
+  // iterations instead of +108%). Percentages below are the v9.5 world it was
+  // found in; v9.6's gentler tuning roughly halves them. This is a real
   // guard now, not a bookkeeping one: moving the default back up for frame
   // rate must be a deliberate edit here, with the number it costs written in.
   const bad = 100 * s.overFrac(TUNED.relaxMtn.d);
