@@ -199,8 +199,11 @@ const MUTANTS = [
   // A tuning slider must not be able to build a world the marcher cannot
   // render: at `peak height` 800 the island needs relax 0.22 and 7.3% of it
   // is unmarchable at the default. test_march.js is the only thing watching.
+  // NB: anchored on the RANGE, not on v/d -- the battery reported this mutant
+  // SKIPPED (anchor not found) the moment the default moved 0.55 -> 0.25 -> 0.30.
+  // A mutant whose anchor drifts is a test that silently stopped running.
   ['the relaxation slider can no longer reach a safe step', 'js/tune.js',
-   "label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.20", "label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.45", 'test_march.js'],
+   "min: 0.20, max: 0.55, step: 0.05", "min: 0.45, max: 0.55, step: 0.05", 'test_march.js'],
 ];
 
 function mutate(src, find, repl, all) {
