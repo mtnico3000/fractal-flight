@@ -907,3 +907,59 @@ no holes. Pinned in `test_shader.js` with a mutant.
 19 flips on the hardest 36 rays is not 0. The remainder needs the
 reference-class march (4× the frame) or exact geometry (v10). The
 `march stride` Debug slider now reaches 0.1‰ for anyone who wants 15 at +30%.
+
+### 6.8 The peak at the exact camera: the render agrees with fp64, the camera does not sit still (13 Sept 2026, afternoon)
+
+Nico, with `invasion` and `rings` hidden: *"those peaks that shift, still
+shift... it's something around the camera view, and the terrain itself."*
+§6.7 measured rays; this measures his frame. The pane loaded his teleport
+(`#pos=1490,287,2490&hdg=37&obs=1`) at 2561×1398 (his aspect, 1.5×
+resolution), hit-distance channel on (sky = grey), clouds 0, and after each
+of ten backward arrow taps (150 ms ≈ 9 m) read the frame back at 1.5 s and
+again at 3.0 s, together with `uCamPos` and `uCamMat` from the program. Per
+capture: the topmost non-sky row of 177 columns (every 16th, plus every 2nd
+across his peak). Then the same rows on the fp64 mirror at the *same*
+camera, with the shader's own ray construction
+(`uv = (2·(frag+0.5) − res)/res.y`, `rd = normalize(M·(uv·fov, 1))`).
+
+| capture | cam heading | pitch down | GPU − ship: ≤1 px / ≤3 px / >3 px (of 177) | max | ship − ref max |
+|---|---|---|---|---|---|
+| tap 2, 3.0 s | 39.11° | 11.05° | 121 / 154 / 23 | 30 | 1 |
+| tap 3, 1.5 s | 37.69° | 11.23° | 131 / 166 / 11 | 35 | 1 |
+| tap 3, 3.0 s | 37.23° | 10.81° | 127 / 160 / 17 | 28 | 1 |
+| tap 4, 1.5 s | 37.08° | 11.14° | 127 / 164 / 13 | 29 | 1 |
+| tap 4, 3.0 s | 37.03° | 10.80° | 129 / 165 / 12 | 28 | 1 |
+| tap 5, 1.5 s | 37.01° | 11.14° | 129 / 163 / 14 | 32 | 1 |
+
+Three things in that table.
+
+1. **The shipped march is the reference here.** `ship − ref` never exceeds
+   1 px on any of 1 062 column-readings. Whatever breathes at this spot is
+   not the crest clip of §6.7 (measured there on the hardest rays the rig
+   could find; at Nico's peak it does not fire).
+2. **The GPU draws the fp64 terrain.** At his peak (columns 925–984) the GPU
+   sits a constant 2–5 px *below* fp64 in every capture — the tolerance
+   stop's residual plus the A1 fade, static. The >10 px columns are one
+   cluster at x ≈ 376–440 (15% from the left), −24…−35 px in *every*
+   capture: fp64 has a ridge there that the GPU draws 30 px lower. Static,
+   so not the breathing; not investigated (the LOD fade or a tree on the
+   skyline are the candidates).
+3. **The camera moves between the two captures of the same tap.** Pitch
+   11.14° at 1.5 s, 10.80° at 3.0 s, on every tap: 0.34° = 6 px on Nico's
+   1194-px screen, and the ridge rows at his peak alternate by the same
+   ±4–7 px. Simulating the chase springs (`kv = 4.2/s`, `k = 3.5/s`, the
+   exact equations) for one 9 m tap: 1.0° at 0.25 s, 0.8° at 0.5 s, 0.4° at
+   1 s, 0.19° at 1.5 s, 0.02° at 3 s — the live residual is about twice the
+   model's, the shape is the same: **a screenshot taken within ~2 s of a
+   tap is of a camera still gliding**. After a teleport (R) the yaw swings
+   136° → 85° → 54° → 43° → 39° → 37.7° → 37.2° at 1.5 s intervals, ~6 s
+   to settle. The run was also cut short at tap 5 by the mouse orbit
+   (observation mode forces Y on; a cursor crossing the pane pitched the
+   view 43° up) — Nico's tip: press Y in observation mode and the mouse is
+   out of it.
+
+What this does not prove: that the glide is what Nico sees. His screenshots
+are 10–17 s apart (filenames), and the glide is gone in 3 s; it explains the
+loop only if each shot came within ~2 s of its tap. Hence the `obs camera`
+Debug switch (`snap` / `freeze`): the experiment that separates the two
+without a stopwatch. Rigs: `gpu_vs_fp64.js`, `camsim.js`.

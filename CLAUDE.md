@@ -320,6 +320,12 @@ Key chips in the HUD glow green when a toggle is active.
   `resolution` at 2× to get under the cap before comparing frame times.
   Also: observation hover has inertia; a "still" capture within ~2 s of a
   nudge is measuring the glide, not the shader.
+- 📷 **The observation camera glides for ~3 s after an arrow tap** — 0.34° of
+  pitch still to go at 1.5 s, measured from `uCamMat`, and ~6 s of yaw swing
+  after R. Any screenshot comparison in observation mode either waits it
+  out or sets Debug → `obs camera` to `snap` (the springs' rest pose every
+  frame, `chasePose()`). And press Y first: O forces the mouse orbit on, and
+  a cursor drifting toward the screen edge rotates the whole view.
 - 🌳 **Trees change size with distance ON PURPOSE** (v4.6 "exaggerated
   perspective", 35% at 4 km) — the mushroom-tree borders moving as you fly
   was a feature. `tree persp` on the world panel, default off since v9.5.
@@ -388,7 +394,7 @@ node test/run_tests.js        # everything
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
   live hull is lethal while a falling/melting one is inert.
 - `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
-  in pairs across 50 knobs (21 world + 15 aliens + 14 debug), and a missed `d` only shows when someone presses
+  in pairs across 53 knobs (21 world + 15 aliens + 17 debug), and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
 - `test/test_build.js` — the single file must be byte-identical to what
@@ -467,6 +473,12 @@ node test/run_tests.js        # everything
   `text/javascript` rather than the registry's `text/plain`. Both of those
   fail silently in a browser. Uses a random high port so a dev server already
   running on 8734 cannot make it pass or fail for the wrong reason.
+- `test/test_flight.js` — the chase camera's rest pose. `chasePose()` is
+  what the instant Y-off snap and the Debug `obs camera` = snap park the
+  camera at, and it is an iteration: pinned to the resting camera measured
+  live (15.7 m back, 8.5 m up, 10.56° down) and to the springs' own
+  fixed-point equations, so it cannot drift from what the springs do. One
+  mutant (12 rounds → 1) verified red.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every

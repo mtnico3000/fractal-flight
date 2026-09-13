@@ -747,6 +747,32 @@ smaller floor exposed (beach residual 0.05 → 0.34 m) was caught by the rig
 before it shipped and pinned with a mutant. Also today: a POS readout and a
 URL teleport, so the next glitch travels as a link. RESEARCH §6.7.
 
+**13 Sept, afternoon — the switches, and the camera.** Nico: *"Putting the
+invasion and rings to none, does nothing, those peaks that shift, still
+shift. I know it's not related to other elements of the game... it's
+something around the camera view, and the terrain itself."* Two Debug
+switches had been built for exactly that question (`invasion`, `rings`:
+hulls, beams, collisions and the ring course gone, the economy still
+ticking) and they answered it. Then the render was checked at the *exact*
+camera: the pane flew his teleport, ten backward taps, and per capture read
+back `uCamPos`/`uCamMat` from the program together with the ridge row of
+177 columns. On the fp64 mirror at those cameras the shipped march and an
+8 000-iteration reference agree to **1 px on every column, all six
+captures**; the GPU agrees with fp64 to ≤3 px on 87–94% of columns, and at
+his peak the difference is a constant −2…−5 px from capture to capture.
+What did move was the camera: 1.5 s after a tap it is pitched **11.14°**
+down, at 3 s **10.80°** — 0.34° (~6 px on his screen) still to go — and
+after a teleport it swings in yaw for ~6 s. So a third switch, `obs
+camera`: **snap** parks the chase camera at the springs' own rest pose
+every frame (`chasePose()`, which the v8.5 instant Y-off already computed
+inline and now shares), **freeze** leaves it where it is while the craft
+moves. If the peak still breathes under `snap`, the camera is cleared and
+the render is back on the table; if it stops, it was the glide. Nico flies
+the verdict. `test_flight.js` pins the solver to the camera measured live
+(15.7 m back, 8.5 m up, 10.56° down) and to the fixed-point equations; the
+12-rounds → 1 mutant verified red by hand. The mutation battery was not
+re-run on this commit — the laptop was at 5%. RESEARCH §6.8.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

@@ -51,7 +51,7 @@ last version of the pure raymarcher: **v10 is a renderer change**, and it was
 Nico's call after the marcher hunt proved the residual flutter is not a bug.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**72 assertions, 11 files**; three skip without `npm install`, and one
+   (**74 assertions, 12 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
@@ -76,6 +76,22 @@ candidates measured and killed on the way (RESEARCH §6.7). Default
 iterations; the refine bound fixed alongside. **Not zero**: the rest needs a
 4× march or v10. The table below is kept because the sliders still
 discriminate what the rig cannot see (trees, the A1 fade).
+
+**13 Sept afternoon, residue after the stride fix — Nico flew it:** *"Putting
+the invasion and rings to none, does nothing, those peaks that shift, still
+shift. I know it's not related to other elements of the game... it's
+something around the camera view, and the terrain itself."* Measured at his
+exact camera (RESEARCH §6.8): shipped march = reference to 1 px on every
+column; GPU = fp64 to ≤3 px at his peak, constant offset; the chase camera
+is 0.34° from rest 1.5 s after a tap and swings for ~6 s after R. **Built,
+not yet flown by Nico:** Debug → `obs camera` = `snap` (camera rigid to the
+craft, no glide) or `freeze` (camera stays, craft moves). The verdict is his
+flight: peak still breathes under `snap` → the camera is cleared and the
+render is back on the table (then log `uCamMat` per screenshot — the pane
+script in RESEARCH §6.8 is the model); it stops → it was the glide, and
+`snap` may deserve to be the observation-mode default. Press Y in
+observation mode first (mouse orbit off). The mutation battery has not been
+run on this commit (laptop at 5%) — run it: 43 mutants now.
 
 #### the original discrimination table (still valid for anything that survives the stride fix)
 

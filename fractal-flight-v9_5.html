@@ -2245,6 +2245,14 @@ const TUNED = {
                 fmt: x => x > 0.5 ? 'on' : 'hidden' },
   ringsOn:    { kind: 'slider', label: 'rings',       v: 1, d: 1, min: 0, max: 1, step: 1,
                 fmt: x => x > 0.5 ? 'on' : 'hidden' },
+  // 13 Sept 2026, Nico: "let's try the b option with a cam snap thing".
+  // Observation mode only. The chase springs take ~3 s to settle after an
+  // arrow tap (0.34 deg of pitch still to go at 1.5 s, measured live), so a
+  // screenshot taken sooner is of a moving camera. 'snap' parks the camera at
+  // the springs' own rest pose every frame; 'freeze' leaves it where it is
+  // while the craft moves. Both tell a settling camera from a changing world.
+  obsCam:     { kind: 'slider', label: 'obs camera',  v: 0, d: 0, min: 0, max: 2, step: 1,
+                fmt: x => x > 1.5 ? 'freeze' : x > 0.5 ? 'snap' : 'spring' },
 
   steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },
@@ -4471,6 +4479,30 @@ function originForAngles(yaw, pitch, mx, my, vw, vh) {
   return { x: mx - bx * s, y: my - by * s };
 }
 
+// The chase camera's rest pose (13 Sept 2026): where the springs in
+// updateFlight would come to rest for a craft heading f - the camera zd back
+// and zh up along its own axes, looking at a point la ahead of the craft, the
+// whole rig lag further behind. The pose depends on its own up vector, so it
+// is solved by iteration (12 rounds: ~1e-6 rad). Used by the instant Y-off
+// snap (v8.5) and by the Debug 'obs camera' = snap mode.
+function chasePose(f, la, zd, zh, lag) {
+  let cF = [f[0], f[1], f[2]];
+  let cR = [1, 0, 0], cU = [0, 1, 0];
+  for (let i = 0; i < 12; i++) {
+    cF = normalize3([f[0] * la + cF[0] * zd - cU[0] * zh,
+                     f[1] * la + cF[1] * zd - cU[1] * zh,
+                     f[2] * la + cF[2] * zd - cU[2] * zh]);
+    cR = cross3(cF, [0, 1, 0]);
+    const cl = Math.hypot(cR[0], cR[1], cR[2]) || 1;
+    cR = [cR[0] / cl, cR[1] / cl, cR[2] / cl];
+    cU = cross3(cR, cF);
+  }
+  return { f: cF, r: cR, u: cU,
+           pos: [craft.pos[0] - cF[0] * zd + cU[0] * zh - f[0] * lag,
+                 craft.pos[1] - cF[1] * zd + cU[1] * zh - f[1] * lag,
+                 craft.pos[2] - cF[2] * zd + cU[2] * zh - f[2] * lag] };
+}
+
 let zoomCur = 1;   // eased wheel zoom (viewZoom.t is the target)
 
 function resetFlight() {
@@ -4761,6 +4793,21 @@ function update(dt, now) {
     craft.pos[1] + eF[1] * zA,
     craft.pos[2] + eF[2] * zA
   ];
+  const zd = 17 * zoomCur;
+  // far-zoom framing (v7.7): the craft's screen height is set purely by the
+  // camera arm's height/distance ratio — the rig rotates rigidly about its
+  // equilibrium, so aiming tricks don't move it. Blending the ratio from the
+  // classic 5.5/17 down to 4.0/17 as you zoom out parks the plane at ~1/3
+  // from the bottom instead of 1/4. The default view is untouched.
+  const zh = (5.5 - 1.5 * Math.min(1, Math.max(0, (zoomCur - 1) / 9))) * zoomCur;
+  // Debug 'obs camera' (13 Sept 2026, observation mode only). The springs
+  // below take ~3 s to settle after an arrow tap (0.34 deg of pitch still to
+  // go at 1.5 s, measured live), so a screenshot taken sooner is of a camera
+  // that is still moving. 'snap' parks the camera at the springs' own rest
+  // pose every frame; 'freeze' leaves it where it is while the craft moves
+  // off. Both tell a settling camera from a changing world.
+  const obsCam = camMode.obs ? TUNED.obsCam.v : 0;
+  if (obsCam < 0.5) {
   // close zooms stiffen the springs: the chase lag (~27 m at cruise) would
   // otherwise keep the camera away no matter how far you scroll in — the
   // plane now fills the screen before the view drops into the cockpit
@@ -4796,13 +4843,6 @@ function update(dt, now) {
     camR = [nR[0]/nRl, nR[1]/nRl, nR[2]/nRl];
     camU = cross3(camR, camF);
   }
-  const zd = 17 * zoomCur;
-  // far-zoom framing (v7.7): the craft's screen height is set purely by the
-  // camera arm's height/distance ratio — the rig rotates rigidly about its
-  // equilibrium, so aiming tricks don't move it. Blending the ratio from the
-  // classic 5.5/17 down to 4.0/17 as you zoom out parks the plane at ~1/3
-  // from the bottom instead of 1/4. The default view is untouched.
-  const zh = (5.5 - 1.5 * Math.min(1, Math.max(0, (zoomCur - 1) / 9))) * zoomCur;
   const desired = [
     craft.pos[0] - camF[0] * zd + camU[0] * zh,
     craft.pos[1] - camF[1] * zd + camU[1] * zh,
@@ -4812,6 +4852,12 @@ function update(dt, now) {
   camPos[0] += (desired[0] - camPos[0]) * k;
   camPos[1] += (desired[1] - camPos[1]) * k;
   camPos[2] += (desired[2] - camPos[2]) * k;
+  } else if (obsCam < 1.5) {
+    // snap: the pose the springs above would settle into, every frame
+    const pose = chasePose(eF, zA, zd, zh, 0);
+    camF = pose.f; camR = pose.r; camU = pose.u;
+    camPos[0] = pose.pos[0]; camPos[1] = pose.pos[1]; camPos[2] = pose.pos[2];
+  }   // else freeze: the camera stays exactly where it is while the craft moves
 
   // ---- mouse-orbit view (v7.4) ----
   // The mouse position orbits the RENDER camera around the plane: full screen
@@ -4866,22 +4912,10 @@ function update(dt, now) {
     // current speed), so the next frames don't visibly settle either.
     zoomCur = 1;
     orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
-    const la = 30 + craft.speed / 3.5;   // look-ahead + spring-lag term
-    let cF = [craft.f[0], craft.f[1], craft.f[2]];
-    let cR = [1, 0, 0], cU = [0, 1, 0];
-    for (let i = 0; i < 12; i++) {
-      cF = normalize3([craft.f[0] * la + cF[0] * 17 - cU[0] * 5.5,
-                       craft.f[1] * la + cF[1] * 17 - cU[1] * 5.5,
-                       craft.f[2] * la + cF[2] * 17 - cU[2] * 5.5]);
-      cR = cross3(cF, [0, 1, 0]);
-      const cl = Math.hypot(cR[0], cR[1], cR[2]) || 1;
-      cR = [cR[0] / cl, cR[1] / cl, cR[2] / cl];
-      cU = cross3(cR, cF);
-    }
-    camF = cF; camR = cR; camU = cU;
-    camPos[0] = craft.pos[0] - cF[0] * 17 + cU[0] * 5.5 - craft.f[0] * (craft.speed / 3.5);
-    camPos[1] = craft.pos[1] - cF[1] * 17 + cU[1] * 5.5 - craft.f[1] * (craft.speed / 3.5);
-    camPos[2] = craft.pos[2] - cF[2] * 17 + cU[2] * 5.5 - craft.f[2] * (craft.speed / 3.5);
+    const lag = craft.speed / 3.5;   // spring-lag term at the current speed
+    const pose = chasePose(craft.f, 30 + lag, 17, 5.5, lag);
+    camF = pose.f; camR = pose.r; camU = pose.u;
+    camPos[0] = pose.pos[0]; camPos[1] = pose.pos[1]; camPos[2] = pose.pos[2];
   }
   if (camMode.pilot && !prevPilot) {
     pilotSaved = { yaw: orbitYaw, pitch: orbitPitch };   // remember the outside view

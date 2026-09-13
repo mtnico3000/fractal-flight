@@ -135,6 +135,14 @@ export const TUNED = {
                 fmt: x => x > 0.5 ? 'on' : 'hidden' },
   ringsOn:    { kind: 'slider', label: 'rings',       v: 1, d: 1, min: 0, max: 1, step: 1,
                 fmt: x => x > 0.5 ? 'on' : 'hidden' },
+  // 13 Sept 2026, Nico: "let's try the b option with a cam snap thing".
+  // Observation mode only. The chase springs take ~3 s to settle after an
+  // arrow tap (0.34 deg of pitch still to go at 1.5 s, measured live), so a
+  // screenshot taken sooner is of a moving camera. 'snap' parks the camera at
+  // the springs' own rest pose every frame; 'freeze' leaves it where it is
+  // while the craft moves. Both tell a settling camera from a changing world.
+  obsCam:     { kind: 'slider', label: 'obs camera',  v: 0, d: 0, min: 0, max: 2, step: 1,
+                fmt: x => x > 1.5 ? 'freeze' : x > 0.5 ? 'snap' : 'spring' },
 
   steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
              fmt: x => x > 0.5 ? 'on' : 'off' },

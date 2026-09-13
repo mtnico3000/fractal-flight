@@ -184,6 +184,12 @@ const MUTANTS = [
    "shadows:    { label: 'shadows',     v: 1,", "shadows:    { label: 'shadows',     v: 0,", 'test_tune.js'],
   ['CLAUDE.md loses a module from the architecture map', 'CLAUDE.md',
    'aliens.js', 'ALIENS_GONE.js', 'test_docs.js', 'all'],
+
+  // --- the chase camera's rest pose (Debug 'obs camera' = snap, 13 Sept) --
+  // chasePose is an iteration; stop it early and the 'snap' camera parks a
+  // few degrees off the springs' rest pose - a screenshot would still glide.
+  ['chasePose stops short of the fixed point (12 rounds -> 1)', 'js/flight.js',
+   'for (let i = 0; i < 12; i++) {', 'for (let i = 0; i < 1; i++) {', 'test_flight.js'],
 ];
 
 function mutate(src, find, repl, all) {

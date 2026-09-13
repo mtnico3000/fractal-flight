@@ -49,7 +49,7 @@ check('every knob is fully formed (label, range, step, fmt)', () => {
 check('the three panels hold the expected number of knobs', () => {
   eq(Object.keys(TUNE).length, 21, 'TUNE knob count');
   eq(Object.keys(TUNEA).length, 15, 'TUNEA knob count');
-  eq(Object.keys(TUNED).length, 16, 'TUNED (debug) knob count');
+  eq(Object.keys(TUNED).length, 17, 'TUNED (debug) knob count');
 });
 
 // Informational, never a failure: a default pinned to a slider end usually
