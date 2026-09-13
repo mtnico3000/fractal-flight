@@ -427,6 +427,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <div>ALT  <span id="alt">0</span> m</div>
   <div>SPD  <span id="spd">0</span> kn</div>
   <div>HDG  <span id="hdg">000</span>°</div>
+  <div>POS  <span id="pos">0 0</span></div>
   <div>FPS  <span id="fps">0</span></div>
   <div>RES  <span id="res">0</span></div>
 </div>
@@ -3357,6 +3358,7 @@ function clearWeapons() {
 const $alt = document.getElementById('alt');
 const $spd = document.getElementById('spd');
 const $hdg = document.getElementById('hdg');
+const $pos = document.getElementById('pos');
 const $fps = document.getElementById('fps');
 const $res = document.getElementById('res');
 const $needle = document.getElementById('cneedle');
@@ -3370,6 +3372,9 @@ function updateHUD(fps, bw, bh) {
   let deg = Math.round(Math.atan2(craft.f[0], craft.f[2]) * 180 / Math.PI) % 360;
   if (deg < 0) deg += 360;
   $hdg.textContent = String(deg).padStart(3, '0');
+  // v9.5: world x z, so a "the ridge over there glitches" report can carry the
+  // spot -- and #pos=x,y,z&hdg=D&obs=1 in the URL puts anyone back on it.
+  $pos.textContent = Math.round(craft.pos[0]) + ' ' + Math.round(craft.pos[2]);
   $needle.setAttribute('transform', 'rotate(' + (-deg) + ')');
   $fps.textContent = fps;
   // the resolution slider is only usable if you can see what it costs
@@ -4451,6 +4456,24 @@ function resetFlight() {
   orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
   unCrash();
   initRings();
+  // v9.5 TELEPORT: #pos=x,y,z&hdg=D&obs=1 in the URL overrides the spawn, so
+  // a glitch spot can be handed over as a link and R returns to it. Heading
+  // uses the HUD's own convention (deg = atan2(f.x, f.z)); the default triad
+  // is f = +z, r = -x, so r = (-cos, 0, sin).
+  try {
+    const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const p = (h.get('pos') || '').split(',').map(Number);
+    if (p.length === 3 && p.every(Number.isFinite)) {
+      craft.pos = [p[0], p[1], p[2]];
+      const hd = Number(h.get('hdg'));
+      if (Number.isFinite(hd)) {
+        const a = hd * Math.PI / 180;
+        craft.f = [Math.sin(a), 0, Math.cos(a)]; craft.r = [-Math.cos(a), 0, Math.sin(a)];
+        camF = [craft.f[0], 0, craft.f[2]]; camR = [craft.r[0], 0, craft.r[2]];
+      }
+      if (h.get('obs') === '1') camMode.obs = true;
+    }
+  } catch (e) { /* a malformed hash is not worth breaking the reset over */ }
 }
 
 let sndBend = 0;   // engine pitch bend in octaves: W/Q held → down, S/E held → up

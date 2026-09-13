@@ -10,6 +10,7 @@ import { getScore, resetScore } from './spores.js';
 const $alt = document.getElementById('alt');
 const $spd = document.getElementById('spd');
 const $hdg = document.getElementById('hdg');
+const $pos = document.getElementById('pos');
 const $fps = document.getElementById('fps');
 const $res = document.getElementById('res');
 const $needle = document.getElementById('cneedle');
@@ -23,6 +24,9 @@ export function updateHUD(fps, bw, bh) {
   let deg = Math.round(Math.atan2(craft.f[0], craft.f[2]) * 180 / Math.PI) % 360;
   if (deg < 0) deg += 360;
   $hdg.textContent = String(deg).padStart(3, '0');
+  // v9.5: world x z, so a "the ridge over there glitches" report can carry the
+  // spot -- and #pos=x,y,z&hdg=D&obs=1 in the URL puts anyone back on it.
+  $pos.textContent = Math.round(craft.pos[0]) + ' ' + Math.round(craft.pos[2]);
   $needle.setAttribute('transform', 'rotate(' + (-deg) + ')');
   $fps.textContent = fps;
   // the resolution slider is only usable if you can see what it costs

@@ -65,6 +65,24 @@ export function resetFlight() {
   orbitYaw = 0; orbitPitch = 0; orbitYawT = 0; orbitPitchT = 0;
   unCrash();
   initRings();
+  // v9.5 TELEPORT: #pos=x,y,z&hdg=D&obs=1 in the URL overrides the spawn, so
+  // a glitch spot can be handed over as a link and R returns to it. Heading
+  // uses the HUD's own convention (deg = atan2(f.x, f.z)); the default triad
+  // is f = +z, r = -x, so r = (-cos, 0, sin).
+  try {
+    const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const p = (h.get('pos') || '').split(',').map(Number);
+    if (p.length === 3 && p.every(Number.isFinite)) {
+      craft.pos = [p[0], p[1], p[2]];
+      const hd = Number(h.get('hdg'));
+      if (Number.isFinite(hd)) {
+        const a = hd * Math.PI / 180;
+        craft.f = [Math.sin(a), 0, Math.cos(a)]; craft.r = [-Math.cos(a), 0, Math.sin(a)];
+        camF = [craft.f[0], 0, craft.f[2]]; camR = [craft.r[0], 0, craft.r[2]];
+      }
+      if (h.get('obs') === '1') camMode.obs = true;
+    }
+  } catch (e) { /* a malformed hash is not worth breaking the reset over */ }
 }
 
 let sndBend = 0;   // engine pitch bend in octaves: W/Q held → down, S/E held → up
