@@ -296,6 +296,21 @@ Key chips in the HUD glow green when a toggle is active.
   2 916 when sliding *along* a ray; the sequence re-converges), which killed a
   world-anchored lattice idea by measurement. `uMarchStride` default 0.2‰,
   slider down to 0.1‰. docs/RESEARCH.md §6.7 has the nine dead ends.
+- 🧗 **The relaxation is not Lipschitz-safe, and from BELOW a ridge that is
+  the lever, not the floor.** `0.55 × vertical gap` is a safe step only
+  against faces under ~61° (`1/tan(slope)`); a 70° ridge face needs 0.35.
+  Level or from above, a ray grazes the crest and the stride floor decides
+  (§6.7); from below it crosses the crest body, the last gap in front of the
+  face is tens of metres (it just crossed a valley), and the step lands past
+  the thin tip — the top ~15 m of a crest 400 m away found or lost by sample
+  phase alone: 30 px of horns and floating pieces on Nico's ALT 127 series,
+  55 of 86 columns swinging ≥ 8 px across taps; relax 0.35 → 4 px, none. A
+  secant-predicted step cap did nothing (the gap is not shrinking toward the
+  crest). Priced at +53% iterations in mountain views, so `uRelaxMtn` is keyed
+  on the mountain `mass` inside `terrainShapeLOD` (an `out` overload; sea and
+  beach frames +3%). Debug `mtn relax`, default 0.55 until Nico has flown the
+  cost. And once the relaxation varies along the ray, the crossing must be
+  interpolated from the GAPS (`pdT/(pdT − dT)`), not the steps. RESEARCH §6.9.
 - 🔗 **A refine bounded in strides breaks when the stride shrinks.** The
   secant extrapolation was capped at two strides; at a 0.0002 floor the last
   stride near a stop is short and two of it could not reach the crossing on
@@ -394,7 +409,7 @@ node test/run_tests.js        # everything
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
   live hull is lethal while a falling/melting one is inert.
 - `test/test_tune.js` — every knob ships with `v === d` (they are hand-edited
-  in pairs across 53 knobs (21 world + 15 aliens + 17 debug), and a missed `d` only shows when someone presses
+  in pairs across 54 knobs (21 world + 15 aliens + 18 debug), and a missed `d` only shows when someone presses
   RESET), defaults inside their own range, knob shape, and an informational
   list of defaults pinned at a slider end.
 - `test/test_build.js` — the single file must be byte-identical to what

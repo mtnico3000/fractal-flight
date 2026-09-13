@@ -83,15 +83,20 @@ shift. I know it's not related to other elements of the game... it's
 something around the camera view, and the terrain itself."* Measured at his
 exact camera (RESEARCH §6.8): shipped march = reference to 1 px on every
 column; GPU = fp64 to ≤3 px at his peak, constant offset; the chase camera
-is 0.34° from rest 1.5 s after a tap and swings for ~6 s after R. **Built,
-not yet flown by Nico:** Debug → `obs camera` = `snap` (camera rigid to the
-craft, no glide) or `freeze` (camera stays, craft moves). The verdict is his
-flight: peak still breathes under `snap` → the camera is cleared and the
-render is back on the table (then log `uCamMat` per screenshot — the pane
-script in RESEARCH §6.8 is the model); it stops → it was the glide, and
-`snap` may deserve to be the observation-mode default. Press Y in
-observation mode first (mouse orbit off). The mutation battery has not been
-run on this commit (laptop at 5%) — run it: 43 mutants now.
+is 0.34° from rest 1.5 s after a tap and swings for ~6 s after R. **Flown by
+Nico (17:05):** `freeze` stable, `snap` still breathing — the camera is
+cleared, the render owns it. His ALT 127 series, looking UP at a ridge,
+reproduced on the fp64 mirror: the 0.55 relaxation is not a safe step against
+a face steeper than ~61°, and from below the sample lands past the thin
+crest — the top ~15 m found or lost by sample phase, 30 px of horns and
+floating pieces (RESEARCH §6.9). **Built, not yet flown:** Debug →
+`mtn relax` (0.55 = v9.5 default, **0.35 = safe**), keyed on the mountain
+`mass` so sea/beach frames stay at +3% while mountain frames pay +53%
+iterations. Nico's call after flying it: does 0.35 become the default (jul's
+GPU pays too), or does it stay a slider until v10. Then the trees: the 550 m
+frond→envelope switch keyed per SAMPLE (splits a tree) and the plant stop
+tolerance without a refine — same law (the §6.8 review in HISTORY). Run the
+mutation battery: 44 mutants now.
 
 #### the original discrimination table (still valid for anything that survives the stride fix)
 

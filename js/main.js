@@ -166,6 +166,7 @@ async function main() {
   gl.uniform1f(U.uRayTol, TUNED.rayTol.v);           // v9.4 A/B: hit tolerance along the ray
   gl.uniform1f(U.uHitRefine, TUNED.hitRefine.v);     // v9.5 A/B: secant refine onto the surface
   gl.uniform1f(U.uMarchStride, TUNED.stride.v);      // v9.5 A/B: minimum stride per unit t
+  gl.uniform1f(U.uRelaxMtn, TUNED.relaxMtn.v);       // 13 Sept 2026: step relaxation where the mountains are
   gl.uniform1f(U.uWaterLOD, TUNED.waterLOD.v);       // v9.4 A/B: footprint-aware water ripples
   // v9.4 diagnostics: the whole Debug panel packed into one uniform (the
   // budget is already over the 224-slot mobile guarantee -- see CLAUDE.md)

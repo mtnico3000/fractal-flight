@@ -18,6 +18,7 @@ uniform float uDetailFade;
 uniform float uRayTol;           // 0 = vertical tolerance (old), 1 = along-ray
 uniform float uHitRefine;        // v9.5: 1 = refine the terrain hit onto the surface after the tolerance stop
 uniform float uMarchStride;      // v9.5: minimum stride per unit t (was a constant 0.0018)
+uniform float uRelaxMtn;         // 13 Sept 2026: step relaxation where the mountains are (0.55 = v9.5, 0.35 = safe against 70 deg faces)
 uniform float uTreePersp;        // v9.5: 1 = trees shrink with distance (the v4.6 look), 0 = true size
 uniform float uWaterLOD;         // 0 = un-LOD'd ripples (old), 1 = footprint-aware
 uniform float uBoxRound;         // hull corner fillet, as a fraction of the smallest half-extent
@@ -254,9 +255,9 @@ float worldDE(vec2 p, int it) {                  // distance-to-land in WORLD me
 // would move a silhouette by far more than a pixel, which is the opposite of
 // what A1 is for. Only the noise octaves, whose amplitude is proportional to
 // their wavelength, fade out sub-pixel.
-float terrainShapeLOD(vec2 p, float px) {
+float terrainShapeLOD(vec2 p, float px, out float mass) {
   float wde  = worldDE(p, 26);
-  float mass = exp(-wde * uMassDecay);           // mountain mass hugs the coastlines
+  mass = exp(-wde * uMassDecay);                 // mountain mass hugs the coastlines
 
   // Land near the sets, ocean floor sloping away from them
   float baseElev = fbmLOD(p * 0.0004, 0.0004, 3, px) * 70.0 + 4.0 - clamp(wde * uOceanSlope, 0.0, uOceanMax);
@@ -291,6 +292,10 @@ float terrainShapeLOD(vec2 p, float px) {
   h = mix(h, -15.0, lake * 0.65);
   return h;
 }
+// The same terrain without the mass output. GLSL inlines both at every call
+// site, so the overload costs nothing; only the march wants mass, to key
+// its step relaxation.
+float terrainShapeLOD(vec2 p, float px) { float mass; return terrainShapeLOD(p, px, mass); }
 
 // The canonical, full-detail terrain. COLLISION AUTHORITY: the GPU probe row
 // and the terrain.js CPU mirror both answer with this, so it must stay exactly
@@ -456,7 +461,7 @@ vec3 terrainNormal(vec2 p, float pixelSize) {
 vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
   float t = 0.5;
   float pt = t, pd = 1e5, pdT = 1e5;
-  float dT = 1e5, dP = 1e5;
+  float dT = 1e5, dP = 1e5, mass = 0.0;
   // v9.5 HIT REFINE runs INSIDE this loop, as phases, so terrainShapeLOD has
   // exactly ONE call site. GLSL inlines every call: a first version with a
   // separate refine block -- four more inlined copies of the terrain function
@@ -472,7 +477,7 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     // A1: sample the terrain at THIS step's footprint. Detail thins with
     // distance along the ray, which is both the shimmer fix and the reason
     // long rays got cheaper rather than more expensive.
-    dT = p.y - terrainShapeLOD(p.xz, t * uPixScale * uDetailFade);
+    dT = p.y - terrainShapeLOD(p.xz, t * uPixScale * uDetailFade, mass);
     if (phase == 1) {
       // The probe. If the extrapolation crossed the surface we now HAVE a
       // bracket, so bisect it three times; if not, keep it only when closer.
@@ -488,7 +493,17 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     // ground — cruising altitude pays a single compare per step.
     dP = 1e5;
     if (t < uFloraRange && dT < 18.0 && dT > -1.0) dP = plantEval(p, dT, t).x;
-    float d = min(dT * 0.55, dP);   // relaxed terrain stride, cautious near plants
+    // 13 Sept 2026: 0.55 x the VERTICAL gap is not a safe step against a face
+    // steeper than ~61 deg (the safe factor is 1/tan(slope)), and from below
+    // a ridge the sample after the last one in front of the face lands past
+    // the thin crest: the top ~15 m of a crest 400 m away was found or lost by
+    // the sample phase alone -- 30 px of horns and floating pieces that moved
+    // with every tap (RESEARCH.md s6.9). uRelaxMtn applies where the
+    // mountains are (mass -> 1, the same factor that raises them inside
+    // terrainShape); the sea and the beach keep 0.55, which is safe on their
+    // slopes and where a shorter step would cost +47% for nothing.
+    float relax = mix(0.55, uRelaxMtn, smoothstep(0.25, 0.60, mass));
+    float d = min(dT * relax, dP);   // relaxed terrain stride, cautious near plants
     // Stop when the surface is within about a pixel ALONG THE RAY, not within
     // a pixel VERTICALLY. dT is a height above the heightfield, so a vertical
     // slop of e leaves the hit e/sin(incidence) short of the true crossing --
@@ -505,9 +520,13 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     float tolRay = 0.01 + 0.0015 * t;
     float inc = mix(1.0, max(abs(rd.y), 0.06), uRayTol);
     if (dT < tolRay * inc || dP < tolRay) {
-      float w = clamp(pd / (pd - d), 0.0, 1.0);
-      float th = mix(pt, t, w);
       bool plant = dP < dT;
+      // the terrain crossing from the last two GAPS: with a relaxation that
+      // varies along the ray the step is no longer a fixed multiple of the
+      // gap, so pd/(pd - d) would misplace it. Plants keep the step ratio (dP
+      // is a distance along the ray, not a gap).
+      float w = plant ? clamp(pd / (pd - d), 0.0, 1.0) : clamp(pdT / (pdT - dT), 0.0, 1.0);
+      float th = mix(pt, t, w);
       // The tolerance stop leaves the hit ABOVE the surface by up to
       // tolRay*inc -- 1.2 m mean, 3.2 m p99 at 4 km -- and that height is what
       // terrainColor keys every altitude band on, what the shadow ray starts

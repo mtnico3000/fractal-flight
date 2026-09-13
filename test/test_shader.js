@@ -122,6 +122,18 @@ check('the terrain march: budget is a hit, not a hole; refine only while closing
   // exactly the along-ray distance a within-tolerance gap can still need.
   ok(/t \+ max\(2\.0 \* \(t - pt\), tolRay\)\)/.test(body),
      'the refine extrapolation must be bounded by max(two strides, tolRay), not two strides alone');
+  // 13 Sept 2026, afternoon: 0.55 x the vertical gap is not a safe step
+  // against a face steeper than ~61 deg. From below a ridge the sample lands
+  // past the thin crest, and the top ~15 m of it came and went with the
+  // camera -- 30 px of horns on Nico's ALT 127 series. The relaxation must be
+  // the mountain-keyed uniform, and the terrain crossing must then be
+  // interpolated from the GAPS, because the step is no longer 0.55 x gap.
+  ok(/float relax = mix\(0\.55, uRelaxMtn, smoothstep\(0\.25, 0\.60, mass\)\);/.test(body),
+     'the step relaxation must be mix(0.55, uRelaxMtn, smoothstep(0.25, 0.60, mass))');
+  ok(/float d = min\(dT \* relax, dP\);/.test(body),
+     'the terrain step must use the keyed relaxation, not a constant');
+  ok(/clamp\(pdT \/ \(pdT - dT\), 0\.0, 1\.0\)/.test(body),
+     'the terrain crossing must be interpolated from the last two gaps (pdT, dT)');
 });
 
 check('the hull marches keep their tangency budget', () => {

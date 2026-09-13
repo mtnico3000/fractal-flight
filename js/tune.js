@@ -127,6 +127,17 @@ export const TUNED = {
   // Hard-ray flips 84 -> 14 for +13-22% iterations; 0.0001 buys little more.
   stride:     { kind: 'slider', label: 'march stride', v: 0.0002, d: 0.0002, min: 0.0001, max: 0.0018, step: 0.0001,
                 fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (v9.4)' : x > 0.00085 && x < 0.00095 ? ' (v9.5)' : '') },
+  // 13 Sept 2026, afternoon: the step is 0.55 x the vertical gap, which is not
+  // a safe step against a face steeper than ~61 deg. From BELOW a ridge the
+  // sample lands past the thin crest and the top ~15 m of it comes and goes
+  // with the camera -- Nico's horns and floating pieces, on his ALT 127 series
+  // (RESEARCH s6.9: 30 px, 55 of 86 columns; 0.35 -> 4 px, 0). The stride
+  // floor was the lever from above; this is the lever from below. 0.35 is
+  // safe for 70 deg faces and costs +53% iterations in mountain views; keyed
+  // on the mountain mass, the sea and beach frames pay +3%. Default is the
+  // v9.5 behaviour until Nico has flown the cost.
+  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.55, d: 0.55, min: 0.25, max: 0.55, step: 0.05,
+                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.325 && x < 0.375 ? ' (safe)' : '') },
   // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
   // mothership" to tell what moves from what is drawn. Hidden = hulls, beams
   // and their collisions are gone; the invasion economy keeps running under

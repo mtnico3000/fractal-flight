@@ -190,6 +190,10 @@ const MUTANTS = [
   // few degrees off the springs' rest pose - a screenshot would still glide.
   ['chasePose stops short of the fixed point (12 rounds -> 1)', 'js/flight.js',
    'for (let i = 0; i < 12; i++) {', 'for (let i = 0; i < 1; i++) {', 'test_flight.js'],
+
+  // --- the from-below crest straddle (13 Sept 2026, afternoon) -------------
+  ['the step relaxation is hard-wired to 0.55 again (crest horns from below)', 'js/shaders.js',
+   'float d = min(dT * relax, dP);', 'float d = min(dT * 0.55, dP);', 'test_shader.js'],
 ];
 
 function mutate(src, find, repl, all) {

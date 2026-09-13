@@ -963,3 +963,79 @@ are 10–17 s apart (filenames), and the glide is gone in 3 s; it explains the
 loop only if each shot came within ~2 s of its tap. Hence the `obs camera`
 Debug switch (`snap` / `freeze`): the experiment that separates the two
 without a stopwatch. Rigs: `gpu_vs_fp64.js`, `camsim.js`.
+
+### 6.9 From below: the relaxation is the lever, and it is not Lipschitz-safe (13 Sept 2026, 17:05)
+
+Nico flew the switches. `freeze`: *"the plane moves but the mountain ridge
+does not"*. `snap`: the peaks still breathed. So the camera was cleared, the
+render owned it, and he sent thirteen screenshots from **ALT 127, HDG 091,
+looking UP at a ridge**: horns on the crest moving with every tap, and in
+four frames *"a piece of mountain floating over it"*.
+
+That regime had never been on the rig. Every crest measurement so far (§6.7,
+§6.8) was level or from above, where a ray *grazes* the tip and the stride
+floor decides whether the centimetre clip is caught. From below the ray
+crosses the crest **body**. The last sample in front of the face sits over
+the valley, with a vertical gap of tens of metres; the step is `0.55 × gap`;
+and the crest, at the height the ray crosses it, is thinner than that step.
+The sample lands past the tip, above the far slope, gap positive, no hit.
+Whether that happens depends on where the previous sample fell — the sample
+phase — which shifts with every tap. `0.55 × vertical gap` is a safe step
+only against faces under ~61° (`1/tan(slope)`); a 70° ridge face needs 0.35.
+
+Rig: his exact snap camera (15.70 m behind, 8.52 m up, 10.564° down) at his
+twelve positions (x 2159 → 2070, z 3192), his 1707×932 buffer, the crest band
+(86 columns × 111 rows), silhouette row per column against the reference
+(relax 0.15, floor 0.0001, cap 20 000). `belowcrest*.js`.
+
+| variant | crest error vs ref, 12 frames: mean / max / cols ≥ 4 px | swing across frames: cols ≥ 4 / ≥ 8 px / worst |
+|---|---|---|
+| **ship (0.55)** | 3.09 / **30** / 297 | 56 / **55** / 30 |
+| relax 0.45 | 0.81 / 14 / 96 | 22 / 10 / 14 |
+| relax 0.40 | 0.44 / 10 / 52 | 13 / 4 / 10 |
+| **relax 0.35** | 0.12 / **4** / 2 | 3 / **0** / 4 |
+| mass-keyed 0.55 → 0.35 | 0.12 / 4 / 2 | 3 / 0 / 4 |
+| mass-keyed 0.55 → 0.30 | 0.06 / 2 / 0 | 1 / 0 / 4 |
+| secant-capped step (0.75 × predicted crossing) | 3.04 / 30 / 293 | 56 / 55 / 30 |
+| secant-capped step (0.50 ×) | 2.04 / 30 / 209 | 50 / 38 / 30 |
+
+The secant cap — never step past a fraction of the crossing the last two
+gaps predict — did nothing, and that is the diagnosis in one line: the gap
+is **not** shrinking toward the crest. The ray has just crossed a valley;
+its last two gaps are large and growing; the ridge is a wall the vertical
+gap cannot see coming. Only a Lipschitz-safe step sees it.
+
+#### Priced
+
+Mean iterations per ray, every 24th pixel of the frame:
+
+| scene | 0.55 | 0.45 | 0.40 | 0.35 | mass → 0.35 | mass → 0.30 |
+|---|---|---|---|---|---|---|
+| mountain, ALT 127 (this series) | 22.9 | 27.6 | 30.9 | 35.0 | 35.0 | 40.3 |
+| mountain, ALT 295 (the 1490,2490 peak) | 16.9 | 20.7 | 23.3 | 26.4 | 26.3 | 30.3 |
+| sea → beach, 2.5 km out, ALT 300 | 33.8 | 40.2 | 44.3 | 49.6 | **34.9** | 35.4 |
+
+A global 0.35 costs +53% iterations in the mountains and +47% over the sea,
+where the slopes never needed it. `mass = exp(−wde·massDecay)` — the
+Mandelbrot proximity that already raises the mountains inside
+`terrainShapeLOD` — is 1.000 at Nico's spot, 0.82 on the ridge ahead, 0.73
+2.5 km inland, 0.043 at the coast, 0.009 a kilometre out to sea. Keyed on
+it, `relax = mix(0.55, uRelaxMtn, smoothstep(0.25, 0.60, mass))`, the sea
+frame pays +3% and the mountain frames pay what correctness costs there.
+`terrainShapeLOD` gained an `out float mass` overload for it (both are
+inlined at every call site; no cost). With a relaxation that varies along
+the ray, the crossing is now interpolated from the two gaps
+(`pdT/(pdT − dT)`) instead of the two steps — identical when the step was
+`0.55 × gap`, correct now.
+
+Shipped as Debug → `mtn relax`, **default 0.55 (v9.5 behaviour) until Nico
+has flown the cost**; 0.35 is the safe setting. His observation that the
+breathing is *"quicker toward the center of the view, and less and less
+toward the edges"* fits the mechanism: moving along the view shifts the
+sample sequence along a central ray by the whole step, along a ray at angle
+θ by cos θ of it (0.65 at his 49.5° horizontal edge), and an oblique crossing
+is thicker along the ray, so it straddles less often.
+
+The floating pieces are the same straddle one row apart: a ray a little
+higher lands its sample *inside* the tip and draws it, the ray below it
+lands past the tip and draws the sky — a sliver of crest above a gap of sky.

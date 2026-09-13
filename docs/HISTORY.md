@@ -773,6 +773,28 @@ the verdict. `test_flight.js` pins the solver to the camera measured live
 12-rounds → 1 mutant verified red by hand. The mutation battery was not
 re-run on this commit — the laptop was at 5%. RESEARCH §6.8.
 
+**13 Sept, 17:05 — from below.** Nico flew the switches: *"with freeze camera
+on, the plane moves but the mountain ridge does not"*, and under `snap` the
+peaks still breathed — the camera was cleared, the render owned it. Then
+thirteen screenshots from ALT 127 looking UP at a ridge, `snap` on: the crest
+grew horns that moved with every tap and, in four frames, *"a piece of
+mountain floating over it"*. That regime had never been on the rig — every
+crest measurement so far was level or from above, where the ray grazes the
+tip and the stride floor decides. From below the ray crosses the crest
+*body*: the last sample in front of the face sits over a valley with a gap of
+tens of metres, and `0.55 × gap` lands past the thin tip — the top ~15 m of
+the crest found or lost by sample phase. Reproduced on the fp64 mirror at his
+exact snap camera: 30 px of crest error, 55 of 86 columns swinging ≥ 8 px
+across his twelve positions; relax 0.35 (the Lipschitz-safe factor for a 70°
+face) → 4 px and none. A secant-predicted step cap did nothing — the gap is
+not shrinking toward the crest, it just crossed a valley. Priced at +53%
+iterations in mountain frames, so the relaxation is keyed on the mountain
+`mass` the terrain function already computes (sea and beach frames +3%),
+behind a Debug slider, `mtn relax`, default 0.55 until Nico has flown the
+cost. His *"quicker toward the center of the view"* fits: moving along the
+view shifts the sample sequence along a central ray by the whole step, along
+an edge ray by cos θ of it. RESEARCH §6.9.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-
