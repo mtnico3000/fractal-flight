@@ -127,9 +127,10 @@ export const TUNED = {
   // Hard-ray flips 84 -> 14 for +13-22% iterations; 0.0001 buys little more.
   stride:     { kind: 'slider', label: 'march stride', v: 0.0002, d: 0.0002, min: 0.0001, max: 0.0018, step: 0.0001,
                 fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (v9.4)' : x > 0.00085 && x < 0.00095 ? ' (v9.5)' : '') },
-  // 13 Sept 2026, afternoon: the step is 0.55 x the vertical gap, which is not
-  // a safe step against a face steeper than ~61 deg. From BELOW a ridge the
-  // sample lands past the thin crest and the top ~15 m of it comes and goes
+  // 13 Sept 2026, afternoon: the step is 0.55 x the vertical gap, and the safe
+  // factor is cos(slope), so that is a safe step only under 56.6 deg (0.35 ->
+  // 69.5, 0.25 -> 75.5; the island's steepest ground is 74.2). From BELOW a
+  // ridge the sample lands past the thin crest and its top comes and goes
   // with the camera -- Nico's horns and floating pieces, on his ALT 127 series
   // (RESEARCH s6.9: 30 px, 55 of 86 columns; 0.35 -> 4 px, 0). The stride
   // floor was the lever from above; this is the lever from below. 0.35 is

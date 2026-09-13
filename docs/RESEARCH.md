@@ -980,8 +980,50 @@ the valley, with a vertical gap of tens of metres; the step is `0.55 × gap`;
 and the crest, at the height the ray crosses it, is thinner than that step.
 The sample lands past the tip, above the far slope, gap positive, no hit.
 Whether that happens depends on where the previous sample fell — the sample
-phase — which shifts with every tap. `0.55 × vertical gap` is a safe step
-only against faces under ~61° (`1/tan(slope)`); a 70° ridge face needs 0.35.
+phase — which shifts with every tap.
+
+Measured on one of his rays (the near crest is 114 m away, not the massif
+behind it):
+
+| ray | true entry → exit (thickness along the ray) | last gap before the face → step it buys |
+|---|---|---|
+| 10 m below the crest, z = 3192 | 113.8 → 121.3 m (**7.5 m**) | 2.5 m → 1.4 m |
+| 20 m below the crest, z = 3192 | 113.0 → 123.5 m (10.5 m) | 5.2 m → 2.9 m |
+| 10 m below the crest, z = 3100 | 114.5 → 118.8 m (**4.3 m**) | 17.5 m → **9.7 m** |
+
+A 9.7 m step at a 4.3 m crest: it is a coin toss decided by where the
+previous sample landed, and the sample grid slides by the whole step every
+time the camera moves along the view.
+
+#### The safe factor, and the slope census
+
+⚠️ The first draft of this section said the safe factor is `1/tan(slope)`.
+It is **`cos(slope)` = `1/sqrt(1 + |∇h|²)`**: the nearest point of a plane of
+slope θ is `gap·cos θ` away, not `gap/tan θ`. The two are close at 70°
+(0.342 vs 0.364), which is why the wrong formula gave a plausible answer and
+survived a whole section.
+
+| relax | safe up to |
+|---|---|
+| 0.55 (v9.5) | 56.6° |
+| 0.45 | 63.3° |
+| 0.35 | 69.5° |
+| 0.30 | 72.5° |
+| **0.25** | **75.5°** |
+
+And the terrain, sampled at 1 m (28 453 land points, 5 108 on that ridge):
+
+| where | median slope | p99 | max | ground too steep for 0.55 |
+|---|---|---|---|---|
+| the whole island, above 5 m | 16.6° | 61.3° | **74.2°** | **2.5%** |
+| the ridge ahead of his camera | 47.4° | 67.8° | 72.5° | **16.4%** |
+| the west face of that crest | 54.6° | 61.9° | 65.1° | **29.3%** |
+
+That is the answer to *"why certain ridges and not others"*: 97.5% of the
+island is gentle enough that 0.55 is a safe step and nothing moves. The
+island's steepest ground is 74.2°, so **0.25 is the only value that is
+provably safe everywhere on this world** — which is exactly where Nico's
+slider ended up when he found it by eye.
 
 Rig: his exact snap camera (15.70 m behind, 8.52 m up, 10.564° down) at his
 twelve positions (x 2159 → 2070, z 3192), his 1707×932 buffer, the crest band
@@ -996,6 +1038,7 @@ twelve positions (x 2159 → 2070, z 3192), his 1707×932 buffer, the crest band
 | **relax 0.35** | 0.12 / **4** / 2 | 3 / **0** / 4 |
 | mass-keyed 0.55 → 0.35 | 0.12 / 4 / 2 | 3 / 0 / 4 |
 | mass-keyed 0.55 → 0.30 | 0.06 / 2 / 0 | 1 / 0 / 4 |
+| mass-keyed 0.55 → 0.25 | 0.05 / 2 / 0 | 1 / 0 / 4 |
 | secant-capped step (0.75 × predicted crossing) | 3.04 / 30 / 293 | 56 / 55 / 30 |
 | secant-capped step (0.50 ×) | 2.04 / 30 / 209 | 50 / 38 / 30 |
 
@@ -1009,11 +1052,11 @@ gap cannot see coming. Only a Lipschitz-safe step sees it.
 
 Mean iterations per ray, every 24th pixel of the frame:
 
-| scene | 0.55 | 0.45 | 0.40 | 0.35 | mass → 0.35 | mass → 0.30 |
-|---|---|---|---|---|---|---|
-| mountain, ALT 127 (this series) | 22.9 | 27.6 | 30.9 | 35.0 | 35.0 | 40.3 |
-| mountain, ALT 295 (the 1490,2490 peak) | 16.9 | 20.7 | 23.3 | 26.4 | 26.3 | 30.3 |
-| sea → beach, 2.5 km out, ALT 300 | 33.8 | 40.2 | 44.3 | 49.6 | **34.9** | 35.4 |
+| scene | 0.55 | 0.45 | 0.40 | 0.35 | mass → 0.35 | mass → 0.30 | mass → 0.25 |
+|---|---|---|---|---|---|---|---|
+| mountain, ALT 127 (this series) | 22.9 | 27.6 | 30.9 | 35.0 | 35.0 | 40.3 | 47.6 |
+| mountain, ALT 295 (the 1490,2490 peak) | 16.9 | 20.7 | 23.3 | 26.4 | 26.3 | 30.3 | 35.9 |
+| sea → beach, 2.5 km out, ALT 300 | 33.8 | 40.2 | 44.3 | 49.6 | **34.9** | 35.4 | 36.0 |
 
 A global 0.35 costs +53% iterations in the mountains and +47% over the sea,
 where the slopes never needed it. `mass = exp(−wde·massDecay)` — the
@@ -1028,8 +1071,15 @@ the ray, the crossing is now interpolated from the two gaps
 (`pdT/(pdT − dT)`) instead of the two steps — identical when the step was
 `0.55 × gap`, correct now.
 
-Shipped as Debug → `mtn relax`, **default 0.55 (v9.5 behaviour) until Nico
-has flown the cost**; 0.35 is the safe setting. His observation that the
+Shipped as Debug → `mtn relax`, default 0.55 (v9.5 behaviour) until Nico had
+flown the cost. **He flew it the same evening: at the slider's left end
+(0.25) — its readout clipped by his window edge, which is why he first read
+it as 0.1 — *"the issue is gone"*.** That is the census's own answer, 0.25
+being the only value safe against this island's steepest ground, arrived at
+independently and by eye. Cost at that end: +108% iterations in his mountain
+view, +6% over the sea. 0.35 removes every swing the crest-band rig can see
+at +53%/+3% and leaves 0.8% of that ridge formally unsafe; whether the eye
+can tell them apart is the next thing to fly. His observation that the
 breathing is *"quicker toward the center of the view, and less and less
 toward the edges"* fits the mechanism: moving along the view shifts the
 sample sequence along a central ray by the whole step, along a ray at angle

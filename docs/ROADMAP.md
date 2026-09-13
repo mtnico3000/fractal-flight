@@ -86,14 +86,19 @@ column; GPU = fp64 to ≤3 px at his peak, constant offset; the chase camera
 is 0.34° from rest 1.5 s after a tap and swings for ~6 s after R. **Flown by
 Nico (17:05):** `freeze` stable, `snap` still breathing — the camera is
 cleared, the render owns it. His ALT 127 series, looking UP at a ridge,
-reproduced on the fp64 mirror: the 0.55 relaxation is not a safe step against
-a face steeper than ~61°, and from below the sample lands past the thin
-crest — the top ~15 m found or lost by sample phase, 30 px of horns and
-floating pieces (RESEARCH §6.9). **Built, not yet flown:** Debug →
-`mtn relax` (0.55 = v9.5 default, **0.35 = safe**), keyed on the mountain
-`mass` so sea/beach frames stay at +3% while mountain frames pay +53%
-iterations. Nico's call after flying it: does 0.35 become the default (jul's
-GPU pays too), or does it stay a slider until v10. Then the trees: the 550 m
+reproduced on the fp64 mirror: the step is 0.55 × the VERTICAL gap and the
+safe factor is cos(slope), so 0.55 covers only 56.6° while 16.4% of that
+ridge is steeper; from below, the ray crosses a crest 4–10 m thick along the
+ray with a step of up to 9.7 m — 30 px of horns and floating pieces
+(RESEARCH §6.9). **Fixed and FLOWN**: Debug → `mtn relax`, and Nico at the
+slider's left end (0.25): *"the issue is gone!"*
+
+▶ **The open question, and it is Nico's:** 0.25 is the only value provably
+safe on this island (steepest ground 74.2°) and costs **+108% march
+iterations** in a mountain view; 0.35 clears every swing the crest-band rig
+can see at **+53%**, and 0.30 at +76%. Fly 0.35 and 0.30 at the same spot and
+see whether the eye can tell them from 0.25 — then the winner becomes the
+default (jul's GPU pays it too) instead of a slider at 0.55. Then the trees: the 550 m
 frond→envelope switch keyed per SAMPLE (splits a tree) and the plant stop
 tolerance without a refine — same law (the §6.8 review in HISTORY). Run the
 mutation battery: 44 mutants now.

@@ -297,8 +297,14 @@ Key chips in the HUD glow green when a toggle is active.
   world-anchored lattice idea by measurement. `uMarchStride` default 0.2‰,
   slider down to 0.1‰. docs/RESEARCH.md §6.7 has the nine dead ends.
 - 🧗 **The relaxation is not Lipschitz-safe, and from BELOW a ridge that is
-  the lever, not the floor.** `0.55 × vertical gap` is a safe step only
-  against faces under ~61° (`1/tan(slope)`); a 70° ridge face needs 0.35.
+  the lever, not the floor.** The safe step for a heightfield marched by its
+  VERTICAL gap is `gap × cos(slope)` = `gap / sqrt(1 + |∇h|²)` — **not**
+  `gap / tan(slope)`, which is what this entry said until the slope census
+  was run. So 0.55 is safe only under **56.6°**, 0.35 under 69.5°, 0.25 under
+  75.5°, and **this island's steepest ground is 74.2°** — 0.25 is the only
+  provably safe value. Measured: 2.5% of the island is too steep for 0.55,
+  but 16.4% of the ridge Nico flew and 29.3% of the face he was looking at —
+  hence *certain* ridges.
   Level or from above, a ray grazes the crest and the stride floor decides
   (§6.7); from below it crosses the crest body, the last gap in front of the
   face is tens of metres (it just crossed a valley), and the step lands past

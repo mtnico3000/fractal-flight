@@ -122,9 +122,9 @@ check('the terrain march: budget is a hit, not a hole; refine only while closing
   // exactly the along-ray distance a within-tolerance gap can still need.
   ok(/t \+ max\(2\.0 \* \(t - pt\), tolRay\)\)/.test(body),
      'the refine extrapolation must be bounded by max(two strides, tolRay), not two strides alone');
-  // 13 Sept 2026, afternoon: 0.55 x the vertical gap is not a safe step
-  // against a face steeper than ~61 deg. From below a ridge the sample lands
-  // past the thin crest, and the top ~15 m of it came and went with the
+  // 13 Sept 2026, afternoon: the safe step on a heightfield marched by its
+  // vertical gap is gap * cos(slope), so 0.55 covers only 56.6 deg. From
+  // below a ridge the sample lands past the thin crest, and its top came and went with the
   // camera -- 30 px of horns on Nico's ALT 127 series. The relaxation must be
   // the mountain-keyed uniform, and the terrain crossing must then be
   // interpolated from the GAPS, because the step is no longer 0.55 x gap.

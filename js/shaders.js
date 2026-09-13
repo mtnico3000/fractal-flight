@@ -493,12 +493,16 @@ vec2 marchTerrain(vec3 ro, vec3 rd, out float iters) {
     // ground — cruising altitude pays a single compare per step.
     dP = 1e5;
     if (t < uFloraRange && dT < 18.0 && dT > -1.0) dP = plantEval(p, dT, t).x;
-    // 13 Sept 2026: 0.55 x the VERTICAL gap is not a safe step against a face
-    // steeper than ~61 deg (the safe factor is 1/tan(slope)), and from below
-    // a ridge the sample after the last one in front of the face lands past
-    // the thin crest: the top ~15 m of a crest 400 m away was found or lost by
-    // the sample phase alone -- 30 px of horns and floating pieces that moved
-    // with every tap (RESEARCH.md s6.9). uRelaxMtn applies where the
+    // 13 Sept 2026: the safe step on a heightfield marched by its VERTICAL gap
+    // is gap * cos(slope) = gap / sqrt(1 + |grad h|^2), so 0.55 is safe only
+    // under 56.6 deg, 0.35 under 69.5, 0.25 under 75.5 -- and this island's
+    // steepest ground is 74.2 deg. From below a ridge the ray crosses the
+    // crest BODY, which is 4-10 m thick along the ray where it crosses, while
+    // the last gap before the face (the ray has just crossed a valley) buys a
+    // step of up to 10 m: the crest is stepped over or not by sample phase
+    // alone -- 30 px of horns and floating pieces moving with every tap
+    // (RESEARCH.md s6.9). Only 2.5% of this island is too steep for 0.55, so
+    // it is certain ridges and not others. uRelaxMtn applies where the
     // mountains are (mass -> 1, the same factor that raises them inside
     // terrainShape); the sea and the beach keep 0.55, which is safe on their
     // slopes and where a shorter step would cost +47% for nothing.

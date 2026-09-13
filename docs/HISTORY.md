@@ -785,8 +785,11 @@ tip and the stride floor decides. From below the ray crosses the crest
 tens of metres, and `0.55 × gap` lands past the thin tip — the top ~15 m of
 the crest found or lost by sample phase. Reproduced on the fp64 mirror at his
 exact snap camera: 30 px of crest error, 55 of 86 columns swinging ≥ 8 px
-across his twelve positions; relax 0.35 (the Lipschitz-safe factor for a 70°
-face) → 4 px and none. A secant-predicted step cap did nothing — the gap is
+across his twelve positions; relax 0.35 (the Lipschitz-safe factor for a 69.5°
+face — `cos(slope)`, not the `1/tan(slope)` the first draft of §6.9 claimed)
+→ 4 px and none. The slope census that followed put the island's steepest
+ground at 74.2°, i.e. only 0.25 is provably safe — and 0.25 is where Nico's
+slider landed that evening, by eye: *"the issue is gone!"* A secant-predicted step cap did nothing — the gap is
 not shrinking toward the crest, it just crossed a valley. Priced at +53%
 iterations in mountain frames, so the relaxation is keyed on the mountain
 `mass` the terrain function already computes (sea and beach frames +3%),
