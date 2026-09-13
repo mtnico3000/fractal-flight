@@ -50,6 +50,10 @@ python3 serve.py 8734
 # then open http://localhost:8734/
 ```
 
+On Windows PowerShell 5.1 (the shell this is developed on) use `python`,
+and note that `&&` is a parser error there -- chain with `;`, or
+`; if ($?) { ... }` to run the second command only if the first succeeded.
+
 `serve.py` is `python -m http.server` plus one header: `Cache-Control:
 no-store`. Use it rather than the bare module — `http.server` sends no
 cache header at all, so a normal refresh replays the `js/*.js` the browser

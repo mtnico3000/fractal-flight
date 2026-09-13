@@ -370,6 +370,40 @@ Key chips in the HUD glow green when a toggle is active.
   of sunlit land is wrongly black** (`terrainCheapH`: 2 octaves, 13 escape
   iterations, no domain warp, against 3/26/warped). Real, ugly, and *static*
   — it moves 0.1% between frames, so it is not the flutter. Parked.
+- 🐚 **The dev machine runs Windows PowerShell 5.1, which is NOT bash.**
+  Measured 13 Sept 2026: `$PSVersionTable.PSVersion` = 5.1.26100, and `pwsh`
+  (PowerShell 7+) is not installed. So anything handed to Nico to paste must
+  avoid, at minimum:
+  - **`&&` and `||`** — added in PowerShell *7.0*; in 5.1 they are a parser
+    error ("The token '&&' is not a valid statement separator in this
+    version"). Use `;` for unconditional, `; if ($?) { ... }` for conditional.
+  - **`$?` is a BOOLEAN in PowerShell**, not bash's numeric status, so
+    `if ($? -eq 0)` is wrong. For a native exe's real code use
+    `$LASTEXITCODE`.
+  - **`%TEMP%` is cmd.exe syntax** and expands to nothing in PowerShell; the
+    variable is `$env:TEMP`. (docs/ROADMAP.md's Chrome dGPU command carried
+    `%TEMP%` from v9.2 until this was written — it had never been run from
+    PowerShell.)
+  This bit for real: the wrap-up of 13 Sept handed over
+  `node test/run_tests.js && python serve.py 8734`, which cannot run on the
+  only machine that plays this game.
+- 🐚 **The dev machine runs Windows PowerShell 5.1, which is NOT bash.**
+  Measured 13 Sept 2026: `$PSVersionTable.PSVersion` = 5.1.26100, and `pwsh`
+  (PowerShell 7+) is not installed. So anything handed to Nico to paste must
+  avoid, at minimum:
+  - **`&&` and `||`** — added in PowerShell *7.0*; in 5.1 they are a parser
+    error ("The token '&&' is not a valid statement separator in this
+    version"). Use `;` for unconditional, `; if ($?) { ... }` for conditional.
+  - **`$?` is a BOOLEAN in PowerShell**, not bash's numeric status, so
+    `if ($? -eq 0)` is wrong. For a native exe's real code use
+    `$LASTEXITCODE`.
+  - **`%TEMP%` is cmd.exe syntax** and expands to nothing in PowerShell; the
+    variable is `$env:TEMP`. (docs/ROADMAP.md's Chrome dGPU command carried
+    `%TEMP%` from v9.2 until this was written — it had never been run from
+    PowerShell.)
+  This bit for real: the wrap-up of 13 Sept handed over
+  `node test/run_tests.js && python serve.py 8734`, which cannot run on the
+  only machine that plays this game.
 - 🚰 **Never pipe `node test/mutants.js` through `tail` inside a `&&` chain.**
   HISTORY's "Lessons" already says piping tests through `tail` masked a
   failure once; on 13 Sept 2026 it happened again, worse: the battery

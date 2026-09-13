@@ -31,8 +31,14 @@ and is reported on other ROG units — full write-up and sources in
 **Chrome on the dGPU** (needs its own `--user-data-dir`, or a running Chrome
 swallows the flag):
 
+PowerShell 5.1 is the only shell on this machine, and this command was wrong
+for it in two ways until 13 Sept 2026: `%TEMP%` is cmd.exe syntax that
+expands to nothing in PowerShell, and the path separator had been written as
+a literal FORM FEED byte (a `\f` that something interpreted), which broke it in
+every shell:
+
 ```sh
-chrome.exe --user-data-dir=%TEMP%f-rtx-profile --force-high-performance-gpu http://127.0.0.1:8734/index.html
+chrome.exe --user-data-dir=$env:TEMP\ff-rtx-profile --force-high-performance-gpu http://127.0.0.1:8734/index.html
 ```
 
 **Still untested from v9.2:** the periodic hiccup. It appeared ONLY on the RTX
