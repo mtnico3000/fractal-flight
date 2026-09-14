@@ -56,6 +56,42 @@ trip counts are free**: the compiler keeps a 384-iteration loop with a huge
 body rolled, so the cap is a ceiling on work, not on code size. This confirms
 the earlier A/B recorded in CLAUDE.md rather than contradicting it.
 
+## 2b. What the ~50 s is actually made of, subsystem by subsystem
+
+Measured 14 Sept 2026 on the shipped v9.6 shader (debug already split out).
+Each row replaces ONE function's body with a trivial `return`, keeping its
+signature so every call site survives — that removes the subsystem's code and
+everything it inlines, and nothing else. Four baselines interleaved:
+**49.8 · 50.0 · 53.3 · 48.5 s**, mean **50.4 s**, spread 4.8 s — so anything
+under ~5 s in the last column is noise, and is marked as such.
+
+| what is being built | stub | compile | it costs | share |
+|---|---|---|---|---|
+| **the terrain heightfield** — `terrainShapeLOD`: 2 Mandelbrot distance estimates, a domain-warped 5-octave ridged fbm, 3 fbm fields, lakes. The world itself. | `0.0` | **9.1 s** | **41.3 s** | **82%** |
+| **the surface normal** — `terrainNormal`, which evaluates the heightfield 4× per shaded pixel (hL/hR/hD/hU) for lighting | flat up | 32.8 s | 17.6 s | 35% |
+| **the shadow heightfield** — `terrainCheapH`, the deliberately coarser 2-octave/13-iteration copy the sun rays march | `0.0` | 37.6 s | 12.8 s | 25% |
+| **the terrain march** — `marchTerrain`: the 384-step sphere trace, the tolerance stop and the secant refine | miss | 39.6 s | 10.8 s | 21% |
+| **sun shadows** — `softShadow`, 24 steps, at 6 call sites | lit | 42.1 s | 8.3 s | 16% |
+| **trees** — `plantEval`: the tree-fern SDF with Julia-carved fronds | far away | 45.7 s | 4.7 s | 9% |
+| **the craft** — `sdCraft`, the player's aircraft SDF | far away | 47.0 s | 3.4 s | 7% |
+| **terrain shading** — `terrainColor`: altitude bands, slope, snow, undergrowth | grey | 47.6 s | 2.8 s | 6% |
+| the alien fleet — `marchAliens`, mandelbox hulls + the relay bulb | miss | 49.4 s | 1.0 s | *noise* |
+| jul's ring course — `marchRings` | miss | 49.7 s | 0.7 s | *noise* |
+| clouds — `cloudLayer`, 16-step volumetric | nothing | 51.5 s | −1.1 s | *noise* |
+
+⚠️ **These do not add up to 100%, and must not be added.** They overlap: the
+normal, the shadow field and the march each *contain* terrain evaluations, so
+each row is the cost of everything that disappears with it. The one number
+that matters is the first: **the terrain heightfield is 82% of the compile.**
+Take it out and a shader with the whole fleet, the rings, the clouds, the
+craft, the trees and the water still links in 9 s.
+
+The corollary is uncomfortable and useful: **every feature that is not the
+terrain is free at compile time.** Adding another alien hull type, another
+ring shape or a second cloud layer costs nothing here. Adding one more place
+that evaluates the terrain costs ~18 000 characters of inlined code, and the
+compiler's time grows faster than linearly in program size.
+
 ## 3. Why — GLSL has no function calls
 
 Every call site is a full recursive **copy**. Measured on the v9.6 shader:
@@ -156,6 +192,48 @@ out 2×.
 against the ~92 s this investigation started from.
 
 ---
+
+## 5b. ▶ IDEA — make the loading page tell the truth
+
+**The stage names on the start page are currently fiction.** `initRenderer`
+cycles a fixed list every 1300 ms while it polls `COMPLETION_STATUS_KHR`:
+
+```js
+const parts = ['terrain raymarcher', 'alien flora', 'cumulonimbus',
+               'ring course', 'water & sky', 'collision probe'];
+```
+
+There is one opaque driver compile; those six labels are a spinner with words
+on it. §2b shows how far from the truth they are — 'cumulonimbus' and 'ring
+course' are each worth **under a second** of the ~50 s, while the terrain
+heightfield nobody is told about is **82%**. A player watching it learns
+nothing, and the one genuinely interesting fact (this is a GPU compiler
+translating a procedural world into machine code, not a level loading) is
+never said.
+
+Worth doing, in rough order of honesty for effort:
+
+1. **Weight the labels by the real numbers.** Cheapest fix: drive the stage
+   text from §2b's shares instead of a flat 1300 ms rotation, so 'the terrain
+   heightfield' holds the screen for most of the wait and 'ring course' flicks
+   past. Still an estimate, but no longer a misleading one.
+2. **Show elapsed against a measured expectation.** The compile is ~50 s on
+   this machine and varies ±5% within a session (±25% for the first two of a
+   cold session — see §1). A bar driven by `performance.now()` against a
+   stored per-machine median, with the number visible, is honest: it says how
+   long this usually takes here rather than pretending to know progress.
+3. **Say what is actually happening, once.** One line under the bar —
+   "your GPU is compiling the world: there is no terrain data to load, every
+   mountain is recomputed per pixel per frame" — turns dead time into the most
+   interesting thing about the project.
+4. **Real progress needs real stages**, which means more than one program —
+   §5's probe-row split is the first one. With N programs the loader can
+   report N/M genuinely completed. Only worth it if §5 is done anyway.
+
+⚠️ Do not fake a smooth progress bar. `KHR_parallel_shader_compile` exposes
+only a boolean (`COMPLETION_STATUS_KHR`), so anything smoother than
+"elapsed vs expected" is invented, and a bar that stalls at 90% is worse than
+a spinner that never claimed to know.
 
 ## 6. Other things measured and NOT worth doing
 

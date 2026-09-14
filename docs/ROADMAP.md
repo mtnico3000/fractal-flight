@@ -52,9 +52,9 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.6; the branch is still named `v9.5`.** (The branch name lags
+**Version is v9.7; the branch is still named `v9.5`.** (The branch name lags
 the version on purpose — PR #3's head branch on origin is named `v9.4`. See
-the push note at the bottom.) v9.6 is the last version of the pure
+the push note at the bottom.) v9.7 is the last version of the pure
 raymarcher: **v10 is a renderer change**, and it was Nico's call after the
 marcher hunt proved the residual flutter is not a bug.
 
@@ -63,12 +63,12 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**79 assertions, 13 files**; three skip without `npm install`, and one
+   (**82 assertions, 14 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **47 mutants as of v9.6**). A green suite is not
+   (slow, opt-in, **47 mutants as of v9.7**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -153,6 +153,17 @@ own small program takes the compile from ~44 s to ~30 s. ⚠️ It is the
 COLLISION AUTHORITY — it must compute from the same GLSL text as the renderer
 or collision drifts from what you see — and it trades load time for a second
 draw call, so measure the FRAME as well as the compile. Its own session.
+
+### ▶ 1c-quater. Make the loading page honest (small, self-contained)
+
+The six stage names `initRenderer` cycles ('terrain raymarcher', 'alien
+flora', 'cumulonimbus', …) are a worded spinner: measured, 'cumulonimbus' and
+'ring course' are each worth **under a second** of the ~50 s wait, while the
+terrain heightfield — which is never mentioned — is **82%**. **docs/COMPILE.md
+§5b** has the four options and the one trap (the extension exposes a boolean,
+so any bar smoother than elapsed-vs-expected is invented). The cheap version
+is weighting the labels by §2b's shares plus one honest line about what the
+wait actually is; it touches `js/renderer.js` and nothing else.
 
 ### ▶ 1d. Watch the frame rate at the new default
 
