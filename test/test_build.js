@@ -35,10 +35,19 @@ check('the committed artifact matches what build.js generates', () => {
   ok(have === built.html, name + ' is stale — run `node build.js` and commit it');
 });
 
-check('every js/ module reaches the bundle', () => {
+// js/debug.js is the ONE module that must not reach the artifact: the
+// double-click build ships with no debug surface at all. It is reached by a
+// single dynamic import in main.js which build.js cuts out.
+const NOT_IN_ARTIFACT = ['debug.js'];
+
+check('every js/ module reaches the bundle, except the debug one', () => {
   const modules = fs.readdirSync(path.join(root, 'js')).filter(f => f.endsWith('.js')).sort();
-  const missing = modules.filter(m => !built.order.includes(m));
+  const missing = modules.filter(m => !built.order.includes(m) && !NOT_IN_ARTIFACT.includes(m));
   ok(missing.length === 0, 'not in the bundle: ' + missing.join(', '));
+  for (const f of NOT_IN_ARTIFACT) {
+    ok(fs.existsSync(path.join(root, 'js', f)), 'js/' + f + ' is missing');
+    ok(!built.order.includes(f), 'js/' + f + ' reached the artifact — the single file must ship with no debug build');
+  }
 });
 
 // A concatenation is one scope, so an `import` or `export` surviving the strip

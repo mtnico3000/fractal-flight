@@ -3,7 +3,7 @@
   GENERATED FILE — do not edit.
 
   Single-file build of Fractal Alps v9.6, produced from the modular
-  source (index.html + css/style.css + 18 js/ modules) by build.js.
+  source (index.html + css/style.css + 20 js/ modules) by build.js.
   Edit those and run `node build.js`. Anything changed here is lost on the
   next build, and never reaches anyone playing the modular build.
 -->
@@ -429,10 +429,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <h2 id="tuneAHead">Aliens <span class="caret">▸</span></h2>
   <div class="body" id="tuneABody"></div>
 </div>
-<div id="tuneD" class="closed">
-  <h2 id="tuneDHead">Debug <span class="caret">▸</span></h2>
-  <div class="body" id="tuneDBody"></div>
-</div>
+<!-- the Debug panel builds its own DOM in js/debug.js, which only a --debug build loads -->
 </div>
 <div id="info">
   <div id="pilotTag" style="display:none;color:rgba(255,200,130,0.9);font-weight:700;letter-spacing:2px;margin-bottom:4px"></div>
@@ -1992,41 +1989,7 @@ void main() {
   //  64 march budget (ramp; white = exhausted the 384 cap)
   //  32 colour LOD -- the alien-undergrowth fade, smoothstep(3,5,pixelSize),
   //     i.e. a hard viewer-centred ring on the green at t = 1875..3125 m
-  int dmask = int(uDebugMask + 0.5);
-  if (dmask > 0) {
-    vec3 hp = ro + rd * t;
-    vec3 d = vec3(0.0);
-    float nch = 0.0;
-    if ((dmask & 1) != 0) {
-      d += vec3(1.0, 0.25, 0.25) * fract(marchIters / 12.0);          nch += 1.0;
-    }
-    if ((dmask & 2) != 0) {
-      d += vec3(0.25, 1.0, 0.25) * fract(t / 250.0);                  nch += 1.0;
-    }
-    if ((dmask & 4) != 0) {
-      d += vec3(0.30, 0.45, 1.0) * fract(t * uPixScale);              nch += 1.0;
-    }
-    if ((dmask & 8) != 0) {
-      d += vec3(1.0, 1.0, 0.35) * fract(terrainShape(hp.xz) / 4.0);   nch += 1.0;
-    }
-    if ((dmask & 16) != 0) {
-      float turn = length(terrainNormal(hp.xz, t * uPixScale) - terrainNormal(hp.xz, 0.15));
-      d += vec3(1.0, 0.35, 1.0) * clamp(turn * 4.0, 0.0, 1.0);        nch += 1.0;
-    }
-    if ((dmask & 32) != 0) {
-      // exactly the term terrainColor uses to fade the undergrowth out
-      float cl = 1.0 - smoothstep(3.0, 5.0, t * uPixScale);
-      d += vec3(0.35, 1.0, 1.0) * cl;                                 nch += 1.0;
-    }
-    if ((dmask & 64) != 0) {
-      // v9.5: iterations spent, as a ramp; a ray that hit the 384 cap is WHITE.
-      // The old 'march steps' sawtooth could not tell 150 from 6.
-      float bud = marchIters / 384.0;
-      d += (marchIters >= 383.0) ? vec3(3.0) : vec3(1.0, 0.30, 0.10) * bud;   nch += 1.0;
-    }
-    col = d / max(nch, 1.0);
-    if (mat == 0) col = vec3(0.02);          // leave the sky dark
-  }
+  //__FF_DEBUG_BLOCK__
   col = 1.0 - exp(-col * 1.15);
   col = pow(col, vec3(0.4545));
   vec2 vuv = gl_FragCoord.xy / uResolution;
@@ -2087,7 +2050,7 @@ const U = {};
 // shader into GPU machine code (on Windows: GLSL -> HLSL -> D3D bytecode).
 // With KHR_parallel_shader_compile we poll instead of blocking, so the start
 // screen stays alive and animated during the wait.
-async function initRenderer(status, lock) {
+async function initRenderer(status, lock, fsText = fsSrc) {
   if (!gl) {
     document.body.innerHTML = '<p style="color:#fff;font-family:monospace;padding:20px">WebGL2 required.</p>';
     return false;
@@ -2097,7 +2060,7 @@ async function initRenderer(status, lock) {
   const vs = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vs, vsSrc); gl.compileShader(vs);
   const fs = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(fs, fsSrc); gl.compileShader(fs);
+  gl.shaderSource(fs, fsText); gl.compileShader(fs);
   const prog = gl.createProgram();
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);
@@ -2234,215 +2197,6 @@ function copyText(text, btn, label) {
   } else fallback();
 }
 
-// ---- DEBUG panel (v9.4, diagnostic) ---------------------------------------
-// Everything that exists to investigate the viewer-centred artifacts lives
-// here rather than in Tuning, because none of it is world tuning.
-//
-// Three kinds of entry:
-//   master - one click snaps everything to the game's normal defaults, another
-//            gives back whatever was dialled in. That is the A/B.
-//   toggle - a false-colour channel, drawn as a button, summed into uDebugMask.
-//   slider - a real render setting that happens to be under investigation.
-//
-// Reading the channels: they are NOT independent. The march produces t;
-// footprint is just t * uPixScale; height / normal / colour all derive from
-// those. So "hit distance" and "footprint" are the SAME quantity at different
-// band widths, and "terrain height" is world-locked. Concentric rings in those
-// views are them working correctly, not evidence of a bug.
-const TUNED = {
-  master:     { kind: 'master', label: 'DEBUG', v: 0, d: 0, min: 0, max: 1, step: 1,
-                fmt: x => x > 0.5 ? 'on' : 'off' },
-
-  resScale:   { kind: 'slider', label: 'resolution',  v: 0, d: 0, min: 0, max: 2, step: 0.05,
-                fmt: x => x < 0.025 ? 'auto' : x.toFixed(2) + '\u00d7' },
-  detailFade: { kind: 'slider', label: 'detail fade', v: 1, d: 1, min: 0, max: 2, step: 0.05,
-                fmt: x => x < 0.025 ? 'off' : x.toFixed(2) },
-  rayTol:     { kind: 'slider', label: 'ray tol',     v: 1, d: 1, min: 0, max: 1, step: 0.05,
-                fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
-  waterLOD:   { kind: 'slider', label: 'water LOD',   v: 0.8, d: 0.8, min: 0, max: 1, step: 0.05,
-                fmt: x => x < 0.025 ? 'off (old)' : (x > 0.975 ? 'on' : x.toFixed(2)) },
-  // v9.5: the two marcher changes that took the beach/ridge flicker to the
-  // reference marcher's own parallax count. Both here so they can be flown
-  // against the old behaviour on the same frame.
-  hitRefine:  { kind: 'slider', label: 'hit refine',  v: 1, d: 1, min: 0, max: 1, step: 1,
-                fmt: x => x > 0.5 ? 'on' : 'off (old)' },
-  // 0.0018 was v9.4, 0.0009 v9.5's beach fix. 0.0002 (13 Sept 2026) is the
-  // crest fix: the floor is what shaves the thin clip a ray takes off a sharp
-  // ridge, and that miss toggling with the camera was the peaks "breathing".
-  // Hard-ray flips 84 -> 14 for +13-22% iterations; 0.0001 buys little more.
-  stride:     { kind: 'slider', label: 'march stride', v: 0.0002, d: 0.0002, min: 0.0001, max: 0.0018, step: 0.0001,
-                fmt: x => (x * 1000).toFixed(1) + '‰' + (x > 0.00175 ? ' (v9.4)' : x > 0.00085 && x < 0.00095 ? ' (v9.5)' : '') },
-  // 13 Sept 2026: the step is `relax x the vertical gap`, and the safe factor
-  // is cos(slope) -- so 0.55 is a safe step only under 56.6 deg, and it could
-  // not step safely on 2.6% of this island. From BELOW a ridge the ray crosses
-  // the crest BODY (4-10 m thick along the ray) with a step of up to 9.7 m, so
-  // the crest was found or missed by sample phase alone: Nico's horns and
-  // floating pieces. He flew the slider to its left end and reported "the
-  // issue is gone!", then set the shipping default one rung up: **0.30**,
-  // safe to 72.5 deg, leaving 0.017% of the island unmarchable against 2.6%
-  // at 0.55, for +76% march iterations in a mountain view and +5% over the
-  // sea (0.25 was 0.002% at +108%). The relaxation is keyed on the mountain
-  // mass, so frames without mountains barely pay. 0.55 is kept at the top of
-  // the range as the v9.5 A/B, and the bottom is 0.20 (safe to 78.5) because
-  // `peak height` at its own maximum needs 0.22: a tuning slider must not be
-  // able to build a world the marcher cannot render.
-  // docs/MARCHING.md R1-R2, test/test_march.js, RESEARCH s6.9.
-  relaxMtn:   { kind: 'slider', label: 'mtn relax',   v: 0.30, d: 0.30, min: 0.20, max: 0.55, step: 0.05,
-                fmt: x => x.toFixed(2) + (x > 0.525 ? ' (v9.5)' : x > 0.275 && x < 0.325 ? ' (safe)' : '') },
-  // 13 Sept 2026, Nico: "a version without any alien relays, harvesters or
-  // mothership" to tell what moves from what is drawn. Hidden = hulls, beams
-  // and their collisions are gone; the invasion economy keeps running under
-  // it. Same switch for jul's rings, the one other thing that moves by itself.
-  invasion:   { kind: 'slider', label: 'invasion',    v: 1, d: 1, min: 0, max: 1, step: 1,
-                fmt: x => x > 0.5 ? 'on' : 'hidden' },
-  ringsOn:    { kind: 'slider', label: 'rings',       v: 1, d: 1, min: 0, max: 1, step: 1,
-                fmt: x => x > 0.5 ? 'on' : 'hidden' },
-  // 13 Sept 2026, Nico: "let's try the b option with a cam snap thing".
-  // Observation mode only. The chase springs take ~3 s to settle after an
-  // arrow tap (0.34 deg of pitch still to go at 1.5 s, measured live), so a
-  // screenshot taken sooner is of a moving camera. 'snap' parks the camera at
-  // the springs' own rest pose every frame; 'freeze' leaves it where it is
-  // while the craft moves. Both tell a settling camera from a changing world.
-  obsCam:     { kind: 'slider', label: 'obs camera',  v: 0, d: 0, min: 0, max: 2, step: 1,
-                fmt: x => x > 1.5 ? 'freeze' : x > 0.5 ? 'snap' : 'spring' },
-
-  steps:   { kind: 'toggle', bit: 1,  label: 'march steps',    v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  dist:    { kind: 'toggle', bit: 2,  label: 'hit distance',   v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  foot:    { kind: 'toggle', bit: 4,  label: 'footprint',      v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  height:  { kind: 'toggle', bit: 8,  label: 'terrain height', v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  normal:  { kind: 'toggle', bit: 16, label: 'normal turn',    v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  colLOD:  { kind: 'toggle', bit: 32, label: 'colour LOD',     v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-  budget:  { kind: 'toggle', bit: 64, label: 'march budget',   v: 0, d: 0, min: 0, max: 1, step: 1,
-             fmt: x => x > 0.5 ? 'on' : 'off' },
-};
-
-// The bitmask the shader reads for the false-colour channels.
-function debugMask() {
-  if (TUNED.master.v < 0.5) return 0;
-  let m = 0;
-  for (const key in TUNED) { const t = TUNED[key]; if (t.bit && t.v > 0.5) m += t.bit; }
-  return m;
-}
-
-// The Debug panel. Channels are BUTTONS -- one click, no drag, no readout to
-// squint at -- because A/B-ing a moving artifact with a slider is unworkable.
-// The master remembers what was dialled in, snaps everything to the game's
-// defaults, and hands it back on the next click.
-function buildDebugPanel(OBJ, panelId, headId, bodyId) {
-  const panel = document.getElementById(panelId);
-  const body = document.getElementById(bodyId);
-  document.getElementById(headId).addEventListener('click', () => {
-    panel.classList.toggle('closed');
-    panel.querySelector('.caret').textContent = panel.classList.contains('closed') ? '\u25b8' : '\u25be';
-  });
-
-  const paints = [];
-  // Touching any debug control means the operator is investigating, so the
-  // master lights up. OFF then always means exactly 'the game's defaults'.
-  let masterPaint = () => {};
-  const armMaster = () => {
-    const m = OBJ.master;
-    if (m && m.v < 0.5) { m.v = 1; masterPaint(); }
-  };
-  for (const key in OBJ) {
-    const t = OBJ[key];
-    const row = document.createElement('div');
-
-    if (t.kind === 'slider') {
-      row.className = 'trow';
-      const label = document.createElement('label');
-      label.textContent = t.label;
-      const slider = document.createElement('input');
-      slider.type = 'range';
-      slider.min = t.min; slider.max = t.max; slider.step = t.step; slider.value = t.v;
-      const val = document.createElement('span');
-      val.className = 'val'; val.textContent = t.fmt(t.v);
-      slider.addEventListener('input', () => {
-        t.v = parseFloat(slider.value); val.textContent = t.fmt(t.v);
-        armMaster();   // or DEBUG would read 'off' while a setting was live
-      });
-      slider.addEventListener('keydown', e => e.preventDefault());   // flight keys keep working
-      paints.push(() => { slider.value = t.v; val.textContent = t.fmt(t.v); });
-      t._slider = slider; t._val = val;
-      row.appendChild(label); row.appendChild(slider); row.appendChild(val);
-      body.appendChild(row);
-      continue;
-    }
-
-    row.className = 'drow';
-    const btn = document.createElement('button');
-    btn.className = 'dbtn' + (t.kind === 'master' ? ' master' : '');
-    btn.textContent = t.label;
-    const paint = () => btn.classList.toggle('on', t.v > 0.5);
-
-    if (t.kind === 'master') {
-      btn.addEventListener('click', () => {
-        t.v = t.v > 0.5 ? 0 : 1;
-        for (const k2 in OBJ) {
-          const o = OBJ[k2];
-          if (o.kind === 'master') continue;
-          // _user is only set by a previous OFF. On the FIRST activation
-          // there is nothing to restore, so leave the value alone --
-          // falling back to o.d here wiped whatever had just been dialled in.
-          if (t.v > 0.5) { if (o._user !== undefined) o.v = o._user; }
-          else { o._user = o.v; o.v = o.d; }
-        }
-        for (const p of paints) p();
-        paint();
-        btn.blur();
-      });
-      masterPaint = paint;
-    } else {
-      btn.addEventListener('click', () => {
-        t.v = t.v > 0.5 ? 0 : 1; paint(); armMaster(); btn.blur();
-      });
-      paints.push(paint);
-    }
-    paint();
-    row.appendChild(btn);
-    body.appendChild(row);
-  }
-
-  // Same RESET / COPY JSON pair the other two panels carry, so a debug setup
-  // can be handed over verbatim instead of described.
-  const btns = document.createElement('div');
-  btns.className = 'tbtns';
-
-  const reset = document.createElement('button');
-  reset.className = 'treset'; reset.textContent = 'RESET';
-  reset.addEventListener('click', () => {
-    for (const k in OBJ) { const o = OBJ[k]; o.v = o.d; o._user = undefined; }
-    for (const p of paints) p();
-    masterPaint();
-    reset.blur();
-  });
-  btns.appendChild(reset);
-
-  const EXPORT_LABEL = 'COPY JSON';
-  const exp = document.createElement('button');
-  exp.className = 'texport'; exp.textContent = EXPORT_LABEL;
-  exp.title = 'copy this panel’s current values to the clipboard as JSON';
-  exp.addEventListener('click', () => {
-    const values = {};
-    for (const k in OBJ) values[k] = OBJ[k].v;
-    copyText(JSON.stringify({ panel: panelId, values }, null, 2), exp, EXPORT_LABEL);
-    exp.blur();
-  });
-  btns.appendChild(exp);
-  body.appendChild(btns);
-
-  const note = document.createElement('div');
-  note.className = 'dnote';
-  note.textContent = 'rings in hit distance / footprint are those views working, not a bug';
-  body.appendChild(note);
-}
-
 function buildPanel(OBJ, panelId, headId, bodyId) {
   const panel = document.getElementById(panelId);
   const body = document.getElementById(bodyId);
@@ -2494,8 +2248,47 @@ function buildPanel(OBJ, panelId, headId, bodyId) {
 function buildTunePanel() {
   buildPanel(TUNE, 'tune', 'tuneHead', 'tuneBody');
   buildPanel(TUNEA, 'tuneA', 'tuneAHead', 'tuneABody');
-  buildDebugPanel(TUNED, 'tuneD', 'tuneDHead', 'tuneDBody');
 }
+
+// ==================== js/dbg.js ====================
+// The render settings the GAME reads, with the shipped behaviour baked in.
+//
+// These used to be read as TUNED.<knob>.v straight out of the Debug panel,
+// which meant the panel -- and the whole diagnostic surface behind it -- had
+// to exist for the game to run at all. Now this plain object IS the game's
+// answer, and js/debug.js (loaded only in a --debug build) writes into it
+// when a slider moves. With no debug module these values never change.
+//
+// Every value below is TUNED's own default, and test_dbg.js fails if the two
+// ever disagree -- two copies of one truth is exactly the shape of bug that
+// `v === d` was already written to catch.
+const DBG = {
+  on:   false,   // a debug build loaded js/debug.js
+  mask: 0,       // uDebugMask: the false-colour channel bits
+  resScale:    0,   // resolution
+  detailFade:  1,   // detail fade
+  rayTol:      1,   // ray tol
+  waterLOD:    0.8,   // water LOD
+  hitRefine:   1,   // hit refine
+  stride:      0.0002,   // march stride
+  relaxMtn:    0.3,   // mtn relax
+  invasion:    1,   // invasion
+  ringsOn:     1,   // rings
+  obsCam:      0,   // obs camera
+};
+
+// ==================== js/dbgflag.js ====================
+// Is this a DEBUG build? Shipped value: no.
+//
+// `python serve.py 8734 --debug` serves this ONE file with `true` instead,
+// which is the only thing that makes main.js dynamically import js/debug.js.
+// Nothing else in the game reaches for the debug module, so:
+//   * a normal server, and the double-click single-file build, never load it;
+//   * build.js walks STATIC imports only, so debug.js cannot reach the
+//     artifact even by accident (test_build.js asserts that).
+// The file on disk is the shipped answer -- do not flip it to commit a
+// debug build.
+const DEBUG_BUILD = false;
 
 // ==================== js/audio.js ====================
 // All synthesized audio: engine (saws + noise + banking wobble LFO), ground
@@ -3961,7 +3754,7 @@ function packRingData() {
   for (let i = 0; i < MAX_RINGS; i++) {
     const r = rings[i];
     // Debug 'rings' hidden: radius -1 is the shader's own "no ring here"
-    if (r.active && TUNED.ringsOn.v > 0.5) {
+    if (r.active && DBG.ringsOn > 0.5) {
       ringsPosData[i*4]   = r.pos[0];
       ringsPosData[i*4+1] = r.pos[1];
       ringsPosData[i*4+2] = r.pos[2];
@@ -4421,7 +4214,7 @@ function updateAliens(dt, now) {
   const cp = craft.pos;
   // A hidden hull (Debug 'invasion') must not kill you either: what you
   // cannot see cannot be flown around.
-  if (TUNED.invasion.v > 0.5) {
+  if (DBG.invasion > 0.5) {
     if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
     if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
     for (const s of alien.ships) {
@@ -4446,7 +4239,7 @@ function packAlienUniforms(out) {
   // Debug 'invasion' hidden: every hull parks at y = -99999 (the shader's own
   // "not here" convention), no lasers, no beams, no hit flash. The economy
   // underneath keeps ticking so the counters stay honest.
-  const hide = TUNED.invasion.v < 0.5;
+  const hide = DBG.invasion < 0.5;
   out.motherPos = (m.gone || hide) ? [0, -99999, 0] : [m.x, m.y, m.z];
   out.motherHalf = [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
   out.motherMelt = m.melt;
@@ -4858,7 +4651,7 @@ function update(dt, now) {
   // that is still moving. 'snap' parks the camera at the springs' own rest
   // pose every frame; 'freeze' leaves it where it is while the craft moves
   // off. Both tell a settling camera from a changing world.
-  const obsCam = camMode.obs ? TUNED.obsCam.v : 0;
+  const obsCam = camMode.obs ? DBG.obsCam : 0;
   if (obsCam < 0.5) {
   // close zooms stiffen the springs: the chase lag (~27 m at cruise) would
   // otherwise keep the camera away no matter how far you scroll in — the
@@ -5128,11 +4921,15 @@ markSwatch();
 async function main() {
   setStatus('waking up WebGL2 \u2026');
   await nextFrame();
-  if (!(await initRenderer(setStatus, lockFields))) return;
+  // debug bootstrap removed by build.js — the artifact has no debug build
+  const dbgMod = null;
+  const fsText = dbgMod ? dbgMod.injectDebug(fsSrc) : fsSrc;
+  if (!(await initRenderer(setStatus, lockFields, fsText))) return;
   setStatus('linking flight systems \u2026');
   await nextFrame();
 
   buildTunePanel();
+  if (dbgMod) dbgMod.buildDebugPanel();
   if (IS_TOUCH) setRenderScale(0.6); // heavy shader: start lower on mobile GPUs, auto-scaler adjusts
 
   genClouds();
@@ -5166,8 +4963,8 @@ async function main() {
   // Above 1 this supersamples -- the browser downsamples the oversized buffer
   // on composite, which is the one antialiasing route with no blur, no
   // ghosting and nothing to tune.
-  const manualRes = TUNED.resScale.v > 0.025;
-  if (manualRes) setRenderScale(TUNED.resScale.v);
+  const manualRes = DBG.resScale > 0.025;
+  if (manualRes) setRenderScale(DBG.resScale);
   else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
   wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
@@ -5206,15 +5003,17 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
-  gl.uniform1f(U.uDetailFade, TUNED.detailFade.v);   // A1 footprint-aware detail fade
-  gl.uniform1f(U.uRayTol, TUNED.rayTol.v);           // v9.4 A/B: hit tolerance along the ray
-  gl.uniform1f(U.uHitRefine, TUNED.hitRefine.v);     // v9.5 A/B: secant refine onto the surface
-  gl.uniform1f(U.uMarchStride, TUNED.stride.v);      // v9.5 A/B: minimum stride per unit t
-  gl.uniform1f(U.uRelaxMtn, TUNED.relaxMtn.v);       // 13 Sept 2026: step relaxation where the mountains are
-  gl.uniform1f(U.uWaterLOD, TUNED.waterLOD.v);       // v9.4 A/B: footprint-aware water ripples
-  // v9.4 diagnostics: the whole Debug panel packed into one uniform (the
-  // budget is already over the 224-slot mobile guarantee -- see CLAUDE.md)
-  gl.uniform1f(U.uDebugMask, debugMask());
+  gl.uniform1f(U.uDetailFade, DBG.detailFade);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uRayTol, DBG.rayTol);           // v9.4 A/B: hit tolerance along the ray
+  gl.uniform1f(U.uHitRefine, DBG.hitRefine);     // v9.5 A/B: secant refine onto the surface
+  gl.uniform1f(U.uMarchStride, DBG.stride);      // v9.5 A/B: minimum stride per unit t
+  gl.uniform1f(U.uRelaxMtn, DBG.relaxMtn);       // 13 Sept 2026: step relaxation where the mountains are
+  gl.uniform1f(U.uWaterLOD, DBG.waterLOD);       // v9.4 A/B: footprint-aware water ripples
+  // v9.4 diagnostics: the whole Debug panel packed into one uniform. In a
+  // non-debug build the shader has no channels, the uniform is optimised
+  // away, and getUniformLocation returned null -- uniform1f(null, 0) is a
+  // no-op, so this costs one call and no branch.
+  gl.uniform1f(U.uDebugMask, DBG.mask);
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();

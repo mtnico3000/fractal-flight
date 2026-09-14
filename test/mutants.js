@@ -163,15 +163,15 @@ const MUTANTS = [
   // its failure mode is silent data loss: you dial a setup in, press DEBUG,
   // and the setup is gone. Only a real DOM exercises it -- test_tune.js reads
   // the knob objects and never builds the panel.
-  ['the master wipes a first-time setup (the v9.4 bug, restored)', 'js/tune.js',
+  ['the master wipes a first-time setup (the v9.4 bug, restored)', 'js/debug.js',
    'if (t.v > 0.5) { if (o._user !== undefined) o.v = o._user; }',
    'if (t.v > 0.5) { o.v = o._user !== undefined ? o._user : o.d; }', 'test_panels.js'],
-  ['touching a slider no longer arms the master', 'js/tune.js',
+  ['touching a slider no longer arms the master', 'js/debug.js',
    "armMaster();   // or DEBUG would read 'off' while a setting was live", ';', 'test_panels.js'],
-  ['the master moves the model but not the slider it sits under', 'js/tune.js',
+  ['the master moves the model but not the slider it sits under', 'js/debug.js',
    'paints.push(() => { slider.value = t.v; val.textContent = t.fmt(t.v); });',
    'paints.push(() => { val.textContent = t.fmt(t.v); });', 'test_panels.js'],
-  ['two debug channels collide on one bitmask bit', 'js/tune.js',
+  ['two debug channels collide on one bitmask bit', 'js/debug.js',
    "colLOD:  { kind: 'toggle', bit: 32,", "colLOD:  { kind: 'toggle', bit: 2,", 'test_panels.js'],
   ['the panels leave the stacking column and can overlap again', 'index.html',
    '<div id="panels">', '<div id="panels"></div>', 'test_panels.js'],
@@ -202,8 +202,22 @@ const MUTANTS = [
   // NB: anchored on the RANGE, not on v/d -- the battery reported this mutant
   // SKIPPED (anchor not found) the moment the default moved 0.55 -> 0.25 -> 0.30.
   // A mutant whose anchor drifts is a test that silently stopped running.
-  ['the relaxation slider can no longer reach a safe step', 'js/tune.js',
+  ['the relaxation slider can no longer reach a safe step', 'js/debug.js',
    "min: 0.20, max: 0.55, step: 0.05", "min: 0.45, max: 0.55, step: 0.05", 'test_march.js'],
+
+  // --- the debug split (14 Sept 2026) --------------------------------------
+  // js/debug.js reaches the game through ONE dynamic import that build.js cuts.
+  // Make it a STATIC import and it lands in the single-file artifact: the
+  // double-click build would ship the Debug panel and, worse, the false-colour
+  // channels, which are half the shader compile. test_build.js is the only
+  // thing watching for that.
+  ['js/debug.js sneaks into the artifact through a static import', 'js/main.js',
+   "import { DEBUG_BUILD } from './dbgflag.js';",
+   "import { DEBUG_BUILD } from './dbgflag.js';\nimport * as _dbg from './debug.js';", 'test_build.js'],
+
+  // The game must not need the debug module to know its own settings.
+  ['a DBG default drifts from the knob it mirrors', 'js/dbg.js',
+   "relaxMtn:    0.3,", "relaxMtn:    0.55,", 'test_dbg.js'],
 ];
 
 function mutate(src, find, repl, all) {

@@ -35,10 +35,17 @@ function boot() {
   const win = dom.window;
   win.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {},
                             addEventListener() {}, removeEventListener() {} });
-  const src = read('js/tune.js').replace(/^import\s[^;]*;/gm, '').replace(/^export\s+/gm, '');
+  // Two modules now: tune.js keeps the world/alien panels, and the debug
+  // surface moved to debug.js (loaded only by a `serve.py --debug` build).
+  // They are evaluated together here so the Debug panel is exercised exactly
+  // as a debug build would build it -- including the DOM it creates itself,
+  // which index.html no longer carries.
+  const strip = s => s.replace(/^import\s[^;]*;/gm, '').replace(/^export\s+/gm, '');
+  const src = strip(read('js/tune.js')) + '\n' + strip(read('js/dbg.js')) + '\n' + strip(read('js/debug.js'));
   const mod = new win.Function('document', 'navigator',
-    src + '\nreturn { TUNE, TUNEA, TUNED, debugMask, buildTunePanel };')(win.document, win.navigator);
+    src + '\nreturn { TUNE, TUNEA, TUNED, DBG, debugMask, buildTunePanel, buildDebugPanel, injectDebug };')(win.document, win.navigator);
   mod.buildTunePanel();
+  mod.buildDebugPanel();
   return { win, doc: win.document, mod };
 }
 

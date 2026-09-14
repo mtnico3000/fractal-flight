@@ -16,7 +16,7 @@
 const { loadModule, check, eq, ok, summary } = require('./harness');
 const { landGrid, slopes, gradWde, safeRelax, slopeFor, deg } = require('./slope_census');
 
-const { TUNED } = loadModule('tune.js');
+const { TUNED } = loadModule('debug.js', { buildPanel: () => {}, copyText: () => {}, DBG: {} });
 
 console.log('march');
 

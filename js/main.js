@@ -5,7 +5,10 @@
 import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD } from './config.js';
 import { craft, camPos, viewPos, viewZoom, sun, probe } from './state.js';
 import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
-import { TUNE, TUNED, debugMask, buildTunePanel } from './tune.js';
+import { fsSrc } from './shaders.js';
+import { TUNE, buildTunePanel } from './tune.js';
+import { DBG } from './dbg.js';
+import { DEBUG_BUILD } from './dbgflag.js';
 import { initInput, IS_TOUCH } from './input.js';
 import { update, resetFlight, grindAmt } from './flight.js';
 import { initRings, updateRings, packRingData, ringsPosData, ringsMatsData } from './rings.js';
@@ -84,11 +87,25 @@ markSwatch();
 async function main() {
   setStatus('waking up WebGL2 \u2026');
   await nextFrame();
-  if (!(await initRenderer(setStatus, lockFields))) return;
+  // >>> debug bootstrap — build.js CUTS this region out of the artifact >>>
+  // The DEBUG build, and the only place it is reached from. DEBUG_BUILD is
+  // false unless the dev server was started with --debug, so a normal run --
+  // and the double-click artifact, where js/debug.js does not exist at all --
+  // never fetches it, never builds the panel, and compiles a shader with no
+  // false-colour channels in it (about half the driver compile: docs/COMPILE.md).
+  let dbgMod = null;
+  if (DEBUG_BUILD) {
+    try { dbgMod = await import('./debug.js'); }
+    catch (e) { console.warn('debug build requested but js/debug.js did not load:', e); }
+  }
+  // <<< debug bootstrap <<<
+  const fsText = dbgMod ? dbgMod.injectDebug(fsSrc) : fsSrc;
+  if (!(await initRenderer(setStatus, lockFields, fsText))) return;
   setStatus('linking flight systems \u2026');
   await nextFrame();
 
   buildTunePanel();
+  if (dbgMod) dbgMod.buildDebugPanel();
   if (IS_TOUCH) setRenderScale(0.6); // heavy shader: start lower on mobile GPUs, auto-scaler adjusts
 
   genClouds();
@@ -122,8 +139,8 @@ async function main() {
   // Above 1 this supersamples -- the browser downsamples the oversized buffer
   // on composite, which is the one antialiasing route with no blur, no
   // ghosting and nothing to tune.
-  const manualRes = TUNED.resScale.v > 0.025;
-  if (manualRes) setRenderScale(TUNED.resScale.v);
+  const manualRes = DBG.resScale > 0.025;
+  if (manualRes) setRenderScale(DBG.resScale);
   else if (wasManualRes) setRenderScale(Math.min(getRenderScale(), 1.0));  // back to auto: rejoin the
   wasManualRes = manualRes;                    // adaptive range at once rather than crawling down 0.15 a step
   resize();
@@ -162,15 +179,17 @@ async function main() {
   gl.uniform1f(U.uFov, TAN_HALF_FOV);
   gl.uniform2f(U.uJitter, 0, 0); // no temporal accumulation → keep rays fixed = no shimmer
   gl.uniform1f(U.uPixScale, 2 * TAN_HALF_FOV / canvas.height);
-  gl.uniform1f(U.uDetailFade, TUNED.detailFade.v);   // A1 footprint-aware detail fade
-  gl.uniform1f(U.uRayTol, TUNED.rayTol.v);           // v9.4 A/B: hit tolerance along the ray
-  gl.uniform1f(U.uHitRefine, TUNED.hitRefine.v);     // v9.5 A/B: secant refine onto the surface
-  gl.uniform1f(U.uMarchStride, TUNED.stride.v);      // v9.5 A/B: minimum stride per unit t
-  gl.uniform1f(U.uRelaxMtn, TUNED.relaxMtn.v);       // 13 Sept 2026: step relaxation where the mountains are
-  gl.uniform1f(U.uWaterLOD, TUNED.waterLOD.v);       // v9.4 A/B: footprint-aware water ripples
-  // v9.4 diagnostics: the whole Debug panel packed into one uniform (the
-  // budget is already over the 224-slot mobile guarantee -- see CLAUDE.md)
-  gl.uniform1f(U.uDebugMask, debugMask());
+  gl.uniform1f(U.uDetailFade, DBG.detailFade);   // A1 footprint-aware detail fade
+  gl.uniform1f(U.uRayTol, DBG.rayTol);           // v9.4 A/B: hit tolerance along the ray
+  gl.uniform1f(U.uHitRefine, DBG.hitRefine);     // v9.5 A/B: secant refine onto the surface
+  gl.uniform1f(U.uMarchStride, DBG.stride);      // v9.5 A/B: minimum stride per unit t
+  gl.uniform1f(U.uRelaxMtn, DBG.relaxMtn);       // 13 Sept 2026: step relaxation where the mountains are
+  gl.uniform1f(U.uWaterLOD, DBG.waterLOD);       // v9.4 A/B: footprint-aware water ripples
+  // v9.4 diagnostics: the whole Debug panel packed into one uniform. In a
+  // non-debug build the shader has no channels, the uniform is optimised
+  // away, and getUniformLocation returned null -- uniform1f(null, 0) is a
+  // no-op, so this costs one call and no branch.
+  gl.uniform1f(U.uDebugMask, DBG.mask);
   gl.uniform3fv(U.uCraftPos, craft.pos);
   gl.uniformMatrix3fv(U.uCraftMat, false, craftBasis.mat);
   packRingData();

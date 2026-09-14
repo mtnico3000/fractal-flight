@@ -18,7 +18,8 @@
 
 const { loadModule } = require('./harness');
 
-const { TUNE, TUNED } = loadModule('tune.js');
+const { TUNE } = loadModule('tune.js');
+const { TUNED } = loadModule('debug.js', { buildPanel: () => {}, copyText: () => {}, DBG: {} });
 const M = loadModule('terrain.js', { TUNE }, ['noiseJ', 'mandelDEJ', 'smaxJ', 'fbmJ', 'ridgedJ']);
 const { terrainShapeJ, mandelDEJ, smaxJ, fbmJ, ridgedJ } = M;
 

@@ -1,4 +1,5 @@
-import { TUNEA, TUNED } from './tune.js';
+import { TUNEA } from './tune.js';
+import { DBG } from './dbg.js';
 import { craft } from './state.js';
 import { terrainShapeJ } from './terrain.js';
 import { collectedSet } from './spores.js';
@@ -384,7 +385,7 @@ export function updateAliens(dt, now) {
   const cp = craft.pos;
   // A hidden hull (Debug 'invasion') must not kill you either: what you
   // cannot see cannot be flown around.
-  if (TUNED.invasion.v > 0.5) {
+  if (DBG.invasion > 0.5) {
     if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
     if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
     for (const s of alien.ships) {
@@ -409,7 +410,7 @@ export function packAlienUniforms(out) {
   // Debug 'invasion' hidden: every hull parks at y = -99999 (the shader's own
   // "not here" convention), no lasers, no beams, no hit flash. The economy
   // underneath keeps ticking so the counters stay honest.
-  const hide = TUNED.invasion.v < 0.5;
+  const hide = DBG.invasion < 0.5;
   out.motherPos = (m.gone || hide) ? [0, -99999, 0] : [m.x, m.y, m.z];
   out.motherHalf = [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
   out.motherMelt = m.melt;

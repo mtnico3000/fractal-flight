@@ -22,7 +22,7 @@ const stubs = {
   terrainShapeJ: () => 0, doCrash: noop, unCrash: noop, collectTree: noop, updateRings: noop, initRings: noop,
   fireGun: noop, updateBullets: noop, updateBombs: noop, resolveBlasts: noop, driftClouds: noop, cloudImmersion: () => 0,
   updateAliens: noop, initAliens: noop, engineUpdate: noop, grindUpdate: noop, cloudWindUpdate: noop, emitTrail: noop,
-  TUNED: { obsCam: { v: 0 } },
+  DBG: { obsCam: 0 },
 };
 const F = loadModule('flight.js', stubs, ['chasePose']);
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

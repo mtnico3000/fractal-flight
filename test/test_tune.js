@@ -8,7 +8,10 @@
 
 const { loadModule, check, eq, ok, summary } = require('./harness');
 
-const { TUNE, TUNEA, TUNED } = loadModule('tune.js');
+const { TUNE, TUNEA } = loadModule('tune.js');
+// The debug knobs moved out of tune.js on 14 Sept 2026: they now live in
+// js/debug.js, which only a `serve.py --debug` build ever loads.
+const { TUNED } = loadModule('debug.js', { buildPanel: () => {}, copyText: () => {}, DBG: {} });
 const panels = { TUNE, TUNEA, TUNED };
 
 console.log('tune');

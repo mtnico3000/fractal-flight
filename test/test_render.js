@@ -33,7 +33,7 @@ check('the fps counter uses real elapsed time, not the physics clamp', () => {
 });
 
 check('a manual resolution scale overrides the auto-scaler', () => {
-  ok(/TUNED\.resScale\.v > 0\.025[\s\S]{0,120}setRenderScale\(TUNED\.resScale\.v\)/.test(main),
+  ok(/DBG\.resScale > 0\.025[\s\S]{0,120}setRenderScale\(DBG\.resScale\)/.test(main),
      'a pinned resolution must be applied before resize()');
   const m = /if \(([^)]*)\) adjustQuality\(fps\);/.exec(main);
   ok(m, 'adjustQuality must be guarded, not called unconditionally');

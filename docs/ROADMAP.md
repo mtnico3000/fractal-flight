@@ -128,6 +128,32 @@ Hand Nico a build with `flora range` at its default and ask for the same
 one-tap-at-a-time series he flew for the peaks — the tell is identical: a
 contour that CYCLES rather than growing monotonically.
 
+### ✅ 1c-bis. The debug build is separate now (14 Sept 2026)
+
+Nico: *"make it that all debug related things (including the panel) are made
+fully separate, and they only load when we run the server with a -debug
+option... the standalone file should never have the debug options."* Done:
+`js/debug.js` holds the knob table, the Debug panel (which builds its own DOM)
+and the shader's false-colour channels; `serve.py --debug` serves
+`js/dbgflag.js` as true without touching the disk; `build.js` cuts the one
+dynamic import so the artifact cannot contain any of it. Measured payoff:
+driver compile **~92 s → ~44 s**. Covered by `test_dbg.js`, and `test_build.js`
+fails if debug.js ever reaches the single file. Start a debug session with:
+
+```sh
+python serve.py 8734 --debug
+```
+
+### ▶ 1c-ter. The probe row into its own program — NOT done, ~14 s more
+
+**docs/COMPILE.md §5 is the full write-up**, traps included. In short: the
+collision probe row is 15.1% of the inlined program (4 × `terrainShape` +
+2 × `plantEval` = 82 k characters) to shade 133 pixels, and moving it to its
+own small program takes the compile from ~44 s to ~30 s. ⚠️ It is the
+COLLISION AUTHORITY — it must compute from the same GLSL text as the renderer
+or collision drifts from what you see — and it trades load time for a second
+draw call, so measure the FRAME as well as the compile. Its own session.
+
 ### ▶ 1d. Watch the frame rate at the new default
 
 `mtn relax` 0.30 roughly doubles the march in mountain-heavy frames (+76%).

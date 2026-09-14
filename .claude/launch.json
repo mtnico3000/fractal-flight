@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["serve.py", "8734"],
       "port": 8734
+    },
+    {
+      "name": "fractal-flight (debug build)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["serve.py", "8735", "--debug"],
+      "port": 8735
     }
   ]
 }

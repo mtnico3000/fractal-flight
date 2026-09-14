@@ -50,6 +50,28 @@ python3 serve.py 8734
 # then open http://localhost:8734/
 ```
 
+### Debug builds
+
+The Debug panel and the shader's false-colour diagnostic channels are NOT in
+the normal game. They live in `js/debug.js`, which is loaded by exactly one
+dynamic import, guarded by `DEBUG_BUILD` in `js/dbgflag.js` — `false` on disk.
+Start the server with `--debug` and it serves that one file as `true`:
+
+```sh
+python3 serve.py 8734 --debug
+```
+
+Nothing on disk changes, so `git status` stays clean either way. Two things
+follow from the split, both deliberate:
+
+- **The double-click build never has any of it.** `build.js` resolves static
+  imports only and cuts the one dynamic import, so `debug.js` cannot reach the
+  artifact. `test/test_build.js` fails if it ever does.
+- **The shipped shader is much faster to compile.** Two of the diagnostic
+  channels evaluate the terrain (8 terrain evaluations once GLSL inlines them,
+  ~31% of the whole program), and leaving them out roughly halves the driver
+  compile at load: ~92 s → ~47 s, measured. See `docs/COMPILE.md`.
+
 On Windows PowerShell 5.1 (the shell this is developed on) use `python`,
 and note that `&&` is a parser error there -- chain with `;`, or
 `; if ($?) { ... }` to run the second command only if the first succeeded.
@@ -113,6 +135,11 @@ js/
   terrain.js        CPU terrain height mirror of the GPU terrainShape (tune-aware)
   hud.js            HUD readouts, crash overlay, toast messages
   tune.js           TUNE (world) + TUNEA (alien fleet) sliders, RESET and COPY JSON
+  dbg.js            The render settings the game reads (shipped defaults; no panel needed)
+  dbgflag.js        DEBUG_BUILD -- false, unless serve.py --debug serves it as true
+  debug.js          THE DEBUG BUILD: knob table, Debug panel, shader false-colour channels.
+                    Loaded by one dynamic import, and only in a --debug run. Never in the
+                    single-file build -- see Debug builds below.
   shaders.js        GLSL vertex + fragment shader sources -- the world lives here
   renderer.js       WebGL2 setup, uniform locations, resize, adaptive render scale
 test/               node test/run_tests.js -- see Tests below

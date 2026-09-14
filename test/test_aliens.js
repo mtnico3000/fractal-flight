@@ -28,7 +28,7 @@ function fresh() {
   const counts = { harv: -1, relays: -1, mothers: -1 };
   const aliens = loadModule('aliens.js', {
     TUNEA,
-    TUNED: { invasion: { v: 1 } },
+    DBG: { invasion: 1 },
     HULL_BLAST_R,
     craft,
     terrainShapeJ: () => GROUND,

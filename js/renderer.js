@@ -51,7 +51,7 @@ export const U = {};
 // shader into GPU machine code (on Windows: GLSL -> HLSL -> D3D bytecode).
 // With KHR_parallel_shader_compile we poll instead of blocking, so the start
 // screen stays alive and animated during the wait.
-export async function initRenderer(status, lock) {
+export async function initRenderer(status, lock, fsText = fsSrc) {
   if (!gl) {
     document.body.innerHTML = '<p style="color:#fff;font-family:monospace;padding:20px">WebGL2 required.</p>';
     return false;
@@ -61,7 +61,7 @@ export async function initRenderer(status, lock) {
   const vs = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vs, vsSrc); gl.compileShader(vs);
   const fs = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(fs, fsSrc); gl.compileShader(fs);
+  gl.shaderSource(fs, fsText); gl.compileShader(fs);
   const prog = gl.createProgram();
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);

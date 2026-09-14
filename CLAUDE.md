@@ -10,7 +10,7 @@ volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.6.
 The modular repo is the SINGLE SOURCE OF TRUTH. Dual maintenance ended with
 ROADMAP C1 on 6 Sept 2026.
 
-- **Modular** (this repo): index.html + css/style.css + 18 js/ modules. ES
+- **Modular** (this repo): index.html + css/style.css + 21 js/ modules. ES
   modules → MUST be served over HTTP (`python serve.py 8734` — the bare
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
@@ -71,6 +71,20 @@ primary hit), alien fleet (mat 6: blue-toned box-cropped mandelbox ships;
 - `audio.js` — all synthesized (engine + LFO wobble, grind, wind, pops, guns,
   bombs, zap, relay blast, crash). M toggles mute.
 - `tune.js` — TUNE (world panel) + TUNEA (green Aliens panel, bottom-right).
+- `dbg.js` — the render settings **the game** reads (`DBG.relaxMtn`,
+  `DBG.stride`, `DBG.invasion`, …), holding the shipped defaults. It exists so
+  the game does not depend on the Debug panel to run; `debug.js` writes into
+  it when a knob moves. Its values are TUNED's own defaults and
+  `test/test_dbg.js` fails if the two ever disagree.
+- `dbgflag.js` — one boolean, `DEBUG_BUILD`, `false` on disk.
+  `serve.py --debug` serves THIS FILE as `true` without touching the disk;
+  that is the only switch in the project.
+- `debug.js` — **the whole debug build, and the only place any of it lives**:
+  the TUNED knob table, the Debug panel (which builds its own DOM — index.html
+  carries no markup for it), `debugMask()`, and the shader's false-colour
+  block as GLSL text spliced at the `//__FF_DEBUG_BLOCK__` marker. Reached by
+  ONE dynamic `import()` in main.js. `build.js` cuts that import, so the
+  module cannot reach the single-file artifact — see the compile gotcha below.
 - `input.js`, `hud.js`, `renderer.js`, `state.js`, `clouds.js`, `math.js`,
   `config.js` — as named. state.js holds shared mutable objects (craft,
   camPos/viewPos, camMode, viewZoom, pilotAim, probe, flags) mutated in
@@ -559,6 +573,14 @@ node test/run_tests.js        # everything
   outlier it was measured to be. Verified red by raising `peak height` to its
   own maximum. Runs in 0.1 s. `test/slope_census.js` (not a suite) prints the
   full derivation in 1.2 s — run it after ANY terrain change.
+- `test/test_dbg.js` — `js/dbg.js` and the `TUNED` table in `js/debug.js` are
+  two copies of one set of defaults, and this fails if they drift. A drift here
+  is nastier than the `v === d` case it mirrors: the game would SHIP one value
+  while the debug build A/Bs against another, so every measurement taken
+  through the panel would be against the wrong baseline, and both files look
+  fine on their own. It also fails if a module starts reading a `DBG` key that
+  `dbg.js` does not define — that key would silently lose its setting in every
+  non-debug build.
 - `test/mutants.js` — **tests for the tests.** Not run by `run_tests.js`
   (slow, and it writes to `js/` as it works; it refuses to start if those
   files are dirty). It breaks the source one bug at a time and requires every
@@ -586,6 +608,24 @@ no-dependency promise and only the dev tooling asks for `npm install`
 a jsdom test that asks whether something is VISIBLE has to inline
 `css/style.css` itself.
 
+- 🧱 **The debug build is a SEPARATE MODULE, and that is a performance
+  decision, not tidiness.** GLSL has no function calls: every call site is a
+  full recursive copy, so `terrainShapeLOD` is 1 910 characters as written and
+  **18 371 inlined**, and `terrainNormal` — 585 characters — is **74 069**,
+  because it evaluates the terrain four times. Two Debug channels evaluated the
+  terrain (`terrain height`, and `normal turn` twice = 8 evaluations):
+  **168 k characters, 30.7% of the whole inlined program, for views that draw
+  nothing in normal play.** Measured 14 Sept 2026: taking them out takes the
+  driver compile from ~92 s to ~44 s. So `js/debug.js` holds the knob table,
+  the panel and that GLSL, reached by ONE dynamic `import()` behind
+  `DEBUG_BUILD`; `serve.py --debug` serves `js/dbgflag.js` as true without
+  touching the disk, and `build.js` CUTS the import so the artifact can never
+  contain it. ⚠️ **Loop bounds are NOT the cost** — 384 → 48, mandelDE 26 → 8
+  and softShadow 24 → 6 each measured INSIDE the baseline's own ±25% noise. Do
+  not "optimise" the caps; they are the marcher fixes. The rule that earns its
+  place beside them: **a diagnostic that evaluates the terrain costs exactly
+  what one that renders it costs.** docs/COMPILE.md.
+
 ## History & roadmap
 
 Full version-by-version chronicle with the WHY behind every design decision
@@ -599,6 +639,9 @@ than the marcher's local sample spacing is found or missed depending on where
 the camera stands, and flips cyclically as it moves. That file has the law,
 eight rules, two checklists, the measured slope census of this world, and the
 levers that are already known dead. It is the highest-value page in docs/.
+Shader compile time — why loading takes what it takes, what measured FREE (the
+iteration caps) and what did not (two debug channels), and the probe-row split
+that is queued but not done: **docs/COMPILE.md**.
 Research notes (shimmer diagnosis + fix rationale, terrain-variation
 papers, TerraForge3D findings, Mandelbox parameter guide):
 **docs/RESEARCH.md** — required reading for ROADMAP sections A and B.

@@ -99,6 +99,19 @@ const RE_EXPORT_KW = /^export\s+(?=(?:async\s+)?(?:const|let|var|function|class)
 const RE_LEFTOVER = /^[ \t]*(?:import|export)\b.*/m;
 const UNSUPPORTED = [[/[^.\w$]import\s*\(/m, 'dynamic import()']];
 
+// ONE dynamic import is allowed, and it is CUT rather than carried: the debug
+// bootstrap in main.js. js/debug.js holds the knob table, the Debug panel and
+// the shader's false-colour channels, and it must never reach the artifact --
+// the double-click build ships with no debug anything, and the single file has
+// no module resolver to fetch it with anyway. DEBUG_BUILD is `false` in the
+// shipped js/dbgflag.js (only `serve.py --debug` serves it as true), so this
+// branch is provably dead in the artifact and removing it changes nothing but
+// size. test/test_build.js asserts the result really is debug-free.
+const DEBUG_BOOTSTRAP = /\n[ \t]*\/\/ >>> debug bootstrap[\s\S]*?\/\/ <<< debug bootstrap[^\n]*\n/;
+const DEBUG_BOOTSTRAP_REPLACEMENT =
+  '\n  // debug bootstrap removed by build.js — the artifact has no debug build\n' +
+  '  const dbgMod = null;\n';
+
 // Every name declared at column 0 — this codebase indents everything nested,
 // so column 0 is exactly module scope. Handles `let a = 0, b = 0;` and
 // records which declarations carried `export`.
@@ -144,7 +157,11 @@ function topLevelDecls(code) {
 function readModule(file) {
   const full = path.join(ROOT, 'js', file);
   if (!fs.existsSync(full)) die('js/' + file + ' does not exist');
-  const raw = read(full);
+  let raw = read(full);
+  // The one dynamic import build.js accepts, and it accepts it by REMOVING it.
+  // Cut here, on the RAW text, so every offset taken below already refers to
+  // the code that will actually be emitted. See DEBUG_BOOTSTRAP above.
+  if (DEBUG_BOOTSTRAP.test(raw)) raw = raw.replace(DEBUG_BOOTSTRAP, DEBUG_BOOTSTRAP_REPLACEMENT);
   const code = blank(raw);
 
   const imports = [];
@@ -209,9 +226,18 @@ function buildBundle() {
     order.push(file);
   })(ENTRY, []);
 
+  // debug.js is reached by ONE dynamic import, which this builder cuts (see
+  // DEBUG_BOOTSTRAP), so it is legitimately absent from the static graph --
+  // that absence IS the feature: the artifact ships with no debug build.
+  const NOT_IN_ARTIFACT = ['debug.js'];
   const onDisk = fs.readdirSync(path.join(ROOT, 'js')).filter(f => f.endsWith('.js')).sort();
-  const orphans = onDisk.filter(f => !mods.has(f));
+  const orphans = onDisk.filter(f => !mods.has(f) && !NOT_IN_ARTIFACT.includes(f));
   if (orphans.length) die('js/ holds module(s) nothing imports: ' + orphans.join(', '));
+  for (const f of NOT_IN_ARTIFACT) {
+    if (mods.has(f)) die('js/' + f + ' reached the artifact through a static import — ' +
+                         'it must stay out of the single file (see NOT_IN_ARTIFACT)');
+    if (!fs.existsSync(path.join(ROOT, 'js', f))) die('js/' + f + ' is missing');
+  }
 
   // Every imported name must really be exported. The modular build reports
   // this at load time; a blind concatenation would not report it at all.

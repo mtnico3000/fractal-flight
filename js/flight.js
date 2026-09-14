@@ -15,7 +15,7 @@ import { driftClouds, cloudImmersion } from './clouds.js';
 import { updateAliens, initAliens } from './aliens.js';
 import { engineUpdate, grindUpdate, cloudWindUpdate } from './audio.js';
 import { emitTrail } from './fx.js';
-import { TUNED } from './tune.js';
+import { DBG } from './dbg.js';
 
 // v4.0 chase camera: its own persistent triad, eased toward the craft's each
 // frame — through a loop the camera's horizon rolls over with the plane.
@@ -376,7 +376,7 @@ export function update(dt, now) {
   // that is still moving. 'snap' parks the camera at the springs' own rest
   // pose every frame; 'freeze' leaves it where it is while the craft moves
   // off. Both tell a settling camera from a changing world.
-  const obsCam = camMode.obs ? TUNED.obsCam.v : 0;
+  const obsCam = camMode.obs ? DBG.obsCam : 0;
   if (obsCam < 0.5) {
   // close zooms stiffen the springs: the chase lag (~27 m at cruise) would
   // otherwise keep the camera away no matter how far you scroll in — the

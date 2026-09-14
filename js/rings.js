@@ -3,7 +3,7 @@ import { craft } from './state.js';
 import { normalize3, cross3 } from './math.js';
 import { terrainShapeJ } from './terrain.js';
 import { ringSound } from './audio.js';
-import { TUNED } from './tune.js';
+import { DBG } from './dbg.js';
 
 // ============ RING COURSE (ported from jul's fractal-flight) ============
 // Fly through rings to score. Spawning chains ring-to-ring and fans its
@@ -152,7 +152,7 @@ export function packRingData() {
   for (let i = 0; i < MAX_RINGS; i++) {
     const r = rings[i];
     // Debug 'rings' hidden: radius -1 is the shader's own "no ring here"
-    if (r.active && TUNED.ringsOn.v > 0.5) {
+    if (r.active && DBG.ringsOn > 0.5) {
       ringsPosData[i*4]   = r.pos[0];
       ringsPosData[i*4+1] = r.pos[1];
       ringsPosData[i*4+2] = r.pos[2];

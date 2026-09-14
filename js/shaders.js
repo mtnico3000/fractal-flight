@@ -1433,41 +1433,7 @@ void main() {
   //  64 march budget (ramp; white = exhausted the 384 cap)
   //  32 colour LOD -- the alien-undergrowth fade, smoothstep(3,5,pixelSize),
   //     i.e. a hard viewer-centred ring on the green at t = 1875..3125 m
-  int dmask = int(uDebugMask + 0.5);
-  if (dmask > 0) {
-    vec3 hp = ro + rd * t;
-    vec3 d = vec3(0.0);
-    float nch = 0.0;
-    if ((dmask & 1) != 0) {
-      d += vec3(1.0, 0.25, 0.25) * fract(marchIters / 12.0);          nch += 1.0;
-    }
-    if ((dmask & 2) != 0) {
-      d += vec3(0.25, 1.0, 0.25) * fract(t / 250.0);                  nch += 1.0;
-    }
-    if ((dmask & 4) != 0) {
-      d += vec3(0.30, 0.45, 1.0) * fract(t * uPixScale);              nch += 1.0;
-    }
-    if ((dmask & 8) != 0) {
-      d += vec3(1.0, 1.0, 0.35) * fract(terrainShape(hp.xz) / 4.0);   nch += 1.0;
-    }
-    if ((dmask & 16) != 0) {
-      float turn = length(terrainNormal(hp.xz, t * uPixScale) - terrainNormal(hp.xz, 0.15));
-      d += vec3(1.0, 0.35, 1.0) * clamp(turn * 4.0, 0.0, 1.0);        nch += 1.0;
-    }
-    if ((dmask & 32) != 0) {
-      // exactly the term terrainColor uses to fade the undergrowth out
-      float cl = 1.0 - smoothstep(3.0, 5.0, t * uPixScale);
-      d += vec3(0.35, 1.0, 1.0) * cl;                                 nch += 1.0;
-    }
-    if ((dmask & 64) != 0) {
-      // v9.5: iterations spent, as a ramp; a ray that hit the 384 cap is WHITE.
-      // The old 'march steps' sawtooth could not tell 150 from 6.
-      float bud = marchIters / 384.0;
-      d += (marchIters >= 383.0) ? vec3(3.0) : vec3(1.0, 0.30, 0.10) * bud;   nch += 1.0;
-    }
-    col = d / max(nch, 1.0);
-    if (mat == 0) col = vec3(0.02);          // leave the sky dark
-  }
+  //__FF_DEBUG_BLOCK__
   col = 1.0 - exp(-col * 1.15);
   col = pow(col, vec3(0.4545));
   vec2 vuv = gl_FragCoord.xy / uResolution;
