@@ -68,7 +68,7 @@ and two checklists, and it is what stops the seventh.
    `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
    the driver compile** — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **45 mutants as of v9.6**). A green suite is not
+   (slow, opt-in, **47 mutants as of v9.6**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test

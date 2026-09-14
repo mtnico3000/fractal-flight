@@ -588,7 +588,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **45/45 mutants caught as of v9.6** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
+  the predicate it named. **47/47 mutants caught as of v9.6** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch
