@@ -11,13 +11,16 @@
 
 const fs = require('fs');
 const path = require('path');
+// Reuse build.js's OWN import regex rather than a line filter. A naive
+// /^import/ drops the first line of a multi-line import and leaves the rest
+// behind as a syntax error -- the trap CLAUDE.md names, and the reason
+// test_smoke.js already borrows this same expression.
+const { RE_IMPORT } = require('../build.js');
 
 function loadModule(file, stubs = {}, extra = []) {
   const src = fs.readFileSync(path.join(__dirname, '..', 'js', file), 'utf8');
   const body = src
-    .split('\n')
-    .filter(l => !/^\s*import\s/.test(l))
-    .join('\n')
+    .replace(new RegExp(RE_IMPORT.source, RE_IMPORT.flags), '')
     .replace(/^export\s+/gm, '');
 
   const exported = [...src.matchAll(/^export\s+(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm)]

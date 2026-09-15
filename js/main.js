@@ -2,7 +2,7 @@
 // The per-frame uniform upload + draw + probe readback live here because they
 // touch nearly every subsystem (flight, rings, weapons, clouds, tuning).
 
-import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD } from './config.js';
+import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD, FXQ } from './config.js';
 import { craft, camPos, viewPos, viewZoom, sun, probe } from './state.js';
 import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
 import { fsSrc } from './shaders.js';
@@ -197,7 +197,7 @@ async function main() {
   gl.uniformMatrix3fv(U.uRingMats, false, ringsMatsData);
   gl.uniform1f(U.uCockpit, viewZoom.cockpit);
   gl.uniform1f(U.uShadows, TUNE.shadows.v);
-  buildFxQueries(fxPosArr, bullets, bombs, impacts);
+  buildFxQueries(fxPosArr, now, bullets, bombs, impacts);
   gl.uniform3fv(U.uFxPos, fxPosArr);
   packAlienUniforms(alienU);
   gl.uniform3fv(U.uMotherPos, alienU.motherPos);
@@ -283,7 +283,7 @@ async function main() {
     const o = (82 + i) * 4;
     gpuBombGround[i] = ((probeBuf[o] * 65536 + probeBuf[o + 1] * 256 + probeBuf[o + 2]) / 16777215) * 640 - 80;
   }
-  for (let i = 0; i < 48; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
+  for (let i = 0; i < FXQ; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
 
   drawTrail(camBasis, now, bullets, bombs, impacts);
   if (running) requestAnimationFrame(frame);

@@ -149,6 +149,79 @@ check('the hull marches keep their tangency budget', () => {
      'the mothership march must step t += d, not a relaxed fraction');
 });
 
+check('the fx occlusion probe can reach the particle it is asked about', () => {
+  // The probe answers "is this overlay dot behind a mountain?" by marching
+  // terrainShape from the camera to the dot. Its stride floor was a CONSTANT
+  // 10 m against a 48-iteration cap, so the march died after ~480 m and every
+  // particle past that answered "visible" whatever stood in front of it --
+  // which is most of why harvest rings were drawn over ridges. The floor has
+  // to scale with the segment so the cap always spans it.
+  const probe = /vec3 pt = uFxPos\[px - 85\];[\s\S]*?fragColor = vec4\(vis, vis, vis, 1\.0\);/.exec(glsl);
+  ok(probe, 'could not find the fx occlusion probe branch');
+  const body = probe[0];
+  ok(/float floorStep = L \/ [\d.]+;/.test(body),
+     'the probe stride floor must be derived from the segment length L, not a constant');
+  ok(/t \+= max\(h \* 0\.7, floorStep\);/.test(body),
+     'the probe march must step with the derived floor');
+  const cap = /for \(int i = 0; i < (\d+); i\+\+\)/.exec(body);
+  const div = /float floorStep = L \/ ([\d.]+);/.exec(body);
+  ok(cap && div && Number(div[1]) <= Number(cap[1]),
+     'the floor divisor (' + (div && div[1]) + ') must not exceed the iteration cap (' +
+     (cap && cap[1]) + '), or the march still cannot span the segment');
+});
+
+check('the mothership hides the overlay and the harvesters deliberately do not', () => {
+  const probe = /vec3 pt = uFxPos\[px - 85\];[\s\S]*?fragColor = vec4\(vis, vis, vis, 1\.0\);/.exec(glsl);
+  ok(probe, 'could not find the fx occlusion probe branch');
+  const body = probe[0];
+  ok(/boxGate\(uCamPos - uMotherPos, dv \/ max\(L, 1e-4\), uMotherHalf\)/.test(body),
+     'the probe must gate the overlay against the mothership bounding box');
+  // the harvest sweep is the thing you are meant to watch THROUGH a harvester
+  ok(!/uShipPos|uShipHalf|uRelay\b/.test(body),
+     'harvesters and the relay must NOT occlude the overlay -- the harvest pops under a hull are the feedback');
+  // g.x > 0 keeps the camera-inside-the-box case from blacking the overlay out
+  ok(/g\.x < g\.y && g\.x > 0\.0 && g\.x < L - [\d.]+/.test(body),
+     'the mothership gate needs all three guards: hit, entry ahead of the camera, and particle beyond the entry');
+});
+
+check('the alien fleet casts a shadow, without marching its hull', () => {
+  ok(/float alienShadow\(vec3 p, vec3 sun\)/.test(glsl), 'alienShadow must exist');
+  const fn = /float alienShadow\(vec3 p, vec3 sun\) \{[\s\S]*?\n\}/.exec(glsl);
+  ok(fn, 'could not isolate alienShadow');
+  const body = fn[0];
+  // GLSL inlines every call site; shipDE carries a mandelbox loop, and this
+  // function is called from three shading paths. A march here would cost what
+  // the two debug channels cost (30.7% of the inlined program, docs/COMPILE.md).
+  ok(!/shipDE|mandelbox|mandelbulbDE/.test(body),
+     'alienShadow must stay analytic -- no hull SDF, or it costs a second of compile per call site');
+  ok(/uMotherPos/.test(body) && /uShipPos\[i\]/.test(body) && /uRelay/.test(body),
+     'all three hull kinds must block the sun');
+  // a downed hull is inert everywhere else; its shadow must die with it
+  ok(/uMotherMelt < 0\.5/.test(body) && /uShipMelt\[i\] > 0\.5/.test(body) && /uRelayMelt < 0\.5/.test(body),
+     'a melting wreck must stop casting a shadow');
+  ok(/if \(uShadows < 0\.5\) return 1\.0;/.test(body), 'alienShadow must honour the shadow-pack toggle');
+  for (const mat of ['terrain', 'water', 'plant']) void mat;
+  const calls = (glsl.match(/alienShadow\(pos, sun\)/g) || []).length;
+  ok(calls === 3, 'expected alienShadow at the terrain, water and plant call sites, found ' + calls);
+});
+
+check('nightfall continues where dusk saturates', () => {
+  // duskAmount is already 1 when the sun touches the horizon, so it cannot
+  // describe anything below it. Both must exist, and the sun-drag floor in
+  // config.js has to actually reach the point where night saturates.
+  ok(/float nightAmount\(vec3 sun\) \{ return 1\.0 - smoothstep\(([-\d.]+), ([-\d.]+), sun\.y\); \}/.test(glsl),
+     'nightAmount must be a smoothstep on sun.y with edge0 < edge1 (GLSL is undefined otherwise)');
+  const m = /float nightAmount\(vec3 sun\) \{ return 1\.0 - smoothstep\(([-\d.]+), ([-\d.]+), sun\.y\); \}/.exec(glsl);
+  ok(Number(m[1]) < Number(m[2]), 'smoothstep edges are inverted: ' + m[1] + ' >= ' + m[2]);
+  const cfg = fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8');
+  const floor = /export const SUN_EL_MIN = ([-\d.]+);/.exec(cfg);
+  ok(floor, 'config.js must define SUN_EL_MIN');
+  ok(Math.sin(Number(floor[1])) <= Number(m[1]) + 1e-6,
+     'the sun drag floor (' + floor[1] + ' rad) stops before night saturates at sun.y = ' + m[1]);
+  ok(/sunLightCol[\s\S]{0,200}nightAmount\(sun\)/.test(glsl), 'direct sunlight must fade at night');
+  ok(/skyAmbCol[\s\S]{0,200}nightAmount\(sun\)/.test(glsl), 'sky ambient must fade at night');
+});
+
 check('no backtick inside the GLSL templates', () => {
   const ticks = (src.match(/`/g) || []).length;
   ok(ticks === 4, 'expected exactly 4 backticks (two template delimiters), found ' + ticks +

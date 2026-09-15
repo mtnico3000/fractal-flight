@@ -28,3 +28,30 @@ export const BOMB_BOOST = 40;     // horizontal speed on top of the plane's own 
 export const MAXCLOUD = 16;
 export const TRAIL_LIFE = 4.5;   // v7.4: contrails linger — the plane reads from afar
 export const POP_LIFE = 0.7;
+
+// ---- fx occlusion-query slot map -------------------------------------------
+// The GPU probe row answers "is this overlay particle hidden?" for FXQ world
+// points (shader: uFxPos[FXQ], probe row px 85 .. 85+FXQ-1). FXQ is a HARD
+// budget, not a preference: the array is already 48 of the shader's measured
+// 245 vec4 uniform slots against a GLSL ES 3.0 guarantee of 224, so the way to
+// give an effect more coverage is to RE-CUT this map, never to grow it. Each
+// constant is the FIRST slot of its class; the class ends where the next
+// begins, and FXQ ends the last one — so a boundary only has to move once.
+//
+// The rings share ONE pool rather than taking a fixed cut each, because they
+// never peak together: impacts are gunfire, pops are harvests, and a single
+// pool round-robins 21 slots over whichever family is actually busy instead of
+// stranding 11 idle ones beside 10 oversubscribed.
+export const FXQ_TRAIL  = 0;    // 16 samples along the contrail polyline
+export const FXQ_BULLET = 16;   // one per tracer slot (MAXB)
+export const FXQ_BOMB   = 24;   // one per bomb slot (MAXBOMB)
+export const FXQ_RING   = 27;   // 21, ROUND ROBIN over every ring being drawn
+export const FXQ        = 48;
+
+// ---- sun travel (right-drag) -----------------------------------------------
+// The floor is BELOW the horizon: the sun sets properly and the island goes
+// dark, lit by the glow-in-the-dark flora and a dim skylight. -0.30 rad is
+// ~17 deg down, past the end of nautical twilight, which is where nightAmount
+// in the shader saturates -- dragging further would change nothing on screen.
+export const SUN_EL_MIN = -0.30;
+export const SUN_EL_MAX = 1.25;

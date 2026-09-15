@@ -218,6 +218,38 @@ const MUTANTS = [
   // The game must not need the debug module to know its own settings.
   ['a DBG default drifts from the knob it mirrors', 'js/dbg.js',
    "relaxMtn:    0.3,", "relaxMtn:    0.55,", 'test_dbg.js'],
+
+  // --- v9.8: the overlay's occlusion budget -------------------------------
+  // The rings were drawn over mountains for two independent reasons, and each
+  // of these mutants is one of them exactly as it shipped.
+  ['ring slots go to the newest entries again, not the ones being drawn', 'js/fx.js',
+   '  live.sort((a, b) => age(a) - age(b));',
+   '  live.reverse();', 'test_fx.js'],
+  ['a never-answered ring sorts last, so it is drawn blind', 'js/fx.js',
+   '(p._vt === undefined ? -1e9 : p._vt)', '(p._vt === undefined ? 1e9 : p._vt)', 'test_fx.js'],
+  ['the allocator and the draw loop disagree on ring lifetime', 'js/fx.js',
+   'kind === 3 ? 0.9 : (kind === 4 ? 0.8 : 0.45)',
+   'kind === 3 ? 0.9 : (kind === 4 ? 0.8 : 0.9)', 'test_fx.js'],
+  ['the occlusion probe stride floor is a constant again (~480 m reach)', 'js/shaders.js',
+   't += max(h * 0.7, floorStep);', 't += max(h * 0.7, 10.0);', 'test_shader.js'],
+  ['the mothership stops hiding the overlay behind it', 'js/shaders.js',
+   'if (g.x < g.y && g.x > 0.0 && g.x < L - 8.0) vis = 0.0;',
+   'if (g.x < g.y && g.x < L - 8.0) vis = 0.0;', 'test_shader.js'],
+
+  // --- v9.8: the fleet's shadow, and nightfall ----------------------------
+  ['alienShadow starts marching the real hull (a second of compile per site)', 'js/shaders.js',
+   '    vec2 g = boxGate(p - uMotherPos, sun, uMotherHalf);',
+   '    float dd = shipDE(p - uMotherPos, uMotherHalf);\n    vec2 g = boxGate(p - uMotherPos, sun, uMotherHalf);', 'test_shader.js'],
+  ['a melting wreck keeps casting its shadow', 'js/shaders.js',
+   'if (uMotherPos.y > -9000.0 && uMotherMelt < 0.5) {',
+   'if (uMotherPos.y > -9000.0) {', 'test_shader.js'],
+  ['one alienShadow call site is quietly dropped', 'js/shaders.js',
+   ' * cloudShadow(pos, sun) * alienShadow(pos, sun);',
+   ' * cloudShadow(pos, sun);', 'test_shader.js'],
+  ['nightAmount smoothstep edges inverted (undefined behaviour in GLSL)', 'js/shaders.js',
+   'smoothstep(-0.26, 0.02, sun.y)', 'smoothstep(0.02, -0.26, sun.y)', 'test_shader.js'],
+  ['the sun drag floor stops short of the night it enables', 'js/config.js',
+   'export const SUN_EL_MIN = -0.30;', 'export const SUN_EL_MIN = -0.10;', 'test_shader.js'],
 ];
 
 function mutate(src, find, repl, all) {

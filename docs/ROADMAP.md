@@ -52,7 +52,7 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.7; the branch is still named `v9.5`.** (The branch name lags
+**Version is v9.8; the branch is still named `v9.5`.** (The branch name lags
 the version on purpose — PR #3's head branch on origin is named `v9.4`. See
 the push note at the bottom.) v9.7 is the last version of the pure
 raymarcher: **v10 is a renderer change**, and it was Nico's call after the
@@ -63,12 +63,12 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**82 assertions, 14 files**; three skip without `npm install`, and one
+   (**92 assertions, 15 files**; three skip without `npm install`, and one
    more without python). Then
-   `python serve.py 8734`, press START, fly it once. Budget **200–240 s for
-   the driver compile** — that is normal here, not a hang.
+   `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
+   driver compile** since the debug split — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **47 mutants as of v9.7**). A green suite is not
+   (slow, opt-in, **57 mutants as of v9.8**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -100,6 +100,35 @@ moves by itself), `test/slope_census.js` (re-derives the whole census in
 relaxation slider).
 
 ---
+
+### ✅ 1b-bis. v9.8 — light, shadow and nightfall (15 Sept 2026)
+
+Three of Nico's requests, all shipped, all covered by tests. The measurements
+are in **docs/HISTORY.md → v9.8**; the short version:
+
+- **Harvest rings no longer draw through mountains.** Two independent causes:
+  the allocator was spending its ten pop slots on rings that had not STARTED
+  yet (a blast staggers them over 1.1 s against a 0.7 s life), and the probe's
+  own march had a constant 10 m stride floor capping its reach at ~480 m. Pops
+  and impacts now share one 21-slot pool, round robin.
+- **The mothership occludes the overlay; harvesters and the relay deliberately
+  do not** — the pops under a harvester are what tells you the sweep works.
+- **The alien fleet casts shadows** (`alienShadow`: an analytic chord through
+  the bounding volume, no hull march, melting wrecks stop casting).
+- **The sun sets.** `nightAmount` continues where `duskAmount` saturates,
+  `SUN_EL_MIN = -0.30` lets the drag reach full night, and the glow-in-the-dark
+  flora becomes the light source.
+
+⚠️ **Not measured: the compile and frame cost of `alienShadow`.** It is
+analytic and inlined at three shading paths, so it should be cheap, but no
+controlled before/after was taken, and compiles here vary by more than most
+effects being measured. Take both sides in one sitting if it matters.
+
+⚠️ **Nico has not flown any of it.** Night was confirmed on screen and the
+mothership shadow by a GPU A/B (38.7% of the frame brightens when the hull is
+removed, ground rows only, zero in the sky). The ring-occlusion fix is covered
+by unit test and source invariant but was NOT seen in flight — staging a
+harvest behind a ridge needs a pilot. **Ask him for that first.**
 
 ### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
 

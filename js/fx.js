@@ -2,46 +2,112 @@
 // impact/blast/harvest rings — world-space particles projected onto the fx
 // canvas each frame, zero cost inside the raymarcher.
 
-import { TAN_HALF_FOV, TRAIL_LIFE, POP_LIFE, MAXB, MAXBOMB, RING_N, BLAST_R } from './config.js';
+import { TAN_HALF_FOV, TRAIL_LIFE, POP_LIFE, MAXB, MAXBOMB, RING_N, BLAST_R,
+         FXQ, FXQ_TRAIL, FXQ_BULLET, FXQ_BOMB, FXQ_RING } from './config.js';
 import { craft, viewPos } from './state.js';
 
 const fxCanvas = document.getElementById('fx');
 const fxCtx = fxCanvas.getContext('2d');
-export const fxOcc = { vis: new Uint8Array(48) };   // 255 = fully visible (GPU probe answers)
+export const fxOcc = { vis: new Uint8Array(FXQ) };   // 255 = fully visible (GPU probe answers)
 fxOcc.vis.fill(255);
+let fxFrame = 0;                                     // round-robin clock, one tick per build
+
+// How long a ring of each kind stays on screen. The query builder and the
+// draw loop BOTH need this: a slot spent on a ring nobody draws is a slot
+// wasted, and that was the whole bug (see slotRings below).
+function impactLife(kind) { return kind === 3 ? 0.9 : (kind === 4 ? 0.8 : 0.45); }
+
+// Visibility of an overlay particle: its last latched probe answer. Undefined
+// means "never answered", which now only happens when more rings become live
+// in ONE frame than the pool has slots — `slotRings` serves the unanswered
+// first, so in practice a ring has an answer before its first drawn frame.
+const fxVis = p => (p._vis !== undefined ? p._vis : 1);
+
+// Latch this frame's probe answers onto the particles that held a slot, by
+// SLOT rather than at the point of drawing. That distinction is load bearing:
+// a blast pushes up to BLASTC pops at once with start times staggered over
+// 1.1 s, so most of them are not drawn for another second — stamping `_vt`
+// where a particle is DRAWN would leave those dormant pops permanently
+// "never answered", sorting them to the front of every round and starving the
+// handful actually on screen.
+function latchFxVis(list) {
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (p && p._q !== undefined) { p._vis = fxOcc.vis[p._q] / 255; p._vt = fxFrame; }
+  }
+}
+
+// Hands the shared ring pool to the rings that are actually being DRAWN this
+// frame, longest-unanswered first.
+//
+// This is the fix for "harvest rings show through the mountains". The old rule
+// took the LAST ten entries of `pops` — and after a blast those are the worst
+// possible ten: `collectTreeAt` staggers the pops by `j * 0.03` s, so the
+// newest entries are the ones that have not STARTED yet, while every pop
+// actually on screen fell through to `_q === undefined`, scored vv = 1, and
+// was painted straight over the ridge in front of it. ~40 rings are live at
+// once during a blast against a 0.7 s life, so this was the common case, not
+// an edge one.
+//
+// Round robin over the live set fixes both halves: nothing waits more than a
+// frame or two for a fresh answer, and a ring that has never been answered
+// sorts first, so it is never drawn blind.
+function slotRings(now, impacts, arr) {
+  const live = [];
+  for (let i = 0; i < pops.length; i++) {
+    const p = pops[i], age = (now - p.t0) / 1000;
+    if (age >= 0 && age <= POP_LIFE) live.push(p); else p._q = undefined;
+  }
+  for (let i = 0; i < impacts.length; i++) {
+    const p = impacts[i], age = (now - p.t0) / 1000;
+    if (age >= 0 && age <= impactLife(p.kind)) live.push(p); else p._q = undefined;
+  }
+  const age = p => (p._vt === undefined ? -1e9 : p._vt);   // never answered = oldest
+  live.sort((a, b) => age(a) - age(b));
+  const n = FXQ - FXQ_RING;
+  for (let k = 0; k < live.length; k++) {
+    const p = live[k];
+    if (k >= n) { p._q = undefined; continue; }
+    const q = FXQ_RING + k;
+    p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z;
+  }
+}
 
 // Assigns every overlay particle an occlusion-query slot and packs the query
-// positions for the GPU probe (row px 85..132): 16 samples along the trail
-// polyline, 8 tracers, 3 bombs, up to 10 pops + 11 impacts. Anything beyond
-// the budget just stays visible.
-export function buildFxQueries(arr, bullets, bombs, impacts) {
-  for (let i = 0; i < 48; i++) { arr[i * 3] = viewPos[0]; arr[i * 3 + 1] = viewPos[1]; arr[i * 3 + 2] = viewPos[2]; }
+// positions for the GPU probe (row px 85 .. 85+FXQ-1). FXQ_* in config.js is
+// the one map of who gets which slot. Two strategies, by particle class:
+//
+//   - one slot each (bullets, bombs): few, and each is a single bright object
+//     whose visibility must be exact every frame.
+//   - shared slots (trail, rings): many, and clustered. The contrail has done
+//     this since v7.9 — 700 dots sampled at 16 points along the polyline —
+//     and the rings now do it too, but ROUND ROBIN rather than by position.
+export function buildFxQueries(arr, now, bullets, bombs, impacts) {
+  fxFrame++;
+  for (let i = 0; i < FXQ; i++) { arr[i * 3] = viewPos[0]; arr[i * 3 + 1] = viewPos[1]; arr[i * 3 + 2] = viewPos[2]; }
   const n = trail.length;
+  const tN = FXQ_BULLET - FXQ_TRAIL;
   if (n > 0) {
-    for (let s = 0; s < 16; s++) {
-      const p = trail[Math.min(n - 1, Math.round(s * (n - 1) / 15))];
-      arr[s * 3] = p.x; arr[s * 3 + 1] = p.y; arr[s * 3 + 2] = p.z;
+    for (let s = 0; s < tN; s++) {
+      const p = trail[Math.min(n - 1, Math.round(s * (n - 1) / (tN - 1)))];
+      const q = FXQ_TRAIL + s;
+      arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z;
     }
-    for (let i = 0; i < n; i++) trail[i]._q = n > 1 ? Math.round(i * 15 / (n - 1)) : 0;
+    for (let i = 0; i < n; i++) trail[i]._q = FXQ_TRAIL + (n > 1 ? Math.round(i * (tN - 1) / (n - 1)) : 0);
   }
   for (let i = 0; i < MAXB; i++) {
     const B = bullets[i];
     if (!B) continue;
-    const q = 16 + i;
+    const q = FXQ_BULLET + i;
     arr[q * 3] = B.x; arr[q * 3 + 1] = B.y; arr[q * 3 + 2] = B.z; B._q = q;
   }
   for (let i = 0; i < MAXBOMB; i++) {
     const B = bombs[i];
     if (!B) continue;
-    const q = 24 + i;
+    const q = FXQ_BOMB + i;
     arr[q * 3] = B.x; arr[q * 3 + 1] = B.y; arr[q * 3 + 2] = B.z; B._q = q;
   }
-  for (const p of pops) p._q = undefined;
-  for (const p of impacts) p._q = undefined;
-  let q = 27;
-  for (let i = pops.length - 1; i >= 0 && q < 37; i--, q++) { const p = pops[i]; p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z; }
-  q = 37;
-  for (let i = impacts.length - 1; i >= 0 && q < 48; i--, q++) { const p = impacts[i]; p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z; }
+  slotRings(now, impacts, arr);
 }
 
 export const trail = [];
@@ -75,6 +141,9 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
   const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
   if (fxCanvas.width !== W || fxCanvas.height !== H) { fxCanvas.width = W; fxCanvas.height = H; }
   fxCtx.clearRect(0, 0, W, H);
+  // the probe row came back between buildFxQueries() and here
+  latchFxVis(trail); latchFxVis(bullets); latchFxVis(bombs);
+  latchFxVis(pops); latchFxVis(impacts);
   // tracer rounds: additive warm glow + bright core along this frame's segment
   fxCtx.globalCompositeOperation = 'lighter';
   fxCtx.lineCap = 'round';
@@ -85,7 +154,7 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
     const c = projectFx(camB, B.x, B.y, B.z, W, H);
     if (!a || !c) continue;
     const fade = Math.max(0.25, 1 - c.z / 1500);
-    const vv = B._q !== undefined ? fxOcc.vis[B._q] / 255 : 1;
+    const vv = fxVis(B);
     if (vv < 0.02) continue;
     fxCtx.beginPath(); fxCtx.moveTo(a.x, a.y); fxCtx.lineTo(c.x, c.y);
     fxCtx.strokeStyle = 'rgba(255,185,80,' + (0.35 * fade * vv).toFixed(3) + ')';
@@ -103,7 +172,7 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
     if (!B) continue;
     const s = projectFx(camB, B.x, B.y, B.z, W, H);
     if (!s) continue;
-    const vv = B._q !== undefined ? fxOcc.vis[B._q] / 255 : 1;
+    const vv = fxVis(B);
     if (vv < 0.02) continue;
     const t = projectFx(camB, B.x - B.vx * 0.06, B.y - B.vy * 0.06, B.z - B.vz * 0.06, W, H);
     const r = Math.max(3.2, 220 / s.z);   // v5.3: doubled
@@ -126,11 +195,11 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
   // height and is projected in perspective, so the circle tilts with slopes.
   for (let i = impacts.length - 1; i >= 0; i--) {
     const p = impacts[i];
-    const life = (p.kind === 3) ? 0.9 : (p.kind === 4 ? 0.8 : 0.45);
+    const life = impactLife(p.kind);
     const age = (now - p.t0) / 1000;
     if (age > life) { impacts.splice(i, 1); continue; }
     const k = age / life;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     if (p.kind === 4) {
       // Alien hull detonation. kind 3 below lies on the TERRAIN; this one lies
@@ -271,7 +340,7 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
     const s = projectFx(camB, p.x, p.y, p.z, W, H);
     if (!s) continue;
     const k = age / POP_LIFE;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     const r = (4 + k * 46) * (60 / Math.min(s.z, 200));
     fxCtx.beginPath();
@@ -289,7 +358,7 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
     const sx = s.x, sy = s.y;
     if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
     const k = 1 - age / TRAIL_LIFE;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     const r = (2.0 + age * 4.8) * (60 / s.z) * (p.boost ? 1.6 : 1.0);   // v7.4: doubled
     fxCtx.beginPath();

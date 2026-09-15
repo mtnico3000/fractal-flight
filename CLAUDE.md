@@ -138,7 +138,8 @@ Key chips in the HUD glow green when a toggle is active.
   of names. Do not reintroduce a second vocabulary.
 - **Vars used by the camera must not be declared inside the flight-physics
   branch** (observation mode skips it): rollFree, groundH, b are hoisted.
-- **uniform budget: 245 vec4 slots — MEASURED, 12 Sept 2026**, by walking
+- **uniform budget: 246 vec4 slots — MEASURED, 15 Sept 2026** (245 at v9.6;
+  the figure is re-measured by the test, so read it there, not here), by walking
   the parsed GLSL in `test/test_glsl.js`, which now fails the build above a
   260 ceiling. The long-standing "~260" in this file was an estimate and so
   was the "~267" that briefly replaced it; both were wrong. The concern is
@@ -449,6 +450,44 @@ Key chips in the HUD glow green when a toggle is active.
   approach against the primary hit distance occludes them against terrain,
   hulls and trees at once. The harvest laser SHEET had been doing this
   correctly since v9.0 (`tp > t`) — the precedent was already in the file.
+- 🎰 **An occlusion slot spent on a particle nobody is drawing is a particle
+  drawn through a mountain.** The overlay has no depth buffer, so visibility is
+  a GPU probe answer keyed to a slot in `uFxPos[48]`, and **no slot means
+  fully visible**. Pops got ten, handed to the last ten entries of `pops` —
+  and `collectTreeAt` staggers a blast by `j * 0.03` s against a 0.7 s
+  `POP_LIFE`, so the newest entries are the ones that have **not started
+  yet** while ~40 rings genuinely on screen got nothing. The slots must go to
+  what is being DRAWN, which means the allocator and the draw loop have to
+  share one lifetime table (`impactLife`) or they drift straight back into the
+  bug. Pops and impacts now share ONE 21-slot pool round robin (they never
+  peak together), longest-unanswered first so a new ring is never drawn blind.
+  `FXQ_*` in config.js is the one slot map; re-cut it, never grow it — the
+  array is already 48 of 246 vec4 slots against a 224 guarantee.
+  `test/test_fx.js` guards it, four mutants verified red.
+- 📡 **A probe march with a CONSTANT stride floor has a maximum RANGE.** The fx
+  occlusion probe stepped `max(h*0.7, 10.0)` under a 48-iteration cap, so a
+  grazing ray died after ~480 m and every particle beyond it answered
+  "visible" whatever stood in front — silently, and only at distance. The floor
+  has to be a fraction of the segment (`L / 44.0`), never a constant. Same
+  shape as the marcher's own budget bugs: running out of iterations is not a
+  miss, it is a WRONG ANSWER that looks plausible.
+- 🌑 **`duskAmount` saturates at the horizon, so it cannot describe night.** It
+  is `1 - smoothstep(0.06, 0.34, sun.y)` — already 1 when the sun touches the
+  horizon. `nightAmount` continues past it (0 → 1 down to sun.y = -0.26) and
+  drives sun colour, sky ambient, horizon/zenith, cirrus and **the fog**. The
+  fog is the one that matters: leave it bright and a night scene washes out to
+  grey no matter how dark the ground is. `SUN_EL_MIN` (config.js) is the drag
+  floor and is pinned just past where `nightAmount` saturates, so the control
+  never travels further than the picture changes; `test_shader.js` fails if
+  they drift apart. ⚠️ GLSL `smoothstep` is **undefined when edge0 >= edge1** —
+  write `1.0 - smoothstep(lo, hi, x)`, never `smoothstep(hi, lo, x)`.
+- 🕶️ **A shadow caster does not need its real geometry.** `alienShadow` is a
+  chord attenuation through each hull's bounding volume, not a march of
+  `shipDE` — GLSL inlines every call site and that function carries a
+  mandelbox loop, so marching it at three shading paths would cost what the
+  two debug channels cost (30.7% of the inlined program). The chord also buys
+  a soft penumbra rim for free: short chord near the silhouette = light
+  shadow. Melting wrecks stop casting, for the same reason `hullAlive` exists.
 - 🧹 **When a draw call moves, check what else it was doing.** `fx.js`
   `drawBolts()` was the only thing splicing spent bolts out of `alien.bolts`.
   Moving the beams into the shader deleted it, and nothing else pruned the
@@ -472,7 +511,9 @@ node test/run_tests.js        # everything
 ```
 
 - `test/harness.js` — loads a REAL `js/` module with stubbed imports (strip
-  `^import` lines, strip `export `, `new Function(...stubNames, src +
+  imports with **build.js's own `RE_IMPORT`** — a naive `^import` line filter
+  drops the first line of a MULTI-LINE import and leaves the rest as a syntax
+  error — strip `export `, `new Function(...stubNames, src +
   'return {...}')`), plus an `extra` list so private names (`HP_MOTHER`,
   `hullAlive`) can be asserted. Tests the shipped source, not a copy.
 - `test/test_aliens.js` — bomb counts per hull, and the matrix proving a
@@ -518,6 +559,14 @@ node test/run_tests.js        # everything
   must invoke serve.py. The README listed the v5 module set until 6 Sept
   2026 (aliens.js and tune.js absent) — nobody notices a file that is not
   there, so it is checked rather than remembered.
+- `test/test_fx.js` — the overlay's occlusion-slot BUDGET. The allocator is the
+  only thing between a harvest ring and being painted on a ridge, and its
+  failure mode is invisible in code review: a ring holding no slot is simply
+  drawn where it should not be. Asserts slots go to rings being DRAWN, that a
+  blast bigger than the pool still gets everyone answered within a few frames,
+  that a never-answered ring is served first, that the map covers the row with
+  no overlap or gap, and that the allocator and the draw loop share one
+  lifetime table. Four mutants verified red.
 - `test/check_module_refs.py` — the modular/single-file divergence guard
   above. Verified to go RED on the real `camPos` bug before being called
   green. It earned its keep again on 9 Sept 2026, rejecting a local named

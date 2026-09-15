@@ -830,6 +830,112 @@ reaches 0.20. Then Nico: *"make the css to show the whole numbers, and set
 default to 0,25"* — both done, and the CSS bug turned out to be why he had
 read 0.25 as 0.1 all week (RESEARCH §6.9 footnote).
 
+## v9.8 — light, shadow and nightfall (15 September 2026)
+
+Three requests from Nico, and one of them turned out to be two bugs wearing
+the same coat.
+
+**The session opened on a broken tree.** `js/fx.js`, `js/config.js` and
+`js/shaders.js` carried an unfinished guided-missile feature: the rendering
+was written, `missiles.js` was never created, and `main.js` still called
+`buildFxQueries(arr, bullets, bombs, impacts)` with four arguments against a
+five-argument signature. `missiles[i]` on `undefined` throws on the first
+frame, which by the freeze rule in CLAUDE.md means the world stops dead while
+the engine keeps humming — and **every suite was green**, because
+`test_smoke.js` stops at module evaluation and jsdom has no WebGL2 to reach
+`frame()` with. Nico: *"the missiles was my previous prompt but it was blocked
+... let's forget about missiles."* Reverted to `02040f2`; the patch is kept
+out of tree.
+
+### The rings through the mountains — two independent causes
+
+*"When trees/shrooms disappear they make a small ring. These rings are visible
+through the harvester hull which is good. But they also show through the
+terrain/mountains."*
+
+The overlay has no depth buffer, so each particle's visibility is a GPU probe
+answer keyed to a slot in `uFxPos[48]`, and **a particle holding no slot is
+drawn fully visible**. Pops had ten slots, handed to the last ten entries of
+`pops`. That is the worst possible ten: `collectTreeAt` staggers a blast's
+pops by `j * 0.03` s against a 0.7 s `POP_LIFE`, so the newest entries are the
+ones that **have not started yet**, while ~40 rings genuinely on screen all
+fell through to full visibility. The slots were being spent on rings nobody
+was drawing.
+
+Second cause, independent and just as real: the probe's own march had a
+**constant 10 m stride floor against a 48-iteration cap**, so a grazing ray
+died after ~480 m and anything beyond answered "visible" whatever stood in
+front of it. `floorStep = L / 44.0` spans the segment at any range and is
+finer than 10 m inside 440 m.
+
+The fix for the first is a single 21-slot pool shared by pops and impacts —
+they never peak together — handed out **round robin**, longest-unanswered
+first, with each particle latching its last answer in `_vis`. A ring that has
+never been answered sorts first, so it is never drawn blind.
+
+*"If it's possible make that the rings are not seen through the mothership
+hull (but visible through the harvester hull)."* Done, and it is a slab test
+against the hull's bounding box rather than a march of `shipDE` — GLSL inlines
+every call site and that function carries a mandelbox loop. Two guards earn
+their place: `g.x > 0.0`, because the camera can sit inside the bounding box
+while outside the cropped hull (without it the whole overlay blacks out while
+skimming a filleted corner), and `g.x < L - 8.0`, because a bomb ring drawn ON
+the near face has its box entry exactly where the ring is.
+
+### The fleet casts a shadow
+
+`craftShadow`, `cloudShadow` and `treeShadow` existed; the aliens did not
+block the sun at all. `alienShadow` is analytic for the same reason
+`treeShadow` is a fake: each hull attenuates by the **chord** its bounding
+volume cuts out of the ray to the sun, which buys a soft penumbra rim for
+nothing and costs no march. Melting wrecks stop casting — a downed hull is
+inert everywhere else, and a shadow outliving its ship is the same class of
+bug as the invisible killbox `hullAlive` was written for.
+
+Verified by A/B on the live GPU rather than by eye, after two null results
+that were **staging, not evidence**: the camera had flown past the footprint
+both times. With the camera actually inside it, removing the mothership
+brightens **38.7% of the frame by a mean of 39 luminance, confined entirely to
+the ground rows and zero in the sky**. The measurement rig was itself
+controlled first — swinging the sun moved 210 230 of 265 722 samples — because
+a null from an unvalidated instrument is not a null.
+
+### Nightfall
+
+*"Sun should be able to go lower behind the horizon, until it's dark, apart
+the shrooms which have the glow."* `sun.el` was clamped at 0.04 rad, and
+`duskAmount` has already saturated by the time the sun touches the horizon, so
+it cannot describe anything below it. `nightAmount` picks up exactly there and
+runs 0 → 1 as the sun sinks to ~-15°, driving the sun colour, the sky ambient,
+the horizon and zenith, the high cirrus and — the one that matters most — the
+**fog**, which washes a night scene out to bright grey if it is left alone.
+The flora's existing dusk-keyed emissive gets a night term ~2x larger than its
+dusk one, so the mushrooms become what you see by. `SUN_EL_MIN = -0.30` is set
+just past where `nightAmount` saturates, so the drag never travels further
+than the picture changes; `test_shader.js` fails if the two drift apart.
+
+### Two traps met on the way
+
+- **A backtick in a GLSL comment ends the JS template early** — twice, in one
+  session, writing prose about the code in the code. `test_glsl.js` caught
+  both in milliseconds instead of an 80 s driver compile. The rule is in
+  CLAUDE.md and it is still the easiest mistake in this file to make.
+- **`core.autocrlf` again.** `git checkout -- js/fx.js` handed the file back
+  as CRLF, so a multi-line search anchor spanning a newline silently failed to
+  match while single-line ones kept working. Every source touched this session
+  was normalised to LF on write.
+
+### Testing
+
+`test/test_fx.js` is new — the slot allocator had no coverage and its failure
+mode is invisible (a ring is simply drawn where it should not be). Six
+assertions, and `test/harness.js` had to be taught multi-line imports first:
+it filtered lines starting with `import`, which drops the first line of a
+multi-line one and leaves the rest as a syntax error. It now reuses
+`build.js`'s own `RE_IMPORT`, the same expression `test_smoke.js` already
+borrows. Ten new mutants take the battery to 57, and all ten were verified
+red before the suites were believed.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

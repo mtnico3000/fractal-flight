@@ -517,6 +517,33 @@ const MAXCLOUD = 16;
 const TRAIL_LIFE = 4.5;   // v7.4: contrails linger — the plane reads from afar
 const POP_LIFE = 0.7;
 
+// ---- fx occlusion-query slot map -------------------------------------------
+// The GPU probe row answers "is this overlay particle hidden?" for FXQ world
+// points (shader: uFxPos[FXQ], probe row px 85 .. 85+FXQ-1). FXQ is a HARD
+// budget, not a preference: the array is already 48 of the shader's measured
+// 245 vec4 uniform slots against a GLSL ES 3.0 guarantee of 224, so the way to
+// give an effect more coverage is to RE-CUT this map, never to grow it. Each
+// constant is the FIRST slot of its class; the class ends where the next
+// begins, and FXQ ends the last one — so a boundary only has to move once.
+//
+// The rings share ONE pool rather than taking a fixed cut each, because they
+// never peak together: impacts are gunfire, pops are harvests, and a single
+// pool round-robins 21 slots over whichever family is actually busy instead of
+// stranding 11 idle ones beside 10 oversubscribed.
+const FXQ_TRAIL  = 0;    // 16 samples along the contrail polyline
+const FXQ_BULLET = 16;   // one per tracer slot (MAXB)
+const FXQ_BOMB   = 24;   // one per bomb slot (MAXBOMB)
+const FXQ_RING   = 27;   // 21, ROUND ROBIN over every ring being drawn
+const FXQ        = 48;
+
+// ---- sun travel (right-drag) -----------------------------------------------
+// The floor is BELOW the horizon: the sun sets properly and the island goes
+// dark, lit by the glow-in-the-dark flora and a dim skylight. -0.30 rad is
+// ~17 deg down, past the end of nautical twilight, which is where nightAmount
+// in the shader saturates -- dragging further would change nothing on screen.
+const SUN_EL_MIN = -0.30;
+const SUN_EL_MAX = 1.25;
+
 // ==================== js/state.js ====================
 // Central mutable game state. Modules mutate these objects in place;
 // none of the bindings are ever reassigned.
@@ -1158,21 +1185,37 @@ float softShadow(vec3 ro, vec3 rd) {
 // palette: deep orange horizon band, purple-blue zenith, reddened sunlight,
 // warm fog, pink clouds. duskAmount goes 0 (day) → 1 (sun on the horizon).
 float duskAmount(vec3 sun) { return 1.0 - smoothstep(0.06, 0.34, sun.y); }
-vec3 sunLightCol(vec3 sun) { return mix(vec3(1.30, 1.02, 0.78), vec3(1.55, 0.55, 0.25), duskAmount(sun)); }
-vec3 skyAmbCol(vec3 sun)   { return mix(vec3(0.42, 0.56, 0.82), vec3(0.46, 0.36, 0.52), duskAmount(sun)); }
+// ---------- nightfall (v9.8) ----------
+// duskAmount has already saturated by the time the sun touches the horizon,
+// so it cannot describe anything below it. nightAmount picks up exactly there
+// and runs 0 -> 1 as the sun sinks to ~-15 deg, the end of nautical twilight
+// and the point where the last colour leaves the sky. SUN_EL_MIN in config.js
+// is the drag floor and is set just past where this saturates, so the control
+// never travels further than the picture changes.
+//
+// Direct sun keeps a 3% sliver rather than going to zero: at exactly 0 the
+// specular and the snow sparkle divide out of the picture in one frame, which
+// reads as a light switch rather than a sunset.
+float nightAmount(vec3 sun) { return 1.0 - smoothstep(-0.26, 0.02, sun.y); }
+vec3 sunLightCol(vec3 sun) { return mix(vec3(1.30, 1.02, 0.78), vec3(1.55, 0.55, 0.25), duskAmount(sun)) * (1.0 - 0.97 * nightAmount(sun)); }
+vec3 skyAmbCol(vec3 sun)   { return mix(mix(vec3(0.42, 0.56, 0.82), vec3(0.46, 0.36, 0.52), duskAmount(sun)), vec3(0.050, 0.070, 0.150), nightAmount(sun)); }
 
 vec3 skyColor(vec3 rd, vec3 sun) {
   float sd = clamp(dot(rd, sun), 0.0, 1.0);
   float dusk = duskAmount(sun);
+  float night = nightAmount(sun);
   float horiz = 1.0 - smoothstep(0.0, 0.45, rd.y);
-  vec3 horCol = mix(vec3(0.62, 0.70, 0.84), vec3(0.96, 0.44, 0.22), dusk);
-  vec3 zenCol = mix(vec3(0.10, 0.24, 0.48), vec3(0.09, 0.10, 0.30), dusk);
+  vec3 horCol = mix(mix(vec3(0.62, 0.70, 0.84), vec3(0.96, 0.44, 0.22), dusk), vec3(0.045, 0.058, 0.115), night);
+  vec3 zenCol = mix(mix(vec3(0.10, 0.24, 0.48), vec3(0.09, 0.10, 0.30), dusk), vec3(0.010, 0.016, 0.045), night);
   vec3 col = mix(horCol, zenCol, smoothstep(-0.05, 0.55, rd.y));
-  // warm band around the low sun — widens and reddens at dusk
+  // warm band around the low sun — widens and reddens at dusk, and survives a
+  // little past sunset as afterglow: the night term fades it over the span
+  // it takes the zenith to go black, so the last orange sits on the horizon
+  // while the sky above is already night.
   vec3 band = mix(vec3(1.00, 0.58, 0.28), vec3(1.05, 0.30, 0.10), dusk);
-  col = mix(col, band, pow(sd, mix(5.0, 2.6, dusk)) * horiz * mix(0.75, 0.95, dusk));
-  col += mix(vec3(1.00, 0.72, 0.42), vec3(1.10, 0.42, 0.16), dusk) * pow(sd, 48.0) * 0.55;   // glow
-  col += mix(vec3(1.00, 0.88, 0.65), vec3(1.05, 0.52, 0.28), dusk) * pow(sd, 900.0) * 3.0;   // disc
+  col = mix(col, band, pow(sd, mix(5.0, 2.6, dusk)) * horiz * mix(0.75, 0.95, dusk) * (1.0 - 0.88 * night));
+  col += mix(vec3(1.00, 0.72, 0.42), vec3(1.10, 0.42, 0.16), dusk) * pow(sd, 48.0) * 0.55 * (1.0 - night);   // glow
+  col += mix(vec3(1.00, 0.88, 0.65), vec3(1.05, 0.52, 0.28), dusk) * pow(sd, 900.0) * 3.0 * (1.0 - night);   // disc
   // thin high clouds — lit pink from below at dusk
   if (rd.y > 0.015) {
     vec2 cuv = rd.xz / (rd.y + 0.18) * 1.4;
@@ -1180,6 +1223,7 @@ vec3 skyColor(vec3 rd, vec3 sun) {
     float cm = smoothstep(0.52, 0.82, cl) * smoothstep(0.015, 0.16, rd.y);
     vec3 cc = mix(vec3(0.92, 0.93, 0.95), vec3(1.0, 0.82, 0.62), pow(sd, 3.0));
     cc = mix(cc, vec3(1.0, 0.58, 0.48), dusk * 0.7);
+    cc = mix(cc, vec3(0.055, 0.065, 0.105), night);   // unlit from below after sunset
     col = mix(col, cc, cm * 0.65);
   }
   return col;
@@ -1195,8 +1239,9 @@ vec3 applyFog(vec3 col, vec3 ro, vec3 rd, float t, vec3 sun) {
   float f = fogFactor(ro, rd, t);
   float sd = clamp(dot(rd, sun), 0.0, 1.0);
   float dusk = duskAmount(sun);
-  vec3 fbase = mix(vec3(0.58, 0.65, 0.78), vec3(0.72, 0.48, 0.44), dusk);
-  vec3 fwarm = mix(vec3(1.0, 0.70, 0.40), vec3(1.05, 0.42, 0.20), dusk);
+  float night = nightAmount(sun);
+  vec3 fbase = mix(mix(vec3(0.58, 0.65, 0.78), vec3(0.72, 0.48, 0.44), dusk), vec3(0.038, 0.048, 0.090), night);
+  vec3 fwarm = mix(mix(vec3(1.0, 0.70, 0.40), vec3(1.05, 0.42, 0.20), dusk), vec3(0.060, 0.055, 0.095), night);
   vec3 fcol = mix(fbase, fwarm, pow(sd, 6.0));
   return mix(col, fcol, f);
 }
@@ -1631,6 +1676,59 @@ float treeShadow(vec3 p, vec3 sun) {
   return att;
 }
 
+// ALIEN FLEET (v9.8): the hulls block the sun as well. Analytic, like
+// cloudShadow, and for the same reason treeShadow is a smart fake -- GLSL
+// inlines every call site, and shipDE carries a mandelbox loop, so marching
+// the real hull here would cost what the two debug channels cost (30.7% of
+// the inlined program, docs/COMPILE.md). Each hull instead attenuates by the
+// CHORD its bounding volume cuts out of the ray to the sun, which buys a soft
+// rim for nothing: near the silhouette the chord is short and the point sits
+// in penumbra, deep inside it is dark, and no march happens at all.
+//
+// The bound, not the silhouette: a cropped-mandelbox hull is a SUBSET of its
+// box, so the shadow is slightly generous at the filleted corners. At 3500 m
+// across that is a couple of percent of the footprint. Marching the carve is
+// the only way to do better and it is not worth a second of compile.
+//
+// Melting wrecks stop casting -- a downed hull is inert everywhere else
+// (hullAlive in aliens.js), and a shadow outliving the ship that cast it is
+// the same class of bug as the invisible killbox that rule was written for.
+float alienShadow(vec3 p, vec3 sun) {
+  if (uShadows < 0.5) return 1.0;
+  float att = 1.0;
+  if (uMotherPos.y > -9000.0 && uMotherMelt < 0.5) {
+    vec2 g = boxGate(p - uMotherPos, sun, uMotherHalf);
+    if (g.x < g.y && g.y > 0.0) {
+      float chord = g.y - max(g.x, 0.0);
+      att *= 1.0 - 0.82 * smoothstep(0.0, uMotherHalf.y * 0.8, chord);
+    }
+  }
+  for (int i = 0; i < 6; i++) {
+    if (float(i) >= uShipN) break;
+    if (uShipPos[i].y < -9000.0 || uShipMelt[i] > 0.5) continue;
+    float ca = cos(uShipPos[i].w), sa = sin(uShipPos[i].w);
+    vec3 lo = shipLocal(p, uShipPos[i].xyz, ca, sa);
+    vec3 ld = vec3(sun.x * ca - sun.z * sa, sun.y, sun.x * sa + sun.z * ca);
+    vec2 g = boxGate(lo, ld, uShipHalf);
+    if (g.x < g.y && g.y > 0.0) {
+      float chord = g.y - max(g.x, 0.0);
+      att *= 1.0 - 0.78 * smoothstep(0.0, uShipHalf.y * 0.8, chord);
+    }
+  }
+  if (uRelay.y > -9000.0 && uRelayMelt < 0.5) {
+    vec3 oc = p - uRelay.xyz;
+    float R = uRelay.w * 1.2;
+    float b = dot(oc, sun);
+    float c = dot(oc, oc) - R * R;
+    float disc = b * b - c;
+    if (disc > 0.0 && -b + sqrt(disc) > 0.0) {
+      float chord = 2.0 * sqrt(disc) / max(R, 1.0);   // 0..2: path through the sphere
+      att *= 1.0 - 0.78 * smoothstep(0.1, 1.5, chord);
+    }
+  }
+  return max(att, 0.20);                              // skylight keeps the shade readable
+}
+
 // probe payload encoders: height → 24-bit fixed point over [-80, 560],
 // plant distance → 8 bits over [0, 40] m
 vec4 encodeHeight(float gh) {
@@ -1669,7 +1767,7 @@ void main() {
       fragColor = encodeHeight(terrainShape(uBombPos[px - 82].xz));
     } else {
       // fx occlusion probe (v7.9): is this overlay particle (contrail dot,
-      // tracer, bomb, blast ring) hidden behind terrain from the camera?
+      // tracer, bomb, harvest/blast ring) hidden from the camera?
       // Marches the SAME terrainShape the pixels render, so overlay
       // visibility agrees with the mountains bit-for-bit. Soft answer:
       // grazing a ridge fades instead of popping.
@@ -1681,15 +1779,49 @@ void main() {
         vec3 rd = dv / L;
         float t = 12.0;
         float mn = 1.0;
+        // The stride floor is a FRACTION OF THE SEGMENT, not a constant. It
+        // was 10 m against a 48-iteration cap, so a ray grazing terrain ran
+        // out of budget after ~480 m and every particle beyond that answered
+        // "visible" whatever stood in front of it -- silently, and only at
+        // range, which is exactly where a ring drawn over a mountain is most
+        // obvious. L/44 spans the whole segment inside the cap at any
+        // distance, and is FINER than 10 m for anything nearer than 440 m.
+        float floorStep = L / 44.0;
         for (int i = 0; i < 48; i++) {
           if (t > L - 10.0) break;
           vec3 p = uCamPos + rd * t;
           float h = p.y - terrainShape(p.xz);
           mn = min(mn, h / 10.0);
           if (mn < 0.0) break;
-          t += max(h * 0.7, 10.0);
+          t += max(h * 0.7, floorStep);
         }
         vis = clamp(mn, 0.0, 1.0);
+      }
+      // The MOTHERSHIP occludes the overlay; the harvesters and the relay
+      // deliberately do not. That is a readability call, not an oversight:
+      // the harvest sweep is what you are meant to watch, and the pops it
+      // makes under the hull are most of what tells you it is working, so
+      // those rings stay visible THROUGH a harvester. A 3500 m mothership
+      // parked overhead is pure occluder, and a ring showing through it reads
+      // as a bug to everyone.
+      //
+      // A slab test against the bounding box, not a march of shipDE: GLSL
+      // inlines every call site and shipDE carries a mandelbox loop, so one
+      // march here would cost what the two debug channels cost (CLAUDE.md --
+      // 30.7% of the inlined program). The box is the hull's bound rather than
+      // its silhouette, so a ring within the corner fillet hides slightly
+      // early; at 3500 m across that is a couple of percent and invisible in
+      // flight.
+      //
+      // Two guards, both load bearing. The g.x > 0.0 test: the camera can sit
+      // INSIDE the bounding box while outside the cropped hull, and without it
+      // the whole overlay would black out while skimming a filleted corner.
+      // The g.x < L - 8.0 test: a bomb-burst ring drawn ON the near face has its box
+      // entry exactly where the ring is, so only a particle the ray reaches
+      // THROUGH the box is hidden.
+      if (uMotherPos.y > -9000.0 && vis > 0.0) {
+        vec2 g = boxGate(uCamPos - uMotherPos, dv / max(L, 1e-4), uMotherHalf);
+        if (g.x < g.y && g.x > 0.0 && g.x < L - 8.0) vis = 0.0;
       }
       fragColor = vec4(vis, vis, vis, 1.0);
     }
@@ -1727,7 +1859,7 @@ void main() {
     vec3 n = terrainNormal(pos.xz, px);
     vec3 alb = terrainColor(pos, n, pos.y, px);
     float ndl = clamp(dot(n, sun), 0.0, 1.0);
-    float sh = (ndl > 0.02) ? softShadow(pos + n * 1.0, sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) * treeShadow(pos, sun) : 0.0; // + v7.6 shadow pack
+    float sh = (ndl > 0.02) ? softShadow(pos + n * 1.0, sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) * treeShadow(pos, sun) * alienShadow(pos, sun) : 0.0; // + v7.6 shadow pack, v9.8 fleet
     float dif = ndl * sh;
     float skyA = clamp(0.5 + 0.5 * n.y, 0.0, 1.0);
     float bnc = clamp(dot(n, normalize(vec3(-sun.x, 0.0, -sun.z))), 0.0, 1.0);
@@ -1766,7 +1898,7 @@ void main() {
     vec3 refl = skyColor(rr, sun);
     float fres = 0.03 + 0.97 * pow(1.0 - clamp(dot(-rd, n), 0.0, 1.0), 5.0);
     vec3 base = mix(vec3(0.10, 0.30, 0.28), vec3(0.02, 0.10, 0.13), depth); // glacial teal
-    float sh = softShadow(pos + vec3(0.0, 0.5, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun);
+    float sh = softShadow(pos + vec3(0.0, 0.5, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) * alienShadow(pos, sun);
     col = mix(base, refl, fres);
     vec3 glint = mix(vec3(1.0, 0.80, 0.50), vec3(1.1, 0.45, 0.20), duskAmount(sun));
     // A razor-thin highlight riding an undersampled normal is a firefly
@@ -1795,14 +1927,17 @@ void main() {
     vec2 ctr = (cell + 0.5) * FCELL + (vec2(hash(cell + 13.0), hash(cell + 37.0)) - 0.5) * 12.0;
     vec3 n = normalize(vec3(pos.x - ctr.x, 2.4, pos.z - ctr.y));
     float ndl = clamp(dot(n, sun), 0.0, 1.0);
-    float sh = (ndl > 0.02) ? softShadow(pos + vec3(0.0, 1.2, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) : 0.0;
+    float sh = (ndl > 0.02) ? softShadow(pos + vec3(0.0, 1.2, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) * alienShadow(pos, sun) : 0.0;
     vec3 lin = sunLightCol(sun) * 2.0 * ndl * sh
              + skyAmbCol(sun) * 0.55 * clamp(0.5 + 0.5 * n.y, 0.0, 1.0);
     col = alb * lin;
     // glow-in-the-dark: an unlit emissive that scales with size (big = more
     // glow) and height on the plant, and INTENSIFIES at dusk. Part is added
     // after the fog so distant groves still shine through the haze.
-    float glow = mix(0.05, 0.60, sn) * (0.40 + 0.60 * yn) * (0.7 + 1.2 * duskAmount(sun));
+    // ...and once the sun is down they are most of what is left to see by, so
+    // the night term is bigger than the dusk one rather than a continuation of
+    // it: at full night a big mushroom is ~2.2x its dusk brightness.
+    float glow = mix(0.05, 0.60, sn) * (0.40 + 0.60 * yn) * (0.7 + 1.2 * duskAmount(sun) + 2.2 * nightAmount(sun));
     vec3 glowC = mix(vec3(0.08, 0.30, 0.85), vec3(0.30, 0.85, 1.15), sn);
     col += glowC * glow * 0.7;
     col += glowC * smoothstep(0.82, 1.0, yn) * (0.25 + 0.55 * sn);   // luminous frond tips
@@ -2699,41 +2834,106 @@ function terrainShapeJ(px, pz) {
 
 const fxCanvas = document.getElementById('fx');
 const fxCtx = fxCanvas.getContext('2d');
-const fxOcc = { vis: new Uint8Array(48) };   // 255 = fully visible (GPU probe answers)
+const fxOcc = { vis: new Uint8Array(FXQ) };   // 255 = fully visible (GPU probe answers)
 fxOcc.vis.fill(255);
+let fxFrame = 0;                                     // round-robin clock, one tick per build
+
+// How long a ring of each kind stays on screen. The query builder and the
+// draw loop BOTH need this: a slot spent on a ring nobody draws is a slot
+// wasted, and that was the whole bug (see slotRings below).
+function impactLife(kind) { return kind === 3 ? 0.9 : (kind === 4 ? 0.8 : 0.45); }
+
+// Visibility of an overlay particle: its last latched probe answer. Undefined
+// means "never answered", which now only happens when more rings become live
+// in ONE frame than the pool has slots — `slotRings` serves the unanswered
+// first, so in practice a ring has an answer before its first drawn frame.
+const fxVis = p => (p._vis !== undefined ? p._vis : 1);
+
+// Latch this frame's probe answers onto the particles that held a slot, by
+// SLOT rather than at the point of drawing. That distinction is load bearing:
+// a blast pushes up to BLASTC pops at once with start times staggered over
+// 1.1 s, so most of them are not drawn for another second — stamping `_vt`
+// where a particle is DRAWN would leave those dormant pops permanently
+// "never answered", sorting them to the front of every round and starving the
+// handful actually on screen.
+function latchFxVis(list) {
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    if (p && p._q !== undefined) { p._vis = fxOcc.vis[p._q] / 255; p._vt = fxFrame; }
+  }
+}
+
+// Hands the shared ring pool to the rings that are actually being DRAWN this
+// frame, longest-unanswered first.
+//
+// This is the fix for "harvest rings show through the mountains". The old rule
+// took the LAST ten entries of `pops` — and after a blast those are the worst
+// possible ten: `collectTreeAt` staggers the pops by `j * 0.03` s, so the
+// newest entries are the ones that have not STARTED yet, while every pop
+// actually on screen fell through to `_q === undefined`, scored vv = 1, and
+// was painted straight over the ridge in front of it. ~40 rings are live at
+// once during a blast against a 0.7 s life, so this was the common case, not
+// an edge one.
+//
+// Round robin over the live set fixes both halves: nothing waits more than a
+// frame or two for a fresh answer, and a ring that has never been answered
+// sorts first, so it is never drawn blind.
+function slotRings(now, impacts, arr) {
+  const live = [];
+  for (let i = 0; i < pops.length; i++) {
+    const p = pops[i], age = (now - p.t0) / 1000;
+    if (age >= 0 && age <= POP_LIFE) live.push(p); else p._q = undefined;
+  }
+  for (let i = 0; i < impacts.length; i++) {
+    const p = impacts[i], age = (now - p.t0) / 1000;
+    if (age >= 0 && age <= impactLife(p.kind)) live.push(p); else p._q = undefined;
+  }
+  const age = p => (p._vt === undefined ? -1e9 : p._vt);   // never answered = oldest
+  live.sort((a, b) => age(a) - age(b));
+  const n = FXQ - FXQ_RING;
+  for (let k = 0; k < live.length; k++) {
+    const p = live[k];
+    if (k >= n) { p._q = undefined; continue; }
+    const q = FXQ_RING + k;
+    p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z;
+  }
+}
 
 // Assigns every overlay particle an occlusion-query slot and packs the query
-// positions for the GPU probe (row px 85..132): 16 samples along the trail
-// polyline, 8 tracers, 3 bombs, up to 10 pops + 11 impacts. Anything beyond
-// the budget just stays visible.
-function buildFxQueries(arr, bullets, bombs, impacts) {
-  for (let i = 0; i < 48; i++) { arr[i * 3] = viewPos[0]; arr[i * 3 + 1] = viewPos[1]; arr[i * 3 + 2] = viewPos[2]; }
+// positions for the GPU probe (row px 85 .. 85+FXQ-1). FXQ_* in config.js is
+// the one map of who gets which slot. Two strategies, by particle class:
+//
+//   - one slot each (bullets, bombs): few, and each is a single bright object
+//     whose visibility must be exact every frame.
+//   - shared slots (trail, rings): many, and clustered. The contrail has done
+//     this since v7.9 — 700 dots sampled at 16 points along the polyline —
+//     and the rings now do it too, but ROUND ROBIN rather than by position.
+function buildFxQueries(arr, now, bullets, bombs, impacts) {
+  fxFrame++;
+  for (let i = 0; i < FXQ; i++) { arr[i * 3] = viewPos[0]; arr[i * 3 + 1] = viewPos[1]; arr[i * 3 + 2] = viewPos[2]; }
   const n = trail.length;
+  const tN = FXQ_BULLET - FXQ_TRAIL;
   if (n > 0) {
-    for (let s = 0; s < 16; s++) {
-      const p = trail[Math.min(n - 1, Math.round(s * (n - 1) / 15))];
-      arr[s * 3] = p.x; arr[s * 3 + 1] = p.y; arr[s * 3 + 2] = p.z;
+    for (let s = 0; s < tN; s++) {
+      const p = trail[Math.min(n - 1, Math.round(s * (n - 1) / (tN - 1)))];
+      const q = FXQ_TRAIL + s;
+      arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z;
     }
-    for (let i = 0; i < n; i++) trail[i]._q = n > 1 ? Math.round(i * 15 / (n - 1)) : 0;
+    for (let i = 0; i < n; i++) trail[i]._q = FXQ_TRAIL + (n > 1 ? Math.round(i * (tN - 1) / (n - 1)) : 0);
   }
   for (let i = 0; i < MAXB; i++) {
     const B = bullets[i];
     if (!B) continue;
-    const q = 16 + i;
+    const q = FXQ_BULLET + i;
     arr[q * 3] = B.x; arr[q * 3 + 1] = B.y; arr[q * 3 + 2] = B.z; B._q = q;
   }
   for (let i = 0; i < MAXBOMB; i++) {
     const B = bombs[i];
     if (!B) continue;
-    const q = 24 + i;
+    const q = FXQ_BOMB + i;
     arr[q * 3] = B.x; arr[q * 3 + 1] = B.y; arr[q * 3 + 2] = B.z; B._q = q;
   }
-  for (const p of pops) p._q = undefined;
-  for (const p of impacts) p._q = undefined;
-  let q = 27;
-  for (let i = pops.length - 1; i >= 0 && q < 37; i--, q++) { const p = pops[i]; p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z; }
-  q = 37;
-  for (let i = impacts.length - 1; i >= 0 && q < 48; i--, q++) { const p = impacts[i]; p._q = q; arr[q * 3] = p.x; arr[q * 3 + 1] = p.y; arr[q * 3 + 2] = p.z; }
+  slotRings(now, impacts, arr);
 }
 
 const trail = [];
@@ -2767,6 +2967,9 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
   const W = fxCanvas.clientWidth, H = fxCanvas.clientHeight;
   if (fxCanvas.width !== W || fxCanvas.height !== H) { fxCanvas.width = W; fxCanvas.height = H; }
   fxCtx.clearRect(0, 0, W, H);
+  // the probe row came back between buildFxQueries() and here
+  latchFxVis(trail); latchFxVis(bullets); latchFxVis(bombs);
+  latchFxVis(pops); latchFxVis(impacts);
   // tracer rounds: additive warm glow + bright core along this frame's segment
   fxCtx.globalCompositeOperation = 'lighter';
   fxCtx.lineCap = 'round';
@@ -2777,7 +2980,7 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
     const c = projectFx(camB, B.x, B.y, B.z, W, H);
     if (!a || !c) continue;
     const fade = Math.max(0.25, 1 - c.z / 1500);
-    const vv = B._q !== undefined ? fxOcc.vis[B._q] / 255 : 1;
+    const vv = fxVis(B);
     if (vv < 0.02) continue;
     fxCtx.beginPath(); fxCtx.moveTo(a.x, a.y); fxCtx.lineTo(c.x, c.y);
     fxCtx.strokeStyle = 'rgba(255,185,80,' + (0.35 * fade * vv).toFixed(3) + ')';
@@ -2795,7 +2998,7 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
     if (!B) continue;
     const s = projectFx(camB, B.x, B.y, B.z, W, H);
     if (!s) continue;
-    const vv = B._q !== undefined ? fxOcc.vis[B._q] / 255 : 1;
+    const vv = fxVis(B);
     if (vv < 0.02) continue;
     const t = projectFx(camB, B.x - B.vx * 0.06, B.y - B.vy * 0.06, B.z - B.vz * 0.06, W, H);
     const r = Math.max(3.2, 220 / s.z);   // v5.3: doubled
@@ -2818,11 +3021,11 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
   // height and is projected in perspective, so the circle tilts with slopes.
   for (let i = impacts.length - 1; i >= 0; i--) {
     const p = impacts[i];
-    const life = (p.kind === 3) ? 0.9 : (p.kind === 4 ? 0.8 : 0.45);
+    const life = impactLife(p.kind);
     const age = (now - p.t0) / 1000;
     if (age > life) { impacts.splice(i, 1); continue; }
     const k = age / life;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     if (p.kind === 4) {
       // Alien hull detonation. kind 3 below lies on the TERRAIN; this one lies
@@ -2963,7 +3166,7 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
     const s = projectFx(camB, p.x, p.y, p.z, W, H);
     if (!s) continue;
     const k = age / POP_LIFE;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     const r = (4 + k * 46) * (60 / Math.min(s.z, 200));
     fxCtx.beginPath();
@@ -2981,7 +3184,7 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
     const sx = s.x, sy = s.y;
     if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
     const k = 1 - age / TRAIL_LIFE;
-    const vv = p._q !== undefined ? fxOcc.vis[p._q] / 255 : 1;
+    const vv = fxVis(p);
     if (vv < 0.02) continue;
     const r = (2.0 + age * 4.8) * (60 / s.z) * (p.boost ? 1.6 : 1.0);   // v7.4: doubled
     fxCtx.beginPath();
@@ -3396,7 +3599,7 @@ window.addEventListener('mousemove', e => {
   }
   if (sunDragging) {
     sun.az += (e.clientX - lastMX) * 0.005;
-    sun.el = Math.min(1.25, Math.max(0.04, sun.el - (e.clientY - lastMY) * 0.004));
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - lastMY) * 0.004));
   }
   lastMX = e.clientX; lastMY = e.clientY;
 });
@@ -3425,7 +3628,7 @@ if (IS_TOUCH) (function initTouch() {
   canvas.addEventListener('pointermove', e => {
     if (e.pointerId !== dragId) return;
     sun.az += (e.clientX - tLastX) * 0.005;
-    sun.el = Math.min(1.25, Math.max(0.04, sun.el - (e.clientY - tLastY) * 0.004));
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - tLastY) * 0.004));
     tLastX = e.clientX; tLastY = e.clientY;
   });
   const endSunDrag = e => { if (e.pointerId === dragId) dragId = null; };
@@ -5021,7 +5224,7 @@ async function main() {
   gl.uniformMatrix3fv(U.uRingMats, false, ringsMatsData);
   gl.uniform1f(U.uCockpit, viewZoom.cockpit);
   gl.uniform1f(U.uShadows, TUNE.shadows.v);
-  buildFxQueries(fxPosArr, bullets, bombs, impacts);
+  buildFxQueries(fxPosArr, now, bullets, bombs, impacts);
   gl.uniform3fv(U.uFxPos, fxPosArr);
   packAlienUniforms(alienU);
   gl.uniform3fv(U.uMotherPos, alienU.motherPos);
@@ -5107,7 +5310,7 @@ async function main() {
     const o = (82 + i) * 4;
     gpuBombGround[i] = ((probeBuf[o] * 65536 + probeBuf[o + 1] * 256 + probeBuf[o + 2]) / 16777215) * 640 - 80;
   }
-  for (let i = 0; i < 48; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
+  for (let i = 0; i < FXQ; i++) fxOcc.vis[i] = probeBuf[(85 + i) * 4];
 
   drawTrail(camBasis, now, bullets, bombs, impacts);
   if (running) requestAnimationFrame(frame);

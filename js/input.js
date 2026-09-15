@@ -3,6 +3,7 @@
 // own state object; the flight model sums and clamps them.
 
 import { sun, viewZoom, camMode } from './state.js';
+import { SUN_EL_MIN, SUN_EL_MAX } from './config.js';
 import { canvas } from './renderer.js';
 import { ensureAudio, toggleMute } from './audio.js';
 import { fireGun, dropBomb } from './weapons.js';
@@ -83,7 +84,7 @@ window.addEventListener('mousemove', e => {
   }
   if (sunDragging) {
     sun.az += (e.clientX - lastMX) * 0.005;
-    sun.el = Math.min(1.25, Math.max(0.04, sun.el - (e.clientY - lastMY) * 0.004));
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - lastMY) * 0.004));
   }
   lastMX = e.clientX; lastMY = e.clientY;
 });
@@ -113,7 +114,7 @@ if (IS_TOUCH) (function initTouch() {
   canvas.addEventListener('pointermove', e => {
     if (e.pointerId !== dragId) return;
     sun.az += (e.clientX - tLastX) * 0.005;
-    sun.el = Math.min(1.25, Math.max(0.04, sun.el - (e.clientY - tLastY) * 0.004));
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - tLastY) * 0.004));
     tLastX = e.clientX; tLastY = e.clientY;
   });
   const endSunDrag = e => { if (e.pointerId === dragId) dragId = null; };
