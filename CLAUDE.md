@@ -3,7 +3,7 @@
 WebGL2 raymarched flight game over a Mandelbrot-shaped island. No meshes, no
 textures: every pixel sphere-traces a procedural world each frame. Two-player
 "ping-pong" development between Nico (mtnico3000) and jul (julaub) — code
-volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.7.
+volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.8.
 
 ## Builds — IMPORTANT
 
@@ -15,7 +15,7 @@ ROADMAP C1 on 6 Sept 2026.
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
   message instead of loading.
-- **Single-file** (`fractal-flight-v9_7.html`): a GENERATED ARTIFACT. **Never
+- **Single-file** (`fractal-flight-v9_8.html`): a GENERATED ARTIFACT. **Never
   edit it.** It is the double-click build jul and everyone else actually
   plays, so it ships in the repo even though it is generated.
 
@@ -143,7 +143,7 @@ Key chips in the HUD glow green when a toggle is active.
   the parsed GLSL in `test/test_glsl.js`, which now fails the build above a
   260 ceiling. The long-standing "~260" in this file was an estimate and so
   was the "~267" that briefly replaced it; both were wrong. The concern is
-  still real: GLSL ES 3.0 guarantees only **224**, so at 245 the shader may
+  still real: GLSL ES 3.0 guarantees only **224**, so at 246 the shader may
   fail to LINK on the weakest target while every desktop is fine. The four
   biggest consumers are `uBlastCell[64]`=64, `uFxPos[48]`=48,
   `uRingMats[8]`=24 and `uCloudPos[16]`=16 — pack those into a texture before
@@ -637,7 +637,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **47/47 mutants caught as of v9.6** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
+  the predicate it named. **57/57 mutants caught as of v9.8** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch
@@ -702,4 +702,4 @@ v2→v4.6 built the world/weapons/probe; v5 merged jul's rings + went
 modular; v5-v6 restored arcade feel + start page; v7 camera suite +
 shadows + fx occlusion; v8 view toggles with exact memory; v9 alien
 invasion + observation mode; C1 ended the dual-maintenance (`build.js`).
-Current: v9.7.
+Current: v9.8.
