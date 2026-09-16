@@ -248,8 +248,11 @@ const MUTANTS = [
    ' * cloudShadow(pos, sun);', 'test_shader.js'],
   ['nightAmount smoothstep edges inverted (undefined behaviour in GLSL)', 'js/shaders.js',
    'smoothstep(-0.26, 0.02, sun.y)', 'smoothstep(0.02, -0.26, sun.y)', 'test_shader.js'],
+  // Re-anchored 16 Sept 2026: the floor moved -0.30 -> -0.72 for deepNight and
+  // this mutant went SKIPPED, which is the only reason anyone noticed. The
+  // mutated value must clear nightAmount's edge but fall short of deepNight's.
   ['the sun drag floor stops short of the night it enables', 'js/config.js',
-   'export const SUN_EL_MIN = -0.30;', 'export const SUN_EL_MIN = -0.10;', 'test_shader.js'],
+   'export const SUN_EL_MIN = -0.72;', 'export const SUN_EL_MIN = -0.30;', 'test_shader.js'],
 ];
 
 function mutate(src, find, repl, all) {
