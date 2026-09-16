@@ -674,9 +674,11 @@ drafted:
    and skip themselves with a note without it, so a bare clone still runs
    the other seven. Flight modes and rings still have no coverage — see
    item 4 in the queue.
-3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **242 vec4
-   slots** (238 before the energy beams moved into the shader), counted from
-   the parsed GLSL by `test_glsl.js`, which fails above a 260 ceiling. The old "~260" was a guess. Still **above the 224 that GLSL
+3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **246 vec4
+   slots** as of v9.8 (242 at v9.4, 238 before the energy beams moved into the
+   shader), counted from the parsed GLSL by `test_glsl.js`, which fails above
+   a 260 ceiling. ⚠️ Read the number off the test, not off this page — it has
+   drifted three times already. The old "~260" was a guess. Still **above the 224 that GLSL
    ES 3.0 guarantees**, so the shader may fail to LINK on jul's phone while
    every desktop is fine — that half is untested and needs a real device.
    Biggest consumers: `uBlastCell[64]`=64, `uFxPos[48]`=48, `uRingMats[8]`=24,
