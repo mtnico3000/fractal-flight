@@ -249,11 +249,20 @@ Key chips in the HUD glow green when a toggle is active.
   branch `v9.1`, with numbers in docs/RESEARCH.md. Do not rebuild them
   without reading that table first. A1 is kept because it is a net speedup
   (+3%) as well as a quality gain.
-- 📏 Measured 6 Sept 2026: at the current fleet tuning a **harvester never
-  visibly falls**. It hovers 45..60 m up while `shHei/2` is 60 m, so
-  `fallAndMelt` lands it in the very frame it dies and it melts in place. The
-  mothership (2200 m) and relay do fall. Cost a red test before it was
-  understood.
+- 📏 **A harvester never visibly falls, and since v9.8b it does not fly
+  either.** `updateAliens` parks a harvester's CENTRE at `terr + 45 m` on a
+  harvest run — and the clamp around that number,
+  `Math.min(Math.max(terr + 45, terr + 20), terr + 100)`, is **degenerate**:
+  both bounds are on the same side of the value, so it always returns
+  `terr + 45` and the 20/100 range is decoration. So the hull's clearance is
+  `45 - shHei/2`, and moving `ship height` past 90 puts it in the ground.
+  Measured 6 Sept at `shHei` 120 (half 60 m): it hovered with its belly on the
+  deck, which is why `fallAndMelt` lands it in the frame it dies and it melts
+  in place. **At Nico's v9.8b tuning of 206 the hull sits 58 m UNDERGROUND**
+  during every sweep. That is a tuning consequence, not a code fault, and it
+  may well be the look he wants — `test/test_aliens.js` prints the clearance
+  as a `note` on every run so the next person sees the number instead of
+  discovering it in flight. The mothership (2400 m) and relay do fall.
 - 📐 **A hit tolerance measured ALONG the ray is an error budget divided by
   the incidence angle.** `tolRay = 0.01 + 0.0015 * t` permitted a *vertical*
   error of `tolRay / sin(incidence)` — a 38x amplification for a ray grazing
@@ -481,6 +490,26 @@ Key chips in the HUD glow green when a toggle is active.
   never travels further than the picture changes; `test_shader.js` fails if
   they drift apart. ⚠️ GLSL `smoothstep` is **undefined when edge0 >= edge1** —
   write `1.0 - smoothstep(lo, hi, x)`, never `smoothstep(hi, lo, x)`.
+  **Night is TWO stages, and they hand over exactly.** `nightAmount` runs the
+  dusk→night ramp (sun.y 0.02 → -0.26); `deepNight` picks up where it
+  saturates (-0.26 → -0.60) and carries on to a sky with nothing left in it,
+  where only emissive things are still drawn. Staging it this way kept the
+  first ramp — which was already tuned and looked right — untouched. The test
+  asserts the handover (`deepNight`'s upper edge ≤ `nightAmount`'s lower edge)
+  and it caught a 0.04 overlap on the first attempt.
+- 🕯️ **An UNLIT constant does not go dark when the sun does, and that is how a
+  night scene fails.** Fading `sunLightCol`/`skyAmbCol` blackens everything
+  that multiplies by them and **nothing else**. Three terms did not, and each
+  read as a bug over a black island: the terrain's warm bounce
+  (`vec3(0.90,0.60,0.40)*0.12*bnc`, a fixed colour), the sea's body colour
+  (`glacial teal`, mixed under the reflection so it never saw the sun), and
+  **half the cloud shade** — `shade *= mix(vec3(1.0), sunLightCol*0.78, 0.5)`
+  leaves 50% unlit by construction, so the clouds stayed bright white. When
+  darkening a scene, grep the material blocks for `vec3(` constants that are
+  added or multiplied WITHOUT a light term; `test_shader.js` now pins all
+  three. ⚠️ The player's own aircraft has no emissive at all, so it goes dark
+  with everything else at full `deepNight` — deliberate, and the contrail is
+  what still marks it.
 - 🕶️ **A shadow caster does not need its real geometry.** `alienShadow` is a
   chord attenuation through each hull's bounding volume, not a march of
   `shipDE` — GLSL inlines every call site and that function carries a

@@ -2,10 +2,10 @@
 // Each knob: v = live value, d = default, min/max/step, fmt = display formatting.
 // ---- alien fleet knobs (v9.0): second panel, bottom-right ----
 export const TUNEA = {
-  boxScale: { label: 'box scale',   v: 1.6,   d: 1.6,   min: -3,   max: 3,     step: 0.1,  fmt: x => x.toFixed(1) },
-  boxFold:  { label: 'box fold',    v: 0.7,   d: 0.7,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
-  boxMinR:  { label: 'box min r',   v: 0.8,   d: 0.8,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
-  bulbPow:  { label: 'bulb power',  v: 10,    d: 10,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
+  boxScale: { label: 'box scale',   v: 3,   d: 3,   min: -3,   max: 3,     step: 0.1,  fmt: x => x.toFixed(1) },
+  boxFold:  { label: 'box fold',    v: 1.4,   d: 1.4,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
+  boxMinR:  { label: 'box min r',   v: 0.1,   d: 0.1,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
+  bulbPow:  { label: 'bulb power',  v: 12,    d: 12,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
   // Corner fillet on the mothership and harvester hulls, as a fraction of
   // each hull's SMALLEST half-extent -- so it scales with the size sliders
   // instead of needing retuning every time a ship changes shape. 0 is the
@@ -14,11 +14,11 @@ export const TUNEA = {
   moLen:    { label: 'mother len',  v: 3500,  d: 3500,  min: 400,  max: 5000,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
   moWid:    { label: 'mother wid',  v: 3500,  d: 3500,  min: 200,  max: 3500,  step: 50,   fmt: x => x.toFixed(0) + ' m' },
   moHei:    { label: 'mother hgt',  v: 400,   d: 400,   min: 30,   max: 400,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  moAlt:    { label: 'mother alt',  v: 2600,  d: 2600,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
+  moAlt:    { label: 'mother alt',  v: 2400,  d: 2400,  min: 1500, max: 15000, step: 100,  fmt: x => x.toFixed(0) + ' m' },
   shLen:    { label: 'ship length', v: 1200,  d: 1200,   min: 80,   max: 1200,  step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  shWid:    { label: 'ship width',  v: 800,   d: 800,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
-  shHei:    { label: 'ship height', v: 120,   d: 120,   min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
-  shSpeed:  { label: 'ship speed',  v: 30,    d: 30,    min: 2,    max: 60,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
+  shWid:    { label: 'ship width',  v: 650,   d: 650,   min: 20,   max: 800,   step: 10,   fmt: x => x.toFixed(0) + ' m' },
+  shHei:    { label: 'ship height', v: 206,   d: 206,   min: 8,    max: 300,   step: 2,    fmt: x => x.toFixed(0) + ' m' },
+  shSpeed:  { label: 'ship speed',  v: 46,    d: 46,    min: 2,    max: 60,    step: 1,    fmt: x => x.toFixed(0) + ' m/s' },
   relSize:  { label: 'relay size',  v: 150,   d: 150,   min: 30,   max: 400,   step: 5,    fmt: x => x.toFixed(0) + ' m' },  // How far the relay swells per delivered energy shot, as a fraction of its
   // BASE radius. This controls SIZE ONLY -- the discharge fires on a fixed
   // RELAY_SHOTS count (50), so the invasion cadence is the same wherever this

@@ -218,8 +218,30 @@ check('nightfall continues where dusk saturates', () => {
   ok(floor, 'config.js must define SUN_EL_MIN');
   ok(Math.sin(Number(floor[1])) <= Number(m[1]) + 1e-6,
      'the sun drag floor (' + floor[1] + ' rad) stops before night saturates at sun.y = ' + m[1]);
-  ok(/sunLightCol[\s\S]{0,200}nightAmount\(sun\)/.test(glsl), 'direct sunlight must fade at night');
-  ok(/skyAmbCol[\s\S]{0,200}nightAmount\(sun\)/.test(glsl), 'sky ambient must fade at night');
+  ok(/sunLightCol[\s\S]{0,260}nightAmount\(sun\)/.test(glsl), 'direct sunlight must fade at night');
+  ok(/skyAmbCol[\s\S]{0,260}nightAmount\(sun\)/.test(glsl), 'sky ambient must fade at night');
+
+  // Stage two: deepNight carries on below nightAmount to a sky with nothing
+  // left in it. The drag floor has to REACH it, or the last part of the
+  // control travels past anything the picture can still do.
+  const dm = /float deepNight\(vec3 sun\) \{ return 1\.0 - smoothstep\(([-\d.]+), ([-\d.]+), sun\.y\); \}/.exec(glsl);
+  ok(dm, 'deepNight must be a smoothstep on sun.y with edge0 < edge1');
+  ok(Number(dm[1]) < Number(dm[2]), 'deepNight edges are inverted: ' + dm[1] + ' >= ' + dm[2]);
+  ok(Number(dm[2]) <= Number(m[1]) + 1e-6,
+     'deepNight should start where nightAmount finishes: it begins at ' + dm[2] + ', night saturates at ' + m[1]);
+  ok(Math.sin(Number(floor[1])) <= Number(dm[1]) + 1e-6,
+     'the sun drag floor (' + floor[1] + ' rad, sun.y = ' + Math.sin(Number(floor[1])).toFixed(3) +
+     ') cannot reach deep night, which saturates at sun.y = ' + dm[1]);
+
+  // Three terms are UNLIT constants: they do not multiply by the sun at all,
+  // so without an explicit fade they stay bright over a black island. Each
+  // one was visible as a bug -- teal sea, lit clouds, warm terrain bounce.
+  ok(/vec3\(0\.90, 0\.60, 0\.40\) \* 0\.12 \* bnc \* \(1\.0 - nightAmount\(sun\)\)/.test(glsl),
+     'the terrain bounce is an unlit constant and must be faded at night');
+  ok(/glacial teal, unlit/.test(glsl) && /depth\) \* \(1\.0 - 0\.97 \* nightAmount\(sun\)\)/.test(glsl),
+     'the sea body colour is unlit and must be faded at night');
+  ok(/shade \*= mix\(vec3\(1\.0 - 0\.96 \* nightAmount\(sun\)\), sunLightCol\(sun\) \* 0\.78, 0\.5\);/.test(glsl),
+     'only half the cloud shade is sun-lit; the other half must fade at night');
 });
 
 check('no backtick inside the GLSL templates', () => {

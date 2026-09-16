@@ -614,16 +614,24 @@ float duskAmount(vec3 sun) { return 1.0 - smoothstep(0.06, 0.34, sun.y); }
 // specular and the snow sparkle divide out of the picture in one frame, which
 // reads as a light switch rather than a sunset.
 float nightAmount(vec3 sun) { return 1.0 - smoothstep(-0.26, 0.02, sun.y); }
-vec3 sunLightCol(vec3 sun) { return mix(vec3(1.30, 1.02, 0.78), vec3(1.55, 0.55, 0.25), duskAmount(sun)) * (1.0 - 0.97 * nightAmount(sun)); }
-vec3 skyAmbCol(vec3 sun)   { return mix(mix(vec3(0.42, 0.56, 0.82), vec3(0.46, 0.36, 0.52), duskAmount(sun)), vec3(0.050, 0.070, 0.150), nightAmount(sun)); }
+// DEEP night (v9.8b) is a second stage BELOW nightAmount, not a rescaling of
+// it: the dusk -> night ramp above is tuned and looks right, so this picks up
+// where that one saturates and carries on to a sky with no light left in it.
+// At 1.0 the only things still on screen are the ones that emit -- the flora
+// glow, the hull seams, the harvest sheets and the ring course. Everything
+// lit, including the player's own aircraft, goes black.
+float deepNight(vec3 sun) { return 1.0 - smoothstep(-0.60, -0.26, sun.y); }
+vec3 sunLightCol(vec3 sun) { return mix(vec3(1.30, 1.02, 0.78), vec3(1.55, 0.55, 0.25), duskAmount(sun)) * (1.0 - 0.97 * nightAmount(sun)) * (1.0 - 0.95 * deepNight(sun)); }
+vec3 skyAmbCol(vec3 sun)   { return mix(mix(mix(vec3(0.42, 0.56, 0.82), vec3(0.46, 0.36, 0.52), duskAmount(sun)), vec3(0.050, 0.070, 0.150), nightAmount(sun)), vec3(0.008, 0.011, 0.024), deepNight(sun)); }
 
 vec3 skyColor(vec3 rd, vec3 sun) {
   float sd = clamp(dot(rd, sun), 0.0, 1.0);
   float dusk = duskAmount(sun);
   float night = nightAmount(sun);
+  float deep = deepNight(sun);
   float horiz = 1.0 - smoothstep(0.0, 0.45, rd.y);
-  vec3 horCol = mix(mix(vec3(0.62, 0.70, 0.84), vec3(0.96, 0.44, 0.22), dusk), vec3(0.045, 0.058, 0.115), night);
-  vec3 zenCol = mix(mix(vec3(0.10, 0.24, 0.48), vec3(0.09, 0.10, 0.30), dusk), vec3(0.010, 0.016, 0.045), night);
+  vec3 horCol = mix(mix(mix(vec3(0.62, 0.70, 0.84), vec3(0.96, 0.44, 0.22), dusk), vec3(0.045, 0.058, 0.115), night), vec3(0.006, 0.008, 0.018), deep);
+  vec3 zenCol = mix(mix(mix(vec3(0.10, 0.24, 0.48), vec3(0.09, 0.10, 0.30), dusk), vec3(0.010, 0.016, 0.045), night), vec3(0.002, 0.003, 0.008), deep);
   vec3 col = mix(horCol, zenCol, smoothstep(-0.05, 0.55, rd.y));
   // warm band around the low sun — widens and reddens at dusk, and survives a
   // little past sunset as afterglow: the night term fades it over the span
@@ -640,7 +648,7 @@ vec3 skyColor(vec3 rd, vec3 sun) {
     float cm = smoothstep(0.52, 0.82, cl) * smoothstep(0.015, 0.16, rd.y);
     vec3 cc = mix(vec3(0.92, 0.93, 0.95), vec3(1.0, 0.82, 0.62), pow(sd, 3.0));
     cc = mix(cc, vec3(1.0, 0.58, 0.48), dusk * 0.7);
-    cc = mix(cc, vec3(0.055, 0.065, 0.105), night);   // unlit from below after sunset
+    cc = mix(mix(cc, vec3(0.055, 0.065, 0.105), night), vec3(0.008, 0.009, 0.015), deep);   // unlit from below after sunset
     col = mix(col, cc, cm * 0.65);
   }
   return col;
@@ -657,8 +665,9 @@ vec3 applyFog(vec3 col, vec3 ro, vec3 rd, float t, vec3 sun) {
   float sd = clamp(dot(rd, sun), 0.0, 1.0);
   float dusk = duskAmount(sun);
   float night = nightAmount(sun);
-  vec3 fbase = mix(mix(vec3(0.58, 0.65, 0.78), vec3(0.72, 0.48, 0.44), dusk), vec3(0.038, 0.048, 0.090), night);
-  vec3 fwarm = mix(mix(vec3(1.0, 0.70, 0.40), vec3(1.05, 0.42, 0.20), dusk), vec3(0.060, 0.055, 0.095), night);
+  float deep = deepNight(sun);
+  vec3 fbase = mix(mix(mix(vec3(0.58, 0.65, 0.78), vec3(0.72, 0.48, 0.44), dusk), vec3(0.038, 0.048, 0.090), night), vec3(0.005, 0.007, 0.014), deep);
+  vec3 fwarm = mix(mix(mix(vec3(1.0, 0.70, 0.40), vec3(1.05, 0.42, 0.20), dusk), vec3(0.060, 0.055, 0.095), night), vec3(0.008, 0.008, 0.015), deep);
   vec3 fcol = mix(fbase, fwarm, pow(sd, 6.0));
   return mix(col, fcol, f);
 }
@@ -721,8 +730,10 @@ vec4 cloudLayer(vec3 ro, vec3 rd, float tMax, vec3 sun) {
       // shade: dark flat base → bright bubbly top, dusk-warmed, silver lining
       float hIn = clamp((pm.y - (c.y - 0.40 * r)) / (1.5 * r), 0.0, 1.0);
       vec3 shade = mix(vec3(0.44, 0.47, 0.55), vec3(1.05, 1.03, 0.99), hIn);
-      shade *= mix(vec3(1.0), sunLightCol(sun) * 0.78, 0.5);
-      shade += vec3(1.0, 0.85, 0.65) * pow(clamp(dot(rd, sun), 0.0, 1.0), 10.0) * 0.35;
+      // only HALF of this was ever multiplied by the sun, so after sunset the
+      // clouds stayed lit over a black island. The unlit half has to fade too.
+      shade *= mix(vec3(1.0 - 0.96 * nightAmount(sun)), sunLightCol(sun) * 0.78, 0.5);
+      shade += vec3(1.0, 0.85, 0.65) * pow(clamp(dot(rd, sun), 0.0, 1.0), 10.0) * 0.35 * (1.0 - nightAmount(sun));
       shade = applyFog(shade, ro, rd, tm, sun);  // distant clouds sink into haze
       float a = dens * 0.82;
       sumC += shade * a;
@@ -1282,7 +1293,7 @@ void main() {
     float bnc = clamp(dot(n, normalize(vec3(-sun.x, 0.0, -sun.z))), 0.0, 1.0);
     vec3 lin = sunLightCol(sun) * 2.3 * dif
              + skyAmbCol(sun) * 0.50 * skyA
-             + vec3(0.90, 0.60, 0.40) * 0.12 * bnc;
+             + vec3(0.90, 0.60, 0.40) * 0.12 * bnc * (1.0 - nightAmount(sun));
     col = alb * lin;
     // low-sun sparkle on snow
     float snowy = smoothstep(uSnowLine, uSnowLine + 50.0, pos.y) * n.y;
@@ -1314,7 +1325,7 @@ void main() {
     rr.y = abs(rr.y);
     vec3 refl = skyColor(rr, sun);
     float fres = 0.03 + 0.97 * pow(1.0 - clamp(dot(-rd, n), 0.0, 1.0), 5.0);
-    vec3 base = mix(vec3(0.10, 0.30, 0.28), vec3(0.02, 0.10, 0.13), depth); // glacial teal
+    vec3 base = mix(vec3(0.10, 0.30, 0.28), vec3(0.02, 0.10, 0.13), depth) * (1.0 - 0.97 * nightAmount(sun)); // glacial teal, unlit -- must be faded by hand
     float sh = softShadow(pos + vec3(0.0, 0.5, 0.0), sun) * craftShadow(pos, sun) * cloudShadow(pos, sun) * alienShadow(pos, sun);
     col = mix(base, refl, fres);
     vec3 glint = mix(vec3(1.0, 0.80, 0.50), vec3(1.1, 0.45, 0.20), duskAmount(sun));

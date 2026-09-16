@@ -936,6 +936,84 @@ multi-line one and leaves the rest as a syntax error. It now reuses
 borrows. Ten new mutants take the battery to 57, and all ten were verified
 red before the suites were believed.
 
+## v9.8b — Nico's fleet, and a darker night (16 September 2026)
+
+Two asks, both small on the surface.
+
+### The fleet tuning becomes the shipped fleet
+
+Fifteen TUNEA values handed over from the live panel. Eight actually moved:
+`boxScale` 1.6 → 3, `boxFold` 0.7 → 1.4, `boxMinR` 0.8 → 0.1, `bulbPow`
+10 → 12, `moAlt` 2600 → 2400, `shWid` 800 → 650, `shHei` 120 → **206**,
+`shSpeed` 30 → 46. Every value landed inside its existing slider range, so
+nothing needed widening — but three now sit **at a slider end** (`boxScale` at
+max 3, `boxMinR` at min 0.1, `bulbPow` at max 12), which means the shape Nico
+picked cannot be pushed further in the direction he was pushing.
+
+Two consequences fell out, neither of them a code fault:
+
+- **`shHei` 206 buries the harvesters.** `updateAliens` parks a harvester's
+  centre at `terr + 45 m`, so clearance is `45 - shHei/2`: at 120 the belly sat
+  on the deck (the 6 Sept measurement), at 206 the hull sits **58 m
+  underground** through every sweep. Left as tuned — it may be the look — and
+  `test_aliens.js` now prints the clearance as a note on every run.
+- **The clamp around that 45 is decoration.**
+  `Math.min(Math.max(terr + 45, terr + 20), terr + 100)` has both bounds on the
+  same side of the value and always returns `terr + 45`. Found while checking
+  the above; left alone, because changing it is a gameplay change nobody asked
+  for.
+
+`test_aliens.js` also went red on a passing test: *"a flank is only 206 m
+tall, so the ring must shrink to fit: got 70"*. The assertion had encoded the
+TUNING, not the clamp — a 120 m flank was narrower than `HULL_BLAST_R` = 70 so
+the ring had to shrink, and a 206 m flank simply does not. Rewritten to drive
+both branches from synthetic hulls, plus one live check that the shipped hull
+never overhangs its own flank, so retuning cannot false-red it again. Same
+lesson as `test_terrain.js`'s pinned TUNE stub, learned a second time.
+
+### Night, stage two
+
+*"Allow the sun to go even lower down until it's really dark, and the only
+visible features stay the glowing ones."*
+
+`deepNight` is a **second** stage below `nightAmount` rather than a rescaling
+of it — the dusk→night ramp shipped that morning was already tuned and looked
+right, so the new one picks up exactly where it saturates (sun.y -0.26) and
+runs to -0.60. The drag floor went -0.30 → **-0.72 rad (-41.3°)**, pinned just
+past where stage two saturates. `test_shader.js` asserts the handover and
+caught a 0.04 overlap on the first attempt.
+
+**The real work was not the ramp; it was finding what refuses to get dark.**
+Fading `sunLightCol` and `skyAmbCol` blackens everything that multiplies by
+them and nothing else. Three terms did not, and each would have read as a bug
+over a black island:
+
+| term | why it stayed lit |
+|---|---|
+| terrain bounce `vec3(0.90,0.60,0.40)*0.12*bnc` | a fixed colour, never multiplied by a light |
+| sea body `glacial teal` | mixed *under* the reflection, so it never saw the sun |
+| cloud shade | `mix(vec3(1.0), sunLightCol*0.78, 0.5)` — half of it unlit **by construction** |
+
+All three are now pinned by `test_shader.js`, because the failure is entirely
+invisible until someone drags the sun down. Verified in the browser at the
+floor: `nightAmount` 1.00, `deepNight` 1.00, the island dark and the
+bioluminescent flora carrying the frame.
+
+⚠️ The player's own aircraft has no emissive, so it goes dark too. That
+follows from the request as stated and the contrail still marks it, but it is
+the one part of this that might want a running light.
+
+### Two notes on the instrument, not the game
+
+- The Claude browser pane **fell back to `Microsoft Basic Render Driver`** for
+  a while — 3.6 fps at 271x314 with nothing changed in the code, which reads
+  exactly like a catastrophic regression. It recovered on a later reload.
+  Check `UNMASKED_RENDERER_WEBGL` before believing any fps number from it.
+- The pane **auto-hides between tool calls, which pauses `requestAnimationFrame`**
+  — so a scripted sun-drag appeared to do nothing (the input handler ran, but
+  no frame uploaded the uniform) and any rAF-based probe hangs. Driving it
+  needs the whole interaction inside one batched call with the tab fronted.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

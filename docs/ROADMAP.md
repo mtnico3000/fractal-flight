@@ -63,7 +63,7 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**92 assertions, 15 files**; three skip without `npm install`, and one
+   (**93 assertions, 15 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.
@@ -129,6 +129,36 @@ mothership shadow by a GPU A/B (38.7% of the frame brightens when the hull is
 removed, ground rows only, zero in the sky). The ring-occlusion fix is covered
 by unit test and source invariant but was NOT seen in flight — staging a
 harvest behind a ridge needs a pilot. **Ask him for that first.**
+
+### ✅ 1b-ter. v9.8b — Nico's fleet tuning, and night stage two (16 Sept 2026)
+
+Fifteen TUNEA values promoted from the live panel to the shipped defaults;
+eight moved (`boxScale` 3, `boxFold` 1.4, `boxMinR` 0.1, `bulbPow` 12,
+`moAlt` 2400, `shWid` 650, `shHei` **206**, `shSpeed` 46). And `deepNight`,
+a second night stage below `nightAmount`, with the drag floor opened to
+**-0.72 rad (-41.3°)**. Full write-up in **docs/HISTORY.md → v9.8b**.
+
+**Three things this left on the table, all needing Nico's call:**
+
+1. ⚠️ **`shHei` 206 buries the harvesters 58 m in the ground.** Clearance is
+   `45 - shHei/2` because `updateAliens` parks the centre at `terr + 45 m`.
+   Left exactly as tuned — it may be the intended look. `test_aliens.js`
+   prints the clearance as a note every run. If it is NOT intended, the fix is
+   either `shHei` ≤ 90 or a hover altitude that derives from `shHei`.
+2. ⚠️ **Three knobs are now pinned at a slider end** (`boxScale` max 3,
+   `boxMinR` min 0.1, `bulbPow` max 12), so the hull shape cannot be pushed
+   further the way it was being pushed. Widening any of them is a one-line
+   change in `js/tune.js`; nobody has asked yet.
+3. ⚠️ **The aircraft goes dark at full `deepNight`** — it has no emissive at
+   all. That follows from "only the glowing ones stay visible" and the
+   contrail still marks it, but a running light is a small addition if Nico
+   wants one.
+
+Also noticed and deliberately NOT changed: the harvester hover clamp
+`Math.min(Math.max(terr + 45, terr + 20), terr + 100)` is degenerate — both
+bounds sit on the same side of the value, so it always returns `terr + 45`
+and the 20/100 range is decoration. Fixing it is a gameplay change nobody
+asked for.
 
 ### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
 

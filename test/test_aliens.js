@@ -230,14 +230,28 @@ check('a hull hit picks the face it actually struck', () => {
 
 check('the ring is clamped to the face it lies on', () => {
   const { aliens, TUNEA } = fresh();
-  const half = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
+  const R = aliens.HULL_BLAST_R;
   const ship = { x: 0, y: 100, z: 0, a: 0 };
-  const top = aliens.boxFace({ x: 0, y: 100 + half[1] - 1, z: 0 }, ship, half, true);
-  const side = aliens.boxFace({ x: 0, y: 100, z: half[2] - 1 }, ship, half, true);
-  eq(top.maxR, aliens.HULL_BLAST_R, 'a broad deck should get the full blast radius');
-  ok(side.maxR < aliens.HULL_BLAST_R,
-     'a flank is only ' + (half[1] * 2) + ' m tall, so the ring must shrink to fit: got ' + side.maxR);
-  ok(side.maxR <= half[1], 'the ring must not hang off the face: ' + side.maxR + ' > ' + half[1]);
+  // Drive BOTH branches from synthetic hulls rather than leaning on the
+  // shipped one. This assertion used to read "a flank is only 120 m tall, so
+  // the ring must shrink" -- true only because shHei happened to be 120. When
+  // it moved to 206 in v9.8b the flank became taller than the blast radius,
+  // the ring correctly stopped shrinking, and the test went red with nothing
+  // wrong. The tuning is not the invariant; the clamp is.
+  const roomy = [600, R * 3, 400];
+  const tight = [600, R * 0.5, 400];
+  const top = aliens.boxFace({ x: 0, y: 100 + roomy[1] - 1, z: 0 }, ship, roomy, true);
+  eq(top.maxR, R, 'a broad deck should get the full blast radius');
+  const wide = aliens.boxFace({ x: 0, y: 100, z: roomy[2] - 1 }, ship, roomy, true);
+  eq(wide.maxR, R, 'a flank taller than the blast radius must not shrink the ring');
+  const narrow = aliens.boxFace({ x: 0, y: 100, z: tight[2] - 1 }, ship, tight, true);
+  ok(narrow.maxR < R, 'a flank only ' + (tight[1] * 2) + ' m tall must shrink the ring: got ' + narrow.maxR);
+  ok(narrow.maxR <= tight[1], 'the ring must not hang off the face: ' + narrow.maxR + ' > ' + tight[1]);
+  // whatever the hull is tuned to, the ring must still sit on it
+  const half = [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
+  const live = aliens.boxFace({ x: 0, y: 100, z: half[2] - 1 }, ship, half, true);
+  ok(live.maxR <= Math.min(R, half[1]) + 1e-9,
+     'the shipped hull overhangs its own flank: ' + live.maxR + ' on a ' + half[1] + ' m half-height');
 });
 
 check('the relay gets a curved cap, not a flat disc', () => {
@@ -394,5 +408,27 @@ check('spent beams are retired instead of piling up', () => {
      'are drawn in the shader, so it would grow for the whole session (got ' +
      aliens.alien.bolts.length + ')');
 });
+
+// ---- informational: how the hull sits against its own hover altitude ------
+// NOT an assertion. updateAliens parks a harvester's CENTRE at terr + 45 m
+// during a harvest run, so once shHei/2 passes 45 the hull starts sitting in
+// the ground -- a tuning consequence, not a code fault, and Nico may well
+// want the buried look. Printed every run so the number is visible when
+// someone moves the slider, rather than discovered in flight.
+//
+// The clamp around that 45 is degenerate as written:
+//   Math.min(Math.max(terr + 45, terr + 20), terr + 100)  ===  terr + 45
+// The bounds never bind, so the 20/100 range is decoration. Left alone
+// deliberately -- changing it is a gameplay change nobody asked for.
+{
+  const { TUNEA } = fresh();
+  const half = TUNEA.shHei.v / 2, hover = 45;
+  const clearance = hover - half;
+  const pad = '         ';
+  console.log('  note  harvester hull vs its hover altitude:');
+  console.log(pad + 'shHei ' + TUNEA.shHei.v + ' m -> half-height ' + half + ' m, hover centre terr+' + hover + ' m');
+  console.log(pad + 'hull bottom sits terr' + (clearance >= 0 ? '+' : '') + clearance.toFixed(0) + ' m'
+              + (clearance < 0 ? '  (BURIED by ' + (-clearance).toFixed(0) + ' m)' : '  (clear)'));
+}
 
 process.exitCode = summary('aliens') ? 1 : 0;

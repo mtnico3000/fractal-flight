@@ -50,8 +50,10 @@ export const FXQ        = 48;
 
 // ---- sun travel (right-drag) -----------------------------------------------
 // The floor is BELOW the horizon: the sun sets properly and the island goes
-// dark, lit by the glow-in-the-dark flora and a dim skylight. -0.30 rad is
-// ~17 deg down, past the end of nautical twilight, which is where nightAmount
-// in the shader saturates -- dragging further would change nothing on screen.
-export const SUN_EL_MIN = -0.30;
+// dark. -0.72 rad is ~41 deg down, which is where the shader's SECOND night
+// stage (deepNight) saturates and the last light leaves the sky -- past that
+// point only the emissive things are still drawn, and dragging further would
+// change nothing on screen. Keep this pinned just past deepNight's lower
+// smoothstep edge; test_shader.js fails if the two drift apart.
+export const SUN_EL_MIN = -0.72;
 export const SUN_EL_MAX = 1.25;
