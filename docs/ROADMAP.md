@@ -63,12 +63,12 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**104 assertions, 16 files**; three skip without `npm install`, and one
+   (**110 assertions, 16 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **63 mutants as of v9.9**). A green suite is not
+   (slow, opt-in, **69 mutants as of v9.9b**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -175,6 +175,12 @@ took 80 trees (−20 net), so it is density-dependent, not a guaranteed profit.
 Both rules are exactly as he specified so it ships that way. Closing it is one
 word: pass `quiet` on the laser's `collectTreeAt`, the way the alien harvest
 sweeps already do, and the burn pops the trees without scoring.
+
+**v9.9b (19 Sept)** answered three notes from flying it: the beam now leaves
+the nose as a point source (muzzle offset measured at 2.40 m from observation
+hover), a charge with too little energy sags to silence instead of reaching
+the hum and no longer falls through to a bomb, and every invader hands its
+gathered energy to the plane when it starts melting.
 
 ⚠️ **Not flown by Nico.** Verified in the browser: charge arms at 2 s, the
 beam draws (87 288 pixels against a 49-pixel still-camera baseline), energy

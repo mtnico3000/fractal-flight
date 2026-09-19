@@ -1093,6 +1093,62 @@ measuring the camera. The energy path was easier: 200 → 100 on the first shot,
 100 → 0 on the second, refused at 0 with the readout reddened, and a short
 right-click still drops a bomb for nothing.
 
+## v9.9b — the beam gets a muzzle (19 September 2026)
+
+Three corrections from Nico after flying v9.9.
+
+**"The source of the shot is too spread."** It was drawn from `craft.pos` with
+a constant 12 m halo — and a 12 m halo is 12 m wide at the nose too, where the
+chase camera sits ~15 m away, so the emitter subtended a huge angle and
+bloomed into a ball of light. Two changes: the beam now starts at
+`craft.pos + craft.f * 2.4` (sdCraft's fuselage is an ellipsoid of half-length
+2.30, so that is just off the tip), and the width OPENS with distance
+travelled instead of being constant, putting a point at the muzzle. The TRACE
+moved the other way, to the camera, because what is under the cursor is only
+what gets hit if the ray starts at the eye — so the shot lands exactly on the
+reticle while appearing to leave the aircraft.
+
+Measuring that offset needed the plane held still. The first reading said
+7.11 m against an expected 2.4, which was the aircraft flying 7 m during the
+80 ms between firing and reading the uniform. From observation hover, with
+`craftMovedDuringRead` confirmed at 0, it reads **2.40** exactly.
+
+**"It should still have the loading sound, but rise and fall back to
+silence."** A dud charge now climbs to about two thirds and sags away, while
+the sustained electrical hum is reserved for a charge that will actually fire.
+Two rules make it hold together: `armable` is decided at the PRESS, because
+that is what the sound has to commit to, and `matured` records that the hold
+ran past the charge time *regardless* — because without it a two-second dud
+press fell through to `dropBomb()`. Verified: a long hold while broke now
+leaves 0 bombs airborne, a short click still drops 1.
+
+**"The points it had gathered are transferred to the plane."** Every hull
+banks its own tally — harvester per tree eaten, relay +3 per arrival (what a
+harvester spends to send one), mothership a full relay cycle — and pays out
+where `falling` becomes `melt`. That is the one transition all three kinds
+pass through, which is why it lives in `fallAndMelt` rather than in three
+damage paths. The tallies are LIFETIME rather than a flow, so killing the
+whole chain can recover the same tree more than once; that is deliberate,
+because a harvester ships every third tree onward and its live `absorbed`
+hovers at 0–2, which would have made killing one worth nothing.
+
+### The battery had a blind spot, and it was the battery
+
+`test/mutants.js` has now twice been committed in a state where it could not
+parse — and because nothing in `run_tests.js` loads it, **all sixteen suites
+stayed green over a file that could not start**. `run_tests.js` now runs
+`node --check` on it, which parses without executing. Verified red by
+appending an unterminated string.
+
+The loot tests needed two passes for the same reason mutation testing exists.
+The first six mutants produced two escapes and one of them was *my mutant*
+being a no-op — moving `payOutLoot` a line earlier inside the same block
+changes nothing. Rewritten to pay out at the KILL instead of the melt, it was
+caught immediately. The other two escapes were real gaps: nothing drove a
+`big` bolt arrival (the mothership bank) or checked that a fresh harvester's
+`loot` is a number (`undefined++` is NaN, and a NaN payout is silently
+nothing). Both now covered; 6/6 caught, battery at 69.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

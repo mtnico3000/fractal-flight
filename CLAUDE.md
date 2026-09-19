@@ -539,6 +539,36 @@ Key chips in the HUD glow green when a toggle is active.
   specified — Nico asked for both rules — but if it wants closing, the one-line
   fix is to pass `quiet` on the laser's `collectTreeAt` the way the ALIEN
   harvest sweeps already do, which pops the trees and scores nothing.
+- 🔦 **A constant-width beam has no point source, and near the camera that
+  reads as a blob.** The laser halo was a fixed 12 m `exp(-d²/w²)` -- which is
+  12 m wide AT THE NOSE too, and the nose sits ~15 m from a chase camera, so
+  the emitter subtended a huge angle and bloomed. The width now OPENS with
+  distance travelled along the beam (`0.30 + u * segLen * 0.012`, capped at
+  12), which puts a point at the muzzle and keeps the far end a proper beam.
+  The muzzle itself is `craft.pos + craft.f * 2.4` -- sdCraft's fuselage is an
+  ellipsoid of half-length 2.30, so that is just off the tip.
+  ⚠️ **Trace from the CAMERA, draw from the NOSE.** What is under the cursor
+  is what gets hit only if the ray starts at the eye; the beam merely has to
+  LOOK like it left the aircraft. Measuring the muzzle offset needs the craft
+  held still (observation hover) -- at 95 m/s it flies 7 m during the 80 ms
+  between firing and reading the uniform, which swamps the 2.4 m being checked.
+- ⏱️ **A charge that can fail needs its own sound, and its own exit.** Holding
+  the right button with less than one shot of energy plays a dud envelope that
+  rises to about two thirds and sags to silence, instead of settling into the
+  sustained hum -- the ear knows before the reticle would. Two rules make it
+  hold together: `armable` is decided at the PRESS, because that is what the
+  sound commits to; and `matured` records that the hold ran past the charge
+  time *regardless*, because otherwise a two-second dud press falls through to
+  `dropBomb()`. It did, until v9.9b.
+- 💰 **An invader hands back what it gathered, on the MELT transition.** Every
+  hull banks its own tally (harvester per tree eaten, relay +3 per arrival,
+  mothership a full relay cycle) and `payOutLoot` fires where `falling` becomes
+  `melt` -- the one moment all three hull kinds pass through, which is why it
+  lives in `fallAndMelt` and not in three damage paths. ⚠️ The tallies are
+  LIFETIME, not a flow, so the same tree can be recovered more than once if you
+  kill the whole chain. Deliberate: a harvester's live `absorbed` hovers at 0-2
+  because it ships every third tree onward, so a flow model would make killing
+  one worth nothing.
 - 🎯 **The aim raycast is JS, and deliberately not the probe row.** The probe
   row is the collision authority and already 15.1% of the inlined program
   (docs/COMPILE.md); a `marchTerrain` + `marchAliens` there to shade one more
