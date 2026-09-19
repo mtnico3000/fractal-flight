@@ -3,7 +3,7 @@
 // touch nearly every subsystem (flight, rings, weapons, clouds, tuning).
 
 import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD, FXQ } from './config.js';
-import { craft, camPos, viewPos, viewZoom, sun, probe } from './state.js';
+import { craft, camPos, viewPos, viewZoom, sun, probe, laser } from './state.js';
 import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
 import { fsSrc } from './shaders.js';
 import { TUNE, buildTunePanel } from './tune.js';
@@ -19,6 +19,7 @@ import { clouds, cloudArr, genClouds } from './clouds.js';
 import { updateHUD } from './hud.js';
 import { ensureAudio } from './audio.js';
 import { drawTrail, buildFxQueries, fxOcc } from './fx.js';
+import { updateLaser } from './laser.js';
 import { initAliens, packAlienUniforms, alien } from './aliens.js';
 
 // GPU collision probe readback buffer + grind-shake scratch
@@ -208,6 +209,18 @@ async function main() {
   gl.uniform2fv(U.uAlienHit, alienU.alienHit);
   gl.uniform4fv(U.uBolts, alienU.bolts);
   gl.uniform1f(U.uBoltN, alienU.boltN);
+  // player laser: the beam lives ~0.4 s, faded out over its last third so it
+  // retracts rather than vanishing. Zero fade = the branch is skipped entirely.
+  updateLaser(now, camBasis);
+  if (laser.shot) {
+    const age = (now - laser.shot.t0) / 420;
+    const fade = Math.max(0, 1 - age * age);
+    gl.uniform4f(U.uLaserA, laser.shot.a[0], laser.shot.a[1], laser.shot.a[2], fade);
+    gl.uniform4f(U.uLaserB, laser.shot.b[0], laser.shot.b[1], laser.shot.b[2], 0);
+  } else {
+    gl.uniform4f(U.uLaserA, 0, 0, 0, 0);
+    gl.uniform4f(U.uLaserB, 0, 0, 0, 0);
+  }
   gl.uniform4fv(U.uShipPos, alienU.shipPos);
   gl.uniform1fv(U.uShipLaser, alienU.shipLaser);
   gl.uniform1fv(U.uShipMelt, alienU.shipMelt);

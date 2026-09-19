@@ -2,6 +2,7 @@ import { gl } from './renderer.js';
 import { probe } from './state.js';
 import { popSound } from './audio.js';
 import { pops } from './fx.js';
+import { addEnergy, SPORE_ENERGY } from './energy.js';
 
 // ============ SPORE HARVEST (tree collection game) ============
 // Trees are collectibles: fly through one and it pops, vanishes, +1 spore.
@@ -11,8 +12,7 @@ import { pops } from './fx.js';
 // harvesting a tree also clears its distant wrap-twins (invisible in play).
 let score = 0;
 export function getScore() { return score; }
-export function resetScore() { score = 0; $score.textContent = 0; }
-const $score = document.getElementById('score');
+export function resetScore() { score = 0; }
 export const collectedSet = new Set();
 let collectedTex = null;
 const onePix = new Uint8Array([255]);
@@ -38,9 +38,11 @@ export function collectTreeAt(wx, wy, wz, sndDelay, quiet) {
   gl.bindTexture(gl.TEXTURE_2D, collectedTex);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, tx, ty, 1, 1, gl.RED, gl.UNSIGNED_BYTE, onePix);
   gl.activeTexture(gl.TEXTURE0);
+  // `quiet` marks an ALIEN harvest sweep: the invaders eating the flora must
+  // not pay the player for it. Only the plane's own kills feed the pool.
   if (!quiet) {
     score++;
-    $score.textContent = score;
+    addEnergy(SPORE_ENERGY);
   }
   popSound(sndDelay || 0, quiet ? 0.10 : 0);
   pops.push({ x: wx, y: wy, z: wz, t0: performance.now() + (sndDelay || 0) * 1000 });

@@ -7,6 +7,11 @@ html, body {
 }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* laser armed (js/laser.js adds .laser-armed to <body> once the charge
+   completes): the crosshair becomes a target reticle, so the 2 s charge has a
+   visible end and not just an audible one. Inlined as a data: URI because the
+   single-file artifact has to run from file://, where every fetch fails. */
+body.laser-armed canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23b4ff8c' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%23b4ff8c'/%3E%3Cpath d='M16 1v7M16 24v7M1 16h7M24 16h7'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair; }
 #hud {
   position: fixed; top: 18px; left: 18px;
   color: rgba(220, 230, 245, 0.85);
@@ -128,7 +133,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 @keyframes crashIn { from { opacity: 0; } to { opacity: 1; } }
 #crash .big { font-size: 34px; font-weight: 700; text-shadow: 0 0 24px rgba(255,80,40,0.8); }
 #crash .sub { margin-top: 12px; font-size: 13px; opacity: 0.85; }
-#rings-score {
+#hud-score {
   position: fixed; top: 24px; left: 50%;
   transform: translateX(-50%);
   color: rgba(255, 215, 0, 0.95);
@@ -139,11 +144,12 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   display: flex; align-items: center; gap: 12px;
   transition: transform 0.15s ease-out;
 }
-#rings-score .label {
+#hud-score .label {
   font-size: 12px; letter-spacing: 3px; color: rgba(255, 215, 0, 0.7);
 }
-#rings-score .label.spores { color: rgba(160, 235, 170, 0.75); margin-left: 22px; }
-#rings-score .sporeval {
+/* the ENERGY readout dims below one laser's worth (js/energy.js) */
+#hud-score #energyScore.spent { color: rgba(255, 140, 120, 0.85); }
+#hud-score .sporeval {
   color: rgba(160, 235, 170, 0.95);
   text-shadow: 0 0 10px rgba(90, 220, 120, 0.6), 0 2px 4px rgba(0,0,0,0.95);
 }
@@ -333,18 +339,18 @@ body.touch #tune, body.touch #tuneA { display: none; }
    use the Aliens-panel green so the invasion reads as one colour family, and
    #defeated replaces them in place -- same font, same size -- once every hull
    is gone, rather than appearing somewhere else on screen. */
-#rings-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
-#rings-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
-#rings-score .alienval {
+#hud-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
+#hud-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
+#hud-score .alienval {
   color: rgba(140, 255, 170, 0.95);
   text-shadow: 0 0 10px rgba(90, 230, 130, 0.6), 0 2px 4px rgba(0,0,0,0.95);
 }
-#rings-score #defeated {
+#hud-score #defeated {
   display: none; margin-left: 22px;
   font-size: 28px; font-weight: 700; letter-spacing: 3px;
   color: rgba(140, 255, 170, 0.95);
   text-shadow: 0 0 14px rgba(90, 230, 130, 0.85), 0 2px 4px rgba(0,0,0,0.95);
 }
 /* swapped by hud.js: the counters go, the banner takes their place */
-#rings-score.defeated #fleetCounts { display: none; }
-#rings-score.defeated #defeated { display: inline; }
+#hud-score.defeated #fleetCounts { display: none; }
+#hud-score.defeated #defeated { display: inline; }

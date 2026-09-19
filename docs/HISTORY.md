@@ -1014,6 +1014,85 @@ the one part of this that might want a running light.
   no frame uploaded the uniform) and any rAF-based probe hangs. Driving it
   needs the whole interaction inside one batched call with the tab fronted.
 
+## v9.9 — energy, and a laser on the right button (19 September 2026)
+
+### The fractal sliders get their real ranges
+
+Nico: *"can I have 'full range' of possible tweaks for all fractal related
+sliders? How do you select which range I can tweak?"* — the honest answer is
+that they are hand-picked literals in `js/tune.js` and nothing derives them.
+Widened to the region where each parameter still MEANS something, from
+docs/RESEARCH.md §1: `boxScale` ±4 (past that the 8-iteration DE cannot
+resolve the detail), `boxFold` 0.2–3 (beyond ~3 the chamber exceeds the unit
+domain and stops folding), `boxMinR` 0.05–1.5 (above 1 the inversion band
+vanishes and it is a pure inflate), `bulbPow` 2–16, and the flora Julia seed
+`juliaRe`/`juliaIm` to ±2 (outside |c| = 2 the set is dust). Four of Nico's
+own v9.8b values had been sitting ON an end stop; all four came off it.
+
+The hulls are BOX-CROPPED (`max(sdBox, mandelbox)`), so even a silly parameter
+cannot break the silhouette — the worst case is mush inside a hull that still
+reads as a ship, which is why widening was safe to do without a marcher study.
+
+### One ENERGY pool
+
+RINGS and SPORES merged into a single **ENERGY** counter, because it stopped
+being a score and became a currency: the ring course and the flora pay in, the
+laser spends. START 200, a ring +100, a tree harvested by the plane +1, a laser
+shot −100. `js/energy.js` owns the number and its element and imports nothing —
+spores, rings, laser and hud all feed it, so anything it imported back would be
+a cycle.
+
+### The laser
+
+Right-button hold for 2 s arms it (rising two-saw hum, reticle cursor),
+release fires a beam from the plane to whatever the CURSOR is over. A hull
+takes `LASER_DAMAGE` = 6 bomb hits, so `HP_RELAY` = 6 means one shot melts the
+relay — which is the whole promise of the weapon. Open ground burns a harvest
+circle of `BLAST_R * 3`. The sun moved to the MIDDLE button to free the right
+one, and both buttons kept the click-vs-drag split the right button already
+had, so nothing was taken away.
+
+**The aim ray is traced in JS, not through the probe row**, and that is the
+load-bearing decision. The probe row is the collision authority and already
+15.1% of the inlined program; adding `marchTerrain` + `marchAliens` there to
+shade one more pixel would have cost seconds of driver compile for a reticle.
+Aiming is not collision. `laser.js` uses the fp64 terrain mirror and analytic
+hull tests instead and costs the shader nothing.
+
+Four traps on the way:
+
+- **`build.js` rejected a bare `export { name };`** — a form it does not strip.
+  Its guard caught it at build time rather than at runtime.
+- **The 300 m burn does not fit the blast machinery.** `BLASTC` is 64 because
+  the cells upload as uniforms, while the circle covers ~435 of the 26 m cells.
+  Split into batches and pushed as several queue entries; `resolveBlasts`
+  already drains one per frame, so the burn resolves over a handful of frames
+  with no new GPU path.
+- **The overlay ring was hard-wired to `BLAST_R`**, so a laser burn drew a
+  bomb-sized circle over a 3x-wider harvest. Impacts now carry their own `R`.
+- **The control legend in `index.html` is hand-written** and advertised
+  `R-DRAG reposition sun` for one build after the sun moved.
+
+### ⚠️ The laser can pay for itself
+
+Measured, not assumed. A shot costs 100 and a tree pays 1, and the burn circle
+holds up to **435 cells** — so over dense flora one shot returns up to **+335
+net** and the weapon becomes an energy engine rather than a cost. One burn
+measured in flight took 80 trees (−20 net), so it is density-dependent. Both
+rules are exactly as specified, so it ships that way; closing it is one word
+(`quiet` on the laser's `collectTreeAt`, the way the alien sweeps already do).
+
+### Measuring it
+
+The browser A/B nearly produced a false positive: the first beam-vs-no-beam
+diff showed 72 062 of 88 796 pixels changed, which looks like a triumphant
+result and was **the plane flying 66 m between the two frames**. Re-run from
+observation hover with the springs settled, the still-camera baseline is 49
+pixels and the beam moves 87 288 — same conclusion, but the first number was
+measuring the camera. The energy path was easier: 200 → 100 on the first shot,
+100 → 0 on the second, refused at 0 with the readout reddened, and a short
+right-click still drops a bomb for nothing.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

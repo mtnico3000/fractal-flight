@@ -3,19 +3,19 @@
 WebGL2 raymarched flight game over a Mandelbrot-shaped island. No meshes, no
 textures: every pixel sphere-traces a procedural world each frame. Two-player
 "ping-pong" development between Nico (mtnico3000) and jul (julaub) — code
-volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.8.
+volleys via PRs on github.com/julaub/fractal-flight. Current version: v9.9.
 
 ## Builds — IMPORTANT
 
 The modular repo is the SINGLE SOURCE OF TRUTH. Dual maintenance ended with
 ROADMAP C1 on 6 Sept 2026.
 
-- **Modular** (this repo): index.html + css/style.css + 21 js/ modules. ES
+- **Modular** (this repo): index.html + css/style.css + 23 js/ modules. ES
   modules → MUST be served over HTTP (`python serve.py 8734` — the bare
   `http.server` sends no cache header, so an edited module survives a refresh
   and looks like it changed nothing); file:// shows an explanatory watchdog
   message instead of loading.
-- **Single-file** (`fractal-flight-v9_8.html`): a GENERATED ARTIFACT. **Never
+- **Single-file** (`fractal-flight-v9_9.html`): a GENERATED ARTIFACT. **Never
   edit it.** It is the double-click build jul and everyone else actually
   plays, so it ships in the repo even though it is generated.
 
@@ -85,6 +85,16 @@ primary hit), alien fleet (mat 6: blue-toned box-cropped mandelbox ships;
   block as GLSL text spliced at the `//__FF_DEBUG_BLOCK__` marker. Reached by
   ONE dynamic `import()` in main.js. `build.js` cuts that import, so the
   module cannot reach the single-file artifact — see the compile gotcha below.
+- `energy.js` — the ENERGY pool (v9.9), one counter replacing the old RINGS
+  and SPORES scores. A ring is +100, a tree harvested BY THE PLANE is +1, a
+  laser shot spends 100, and the readout reddens below one shot. It imports
+  nothing: spores, rings, laser and hud all feed it, so anything it imported
+  back would be a cycle.
+- `laser.js` — the plane's laser (v9.9): right-button hold charges for 2 s,
+  release fires at whatever the CURSOR is over. The aim ray is traced in JS
+  (fp64 terrain mirror + analytic hull tests), deliberately NOT through the
+  probe row — aiming is not collision, and a marchTerrain there would cost
+  seconds of driver compile for a reticle.
 - `input.js`, `hud.js`, `renderer.js`, `state.js`, `clouds.js`, `math.js`,
   `config.js` — as named. state.js holds shared mutable objects (craft,
   camPos/viewPos, camMode, viewZoom, pilotAim, probe, flags) mutated in
@@ -116,10 +126,12 @@ silently and only at distance. `test/test_shader.js` guards it.
 
 A/D bank (clamped ~49°, auto-level on release) · W/S pitch (loops) · SPACE
 hold = raw free flight (no auto-level; axis-stable barrel rolls) · Q/E lift ·
-SHIFT boost · click fire / right-click bomb / right-drag sun · R full reset ·
-M mute · Y mouse-cam+zoom toggle (remembers the view exactly, instant off) ·
-X pilot view toggle (gaze aim = weapons) · O observation hover (arrows move,
-W/S up/down, forces Y) · M-CLICK recenter view · WHEEL zoom (Y on).
+SHIFT boost · click fire · **right-click bomb, right-HOLD 2 s charges the
+laser and release fires it** (v9.9) · **middle-DRAG sun** (it moved off the
+right button to free it for the laser; middle-CLICK still recenters the view)
+· R full reset · M mute · Y mouse-cam+zoom toggle (remembers the view exactly,
+instant off) · X pilot view toggle (gaze aim = weapons) · O observation hover
+(arrows move, W/S up/down, forces Y) · WHEEL zoom (Y on).
 Key chips in the HUD glow green when a toggle is active.
 
 ## Gotchas (hard-won)
@@ -517,6 +529,32 @@ Key chips in the HUD glow green when a toggle is active.
   two debug channels cost (30.7% of the inlined program). The chord also buys
   a soft penumbra rim for free: short chord near the silhouette = light
   shadow. Melting wrecks stop casting, for the same reason `hullAlive` exists.
+- ⚡ **The laser can pay for itself, and that falls out of two rules that are
+  each correct alone.** A shot costs 100 energy; a tree harvested BY THE PLANE
+  is worth 1; and a laser burn harvests a circle of `BLAST_R * 3` = 300 m. That
+  circle holds up to **435 of the 26 m flora cells**, so over dense flora one
+  shot returns up to **+335 net** and the weapon becomes an energy ENGINE
+  instead of a cost. Measured in flight 19 Sept 2026: one burn took 80 trees,
+  i.e. −20 net, so it is density-dependent and not always a profit. Shipped as
+  specified — Nico asked for both rules — but if it wants closing, the one-line
+  fix is to pass `quiet` on the laser's `collectTreeAt` the way the ALIEN
+  harvest sweeps already do, which pops the trees and scores nothing.
+- 🎯 **The aim raycast is JS, and deliberately not the probe row.** The probe
+  row is the collision authority and already 15.1% of the inlined program
+  (docs/COMPILE.md); a `marchTerrain` + `marchAliens` there to shade one more
+  pixel would cost seconds of driver compile for a reticle. Aiming is not
+  collision — a metre of error picks the same target — so `laser.js` traces the
+  fp64 mirror plus analytic hull tests and costs the shader nothing. ⚠️ The
+  vertical flip is the trap: `clientY` runs DOWN from the top while
+  `gl_FragCoord.y` runs UP from the bottom, so an unflipped cursor aims at its
+  own mirror image across the horizon.
+- 🖱️ **The sun moved to the MIDDLE button in v9.9**, because the right button
+  became the laser. Both kept the click-vs-drag split the right button used to
+  have: middle CLICK still recenters the view, middle DRAG moves the sun; right
+  CLICK still drops a bomb, right HOLD past 2 s charges the laser. Nothing was
+  taken away — but `index.html`'s control legend is a hand-written list and does
+  NOT update itself, so a binding change means editing it too (it advertised
+  `R-DRAG reposition sun` for one build after the change).
 - 🧹 **When a draw call moves, check what else it was doing.** `fx.js`
   `drawBolts()` was the only thing splicing spent bolts out of `alien.bolts`.
   Moving the beams into the shader deleted it, and nothing else pruned the
@@ -731,4 +769,4 @@ v2→v4.6 built the world/weapons/probe; v5 merged jul's rings + went
 modular; v5-v6 restored arcade feel + start page; v7 camera suite +
 shadows + fx occlusion; v8 view toggles with exact memory; v9 alien
 invasion + observation mode; C1 ended the dual-maintenance (`build.js`).
-Current: v9.8.
+Current: v9.9.

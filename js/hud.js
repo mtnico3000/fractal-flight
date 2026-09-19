@@ -6,6 +6,7 @@ import { engineCrash, isMuted } from './audio.js';
 import { trail } from './fx.js';
 import { clearWeapons } from './weapons.js';
 import { getScore, resetScore } from './spores.js';
+import { resetEnergy } from './energy.js';
 
 const $alt = document.getElementById('alt');
 const $spd = document.getElementById('spd');
@@ -54,6 +55,7 @@ export function unCrash() {
   trail.length = 0;
   clearWeapons();
   resetScore();
+  resetEnergy();   // R returns the pool to START, not to whatever was left
 }
 
 // toast: transient messages (gyro permission hints etc.)
@@ -73,7 +75,7 @@ export function hideToast() { $toast.style.display = 'none'; }
 // it) and lingers for ~116 s, so counting objects would leave the tally stuck
 // above zero long after the last kill and the defeated banner would never fire.
 const $harv = document.getElementById('harvCount');
-const $ringsScore = document.getElementById('rings-score');
+const $ringsScore = document.getElementById('hud-score');
 let lastFleet = '';
 
 export function setFleetCounts(harv, relays, mothers) {

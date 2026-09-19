@@ -289,6 +289,84 @@ export function zapSound() {
   o.start(T); o.stop(T + 0.22);
 }
 
+// ---- player laser (v9.9) --------------------------------------------------
+// The charge hum is a SUSTAINED voice, not a one-shot, because it has to last
+// exactly as long as the button is held — so it is started and stopped by the
+// caller and kept in a module-level handle. Two detuned saws through a rising
+// lowpass: the pitch and the brightness both climb over the 2 s charge, so the
+// sound tells you when the shot is ready without looking at the cursor.
+let CHARGE = null;
+export function laserChargeStart(seconds) {
+  if (!AC || muted || CHARGE) return;
+  const T = AC.currentTime;
+  const o1 = AC.createOscillator(), o2 = AC.createOscillator();
+  const f = AC.createBiquadFilter(), g = AC.createGain();
+  o1.type = 'sawtooth'; o2.type = 'sawtooth';
+  o1.frequency.setValueAtTime(70, T);  o1.frequency.linearRampToValueAtTime(190, T + seconds);
+  o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
+  f.type = 'lowpass'; f.Q.value = 6;
+  f.frequency.setValueAtTime(220, T); f.frequency.linearRampToValueAtTime(2400, T + seconds);
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
+  o1.connect(f); o2.connect(f); f.connect(g); g.connect(AC.destination);
+  o1.start(T); o2.start(T);
+  CHARGE = { o1, o2, g };
+}
+export function laserChargeStop() {
+  if (!CHARGE) return;
+  const { o1, o2, g } = CHARGE;
+  CHARGE = null;
+  if (!AC) return;
+  const T = AC.currentTime;
+  // ramp out rather than stop dead: cutting a sustained voice at full gain is
+  // a click, and this one can be cut on every bomb-length right-click
+  try {
+    g.gain.cancelScheduledValues(T);
+    g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), T);
+    g.gain.exponentialRampToValueAtTime(0.0001, T + 0.06);
+    o1.stop(T + 0.08); o2.stop(T + 0.08);
+  } catch (_) {}
+}
+
+export function laserFireSound() {
+  // the discharge: a bright downward sweep with a noise transient on the front
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(2600, T);
+  o.frequency.exponentialRampToValueAtTime(240, T + 0.45);
+  f.type = 'bandpass'; f.frequency.value = 1600; f.Q.value = 1.4;
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.16, T + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 0.5);
+  o.connect(f); f.connect(g); g.connect(AC.destination);
+  o.start(T); o.stop(T + 0.52);
+}
+
+export function laserCrackSound() {
+  // hull strike: electrical crackle — filtered noise chopped by a fast LFO on
+  // the gain, which reads as arcing rather than as an explosion
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const nb = AC.createBuffer(1, Math.floor(AC.sampleRate * 0.5), AC.sampleRate);
+  const ch = nb.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) {
+    const k = i / ch.length;
+    ch[i] = (Math.random() * 2 - 1) * (Math.random() < 0.35 + 0.4 * (1 - k) ? 1 : 0.15);
+  }
+  const ns = AC.createBufferSource(); ns.buffer = nb;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.setValueAtTime(3200, T);
+  f.frequency.exponentialRampToValueAtTime(700, T + 0.4);
+  f.Q.value = 3;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.22, T);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 0.45);
+  ns.connect(f); f.connect(g); g.connect(AC.destination);
+  ns.start(T); ns.stop(T + 0.5);
+}
+
 export function relayBlastSound() {
   // Relay -> mothership discharge: a rising-falling saw sweep, stretched to
   // cover the 2 s deflation in aliens.js (RELAY_SHRINK_MS). It used to finish

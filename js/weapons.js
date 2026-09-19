@@ -131,7 +131,7 @@ export function updateBombs(dt) {
   }
 }
 
-function ringHeights(x, y, z, overWater) {
+function ringHeights(x, y, z, overWater, R) {
   // sampled ONCE per detonation: actual terrain height at RING_N points on
   // the full-radius circle, so the visual ring drapes over the real slope
   // (JS terrain mirror; close enough for an overlay effect). Water flattens.
@@ -139,7 +139,7 @@ function ringHeights(x, y, z, overWater) {
   for (let k = 0; k < RING_N; k++) {
     if (overWater) { h[k] = y; continue; }
     const a = (k / RING_N) * 6.28318;
-    let gh = terrainShapeJ(x + Math.cos(a) * BLAST_R, z + Math.sin(a) * BLAST_R);
+    let gh = terrainShapeJ(x + Math.cos(a) * R, z + Math.sin(a) * R);
     if (gh < WATER_LEVEL) gh = WATER_LEVEL;
     h[k] = gh + 1.5;
   }
@@ -147,7 +147,7 @@ function ringHeights(x, y, z, overWater) {
 }
 
 function detonate(x, y, z, kind) {
-  impacts.push({ x, y, z, t0: performance.now(), kind: 3, ringH: ringHeights(x, y, z, kind === 2) });
+  impacts.push({ x, y, z, t0: performance.now(), kind: 3, R: BLAST_R, ringH: ringHeights(x, y, z, kind === 2, BLAST_R) });
   if (kind === 2) impacts.push({ x, y, z, t0: performance.now(), kind: 2 });
   explosionSound();
   // candidate cells: any cell whose tree (center jitter ±6 m) could sit
@@ -165,6 +165,32 @@ function detonate(x, y, z, kind) {
   cells.sort((a, b) => a.d - b.d);
   cells.length = Math.min(cells.length, BLASTC);
   if (cells.length) blastQueue.push({ cells, y, uploaded: false });
+}
+
+// A laser burn harvests a circle far wider than a bomb's, and that does not
+// fit the blast machinery in one go: BLASTC is 64 cells because the probe row
+// uploads them as uniforms, while a 300 m circle covers ~420 of the 26 m
+// cells. So it is SPLIT into batches and pushed as several queue entries --
+// resolveBlasts already drains one per frame, so the burn simply resolves over
+// a handful of frames, nearest cells first. No new GPU path, no new uniforms.
+export function harvestCircle(x, y, z, R, overWater) {
+  impacts.push({ x, y, z, t0: performance.now(), kind: 3, R,
+                 ringH: ringHeights(x, y, z, overWater, R) });
+  const reach = R + 6;                       // + the cell centre jitter
+  const cells = [];
+  for (let cx = Math.floor((x - reach) / 26); cx <= Math.floor((x + reach) / 26); cx++) {
+    for (let cz = Math.floor((z - reach) / 26); cz <= Math.floor((z + reach) / 26); cz++) {
+      if (collectedSet.has(cx + ':' + cz)) continue;
+      const ccx = (cx + 0.5) * 26, ccz = (cz + 0.5) * 26;
+      const d = Math.hypot(ccx - x, ccz - z);
+      if (d <= reach) cells.push({ x: ccx, z: ccz, d });
+    }
+  }
+  cells.sort((a, b) => a.d - b.d);           // inner cells pop first
+  for (let i = 0; i < cells.length; i += BLASTC) {
+    blastQueue.push({ cells: cells.slice(i, i + BLASTC), y, uploaded: false });
+  }
+  return cells.length;
 }
 
 export function resolveBlasts() {

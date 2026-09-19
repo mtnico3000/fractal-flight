@@ -4,6 +4,7 @@ import { normalize3, cross3 } from './math.js';
 import { terrainShapeJ } from './terrain.js';
 import { ringSound } from './audio.js';
 import { DBG } from './dbg.js';
+import { addEnergy, RING_ENERGY } from './energy.js';
 
 // ============ RING COURSE (ported from jul's fractal-flight) ============
 // Fly through rings to score. Spawning chains ring-to-ring and fans its
@@ -13,12 +14,10 @@ export const rings = [];
 let ringScore = 0;
 export const ringsPosData = new Float32Array(MAX_RINGS * 4);
 export const ringsMatsData = new Float32Array(MAX_RINGS * 9);
-const $ringScore = document.getElementById('ringScore');
-const $ringsBox = document.getElementById('rings-score');
+const $ringsBox = document.getElementById('hud-score');
 
 export function initRings() {
   ringScore = 0;
-  $ringScore.textContent = 0;
   prevPos = null;
   rings.length = 0;
   for (let i = 0; i < MAX_RINGS; i++) {
@@ -95,7 +94,7 @@ export function updateRings(craftPos, craftFwd, dt) {
         const ry = hx * r.up[0] + hy * r.up[1] + hz * r.up[2];
         if (rx * rx + ry * ry <= r.radius * r.radius) {
           ringScore++;
-          $ringScore.textContent = ringScore;
+          addEnergy(RING_ENERGY);   // the course is how you re-arm the laser
           pulseRingScore();
           ringSound();
           r.active = false;

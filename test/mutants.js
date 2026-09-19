@@ -253,6 +253,27 @@ const MUTANTS = [
   // mutated value must clear nightAmount's edge but fall short of deepNight's.
   ['the sun drag floor stops short of the night it enables', 'js/config.js',
    'export const SUN_EL_MIN = -0.72;', 'export const SUN_EL_MIN = -0.30;', 'test_shader.js'],
+
+  // --- v9.9: the energy economy ------------------------------------------
+  // One pool now funds the laser, so these are balance rules, not scores.
+  // The canFireLaser one is here because it ESCAPED the first version of its
+  // test: the sweep only sampled multiples of the cost, where `> 0` and
+  // `>= 100` agree. The bug lives strictly between 0 and the cost.
+  ['a refused spend still drains the pool', 'js/energy.js',
+   'if (energy < n) return false;', 'if (energy < n) { energy -= n; render(); return false; }', 'test_energy.js'],
+  ['the laser becomes free', 'js/energy.js',
+   'export const LASER_COST = 100;', 'export const LASER_COST = 0;', 'test_energy.js'],
+  ['a ring stops covering a shot', 'js/energy.js',
+   'export const RING_ENERGY = 100;', 'export const RING_ENERGY = 40;', 'test_energy.js'],
+  ['flora out-earns the ring course', 'js/energy.js',
+   'export const SPORE_ENERGY = 1;', 'export const SPORE_ENERGY = 25;', 'test_energy.js'],
+  ['canFireLaser disagrees with spendEnergy', 'js/energy.js',
+   'return energy >= LASER_COST;', 'return energy > 0;', 'test_energy.js'],
+  ['reset keeps whatever energy was left', 'js/energy.js',
+   'export function resetEnergy() {
+  energy = START_ENERGY;',
+   'export function resetEnergy() {
+  energy = energy;', 'test_energy.js'],
 ];
 
 function mutate(src, find, repl, all) {

@@ -45,7 +45,7 @@ function fresh() {
     resetFleetCounts: () => {},
   }, ['HP_MOTHER', 'HP_SHIP', 'HP_RELAY', 'hullAlive', 'bombs', 'craft',
       'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
-      'RELAY_SHRINK_MS', 'hullDist']);
+      'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE']);
   aliens.initAliens();
   return { aliens, craft, crashes, blasts, counts, TUNEA };
 }
@@ -407,6 +407,42 @@ check('spent beams are retired instead of piling up', () => {
      'alien.bolts must be pruned -- nothing else splices it now that the beams ' +
      'are drawn in the shader, so it would grow for the whole session (got ' +
      aliens.alien.bolts.length + ')');
+});
+
+check('one laser strike is worth six bombs, and melts the relay outright', () => {
+  // The laser's whole point is that it kills what bombs chip at, and the
+  // relay -- HP_RELAY = 6 -- is the shape of that promise: exactly one shot.
+  // Pinned as the RATIO, not as "6", so re-tuning any hull's hp cannot
+  // silently turn a one-shot into a two-shot.
+  const { aliens } = fresh();
+  eq(aliens.LASER_DAMAGE, 6, 'LASER_DAMAGE');
+  eq(aliens.LASER_DAMAGE, aliens.HP_RELAY, 'one laser must take the relay from full hp to zero');
+
+  const r = aliens.alien.relay;
+  eq(r.hp, aliens.HP_RELAY, 'relay starts full');
+  eq(aliens.alienLaserHit(7, r.x, r.y, r.z), true, 'the relay must accept the hit');
+  ok(r.hp <= 0, 'relay survived a laser with ' + r.hp + ' hp');
+  ok(r.falling, 'a relay at zero hp must go down');
+
+  // and a second shot on the wreck does nothing: a downed hull is inert
+  // everywhere else (hullAlive), and the laser must not be the exception
+  eq(aliens.alienLaserHit(7, r.x, r.y, r.z), false, 'a falling relay must absorb nothing');
+});
+
+check('a laser needs six times fewer hits than a bomb on every hull', () => {
+  const { aliens } = fresh();
+  const m = aliens.alien.mother;
+  let shots = 0;
+  while (m.hp > 0 && shots < 50) { aliens.alienLaserHit(0, m.x, m.y, m.z); shots++; }
+  eq(shots, Math.ceil(aliens.HP_MOTHER / aliens.LASER_DAMAGE), 'mothership shots');
+  ok(m.falling, 'the mothership must go down when its hp runs out');
+
+  const { aliens: a2 } = fresh();
+  const s0 = a2.alien.ships[0];
+  ok(s0, 'the fleet must start with a harvester to shoot at');
+  let n = 0;
+  while (s0.hp > 0 && n < 50) { a2.alienLaserHit(1, s0.x, s0.y, s0.z); n++; }
+  eq(n, Math.ceil(a2.HP_SHIP / a2.LASER_DAMAGE), 'harvester shots');
 });
 
 // ---- informational: how the hull sits against its own hover altitude ------

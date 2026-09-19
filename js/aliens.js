@@ -175,6 +175,40 @@ function hullHit(id, B, frame, hull, rot) {
   hullExplosionSound();
 }
 
+// A laser strike is six bomb hits landing at once (LASER_DAMAGE), so the
+// relay -- HP_RELAY = 6 -- melts on a single shot, which is the whole point of
+// aiming at it. Geometry is NOT re-derived here: the caller has already traced
+// the aim ray and says which hull it found, so this only has to apply damage
+// and raise the same hit flare a bomb does. hullAlive is still the gate, so a
+// falling or melting wreck absorbs nothing.
+export const LASER_DAMAGE = 6;
+
+export function alienLaserHit(id, px, py, pz) {
+  const B = { x: px, y: py, z: pz };
+  if (id === 0) {
+    const m = alien.mother;
+    if (m.gone || m.falling || m.melt > 0) return false;
+    m.hp -= LASER_DAMAGE;
+    hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
+    if (m.hp <= 0) m.falling = true;
+    return true;
+  }
+  if (id === 7) {
+    const r = alien.relay;
+    if (r.gone || r.falling || r.melt > 0) return false;
+    r.hp -= LASER_DAMAGE;
+    hullHit(7.0, B, sphereFace(B, r, r.r), r, false);
+    if (r.hp <= 0) r.falling = true;
+    return true;
+  }
+  const s = alien.ships[id - 1];
+  if (!s || s.falling || s.melt > 0) return false;
+  s.hp -= LASER_DAMAGE;
+  hullHit(id, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
+  if (s.hp <= 0) s.falling = true;
+  return true;
+}
+
 function alienBombHits(bombs) {
   // bombs vs hulls: oriented-box tests in JS (analytic, cheap)
   for (let i = 0; i < bombs.length; i++) {

@@ -5,8 +5,9 @@
 import { sun, viewZoom, camMode } from './state.js';
 import { SUN_EL_MIN, SUN_EL_MAX } from './config.js';
 import { canvas } from './renderer.js';
-import { ensureAudio, toggleMute } from './audio.js';
+import { ensureAudio, toggleMute, laserChargeStart } from './audio.js';
 import { fireGun, dropBomb } from './weapons.js';
+import { laserPress, laserRelease, laserCancel, LASER_CHARGE_MS } from './laser.js';
 import { toast, hideToast } from './hud.js';
 
 export const keys = Object.create(null);
@@ -33,13 +34,21 @@ window.addEventListener('keydown', e => {
 canvas.addEventListener('pointerdown', ensureAudio);
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// LEFT button: fire (hold = burst). RIGHT button: quick click drops a bomb,
-// press-and-move (or hold >260 ms) repositions the sun.
-let rbDown = false, rbStartT = 0, rbStartX = 0, rbStartY = 0, sunDragging = false;
+// LEFT button: fire (hold = burst).
+// MIDDLE button: quick click recenters the view; press-and-move repositions
+//   the sun. The sun moved here in v9.9 to free the right button for the
+//   laser, and it keeps the same click-vs-drag split the right button used:
+//   short press = the old action, movement = the drag.
+// RIGHT button: quick click drops a bomb; holding past LASER_CHARGE_MS arms
+//   the laser and releasing fires it.
+let mbDown = false, mbStartT = 0, mbStartX = 0, mbStartY = 0, sunDragging = false;
 let lastMX = 0, lastMY = 0;
-// mouse-orbit view tracking (v7.5) — frozen while dragging the sun
+let rbDown = false;
+// mouse-orbit view tracking (v7.5) — frozen while dragging the sun, but NOT
+// while the laser is charging: the cursor is the aim point, so it has to keep
+// tracking through the whole right-button hold.
 window.addEventListener('mousemove', e => {
-  if (rbDown) return;
+  if (sunDragging) return;
   mouseView.x = e.clientX; mouseView.y = e.clientY;
 });
 // wheel zoom (v7.5): down = farther (up to map scale), up = closer, past the
@@ -54,33 +63,44 @@ canvas.addEventListener('mousedown', e => {
   if (IS_TOUCH) return;   // touch uses the on-screen buttons + sun drag below
   if (e.button === 1) {
     e.preventDefault();   // suppress the middle-click autoscroll widget
-    viewOrigin.x = e.clientX; viewOrigin.y = e.clientY;   // view resets to center here
-    // zoom resets too, but ONLY from beyond the default: zoomed-in and
-    // cockpit views keep their zoom, middle-click just re-aims them (v7.5)
-    if (viewZoom.t > 1) viewZoom.t = 1;
+    mbDown = true; sunDragging = false;
+    mbStartT = performance.now();
+    mbStartX = lastMX = e.clientX; mbStartY = lastMY = e.clientY;
     return;
   }
   if (e.button === 0) {
     fireGun();
     mouse.lmbDown = true; mouse.lastAuto = performance.now();
   } else if (e.button === 2) {
-    rbDown = true; sunDragging = false;
-    rbStartT = performance.now();
-    rbStartX = lastMX = e.clientX; rbStartY = lastMY = e.clientY;
+    rbDown = true;
+    laserPress(performance.now());
+    laserChargeStart(LASER_CHARGE_MS / 1000);   // hum rises for exactly the charge
   }
 });
 window.addEventListener('mouseup', e => {
   if (e.button === 0) mouse.lmbDown = false;
-  if (e.button === 2) {
-    if (rbDown && !sunDragging && performance.now() - rbStartT < 260) dropBomb();
-    rbDown = false; sunDragging = false;
+  if (e.button === 1 && mbDown) {
+    // a middle press that never became a drag still recenters the view, and
+    // zoom resets too — but ONLY from beyond the default, so zoomed-in and
+    // cockpit views keep their zoom and are just re-aimed (v7.5)
+    if (!sunDragging && performance.now() - mbStartT < 400) {
+      viewOrigin.x = e.clientX; viewOrigin.y = e.clientY;
+      if (viewZoom.t > 1) viewZoom.t = 1;
+    }
+    mbDown = false; sunDragging = false;
+  }
+  if (e.button === 2 && rbDown) {
+    rbDown = false;
+    // a charged release fires; anything shorter is still a bomb, so the
+    // right button keeps the behaviour it has had since v3
+    if (!laserRelease(performance.now(), e.clientX, e.clientY)) dropBomb();
   }
 });
 window.addEventListener('mousemove', e => {
-  if (!rbDown) return;
+  if (!mbDown) return;
   if (!sunDragging) {
-    const moved = Math.abs(e.clientX - rbStartX) + Math.abs(e.clientY - rbStartY);
-    if (moved > 6 || performance.now() - rbStartT > 260) sunDragging = true;
+    const moved = Math.abs(e.clientX - mbStartX) + Math.abs(e.clientY - mbStartY);
+    if (moved > 6 || performance.now() - mbStartT > 400) sunDragging = true;
   }
   if (sunDragging) {
     sun.az += (e.clientX - lastMX) * 0.005;
@@ -90,7 +110,8 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('blur', () => {
   for (const k in keys) keys[k] = false;
-  mouse.lmbDown = false; rbDown = false; sunDragging = false;
+  mouse.lmbDown = false; rbDown = false; mbDown = false; sunDragging = false;
+  laserCancel();   // a charge held across a focus loss must not survive it
 });
 
 // ---- touch + gyro ----

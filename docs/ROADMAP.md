@@ -52,7 +52,7 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.8; the branch is still named `v9.5`.** (The branch name lags
+**Version is v9.9; the branch is still named `v9.5`.** (The branch name lags
 the version on purpose — PR #3's head branch on origin is named `v9.4`. See
 the push note at the bottom.) v9.7 is the last version of the pure
 raymarcher: **v10 is a renderer change**, and it was Nico's call after the
@@ -63,12 +63,12 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**93 assertions, 15 files**; three skip without `npm install`, and one
+   (**104 assertions, 16 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **57 mutants as of v9.8**). A green suite is not
+   (slow, opt-in, **63 mutants as of v9.9**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -159,6 +159,32 @@ Also noticed and deliberately NOT changed: the harvester hover clamp
 bounds sit on the same side of the value, so it always returns `terr + 45`
 and the 20/100 range is decoration. Fixing it is a gameplay change nobody
 asked for.
+
+### ✅ 1b-quater. v9.9 — energy and the laser (19 Sept 2026)
+
+Fractal sliders widened to their meaningful full ranges, RINGS + SPORES merged
+into one **ENERGY** pool, and the plane got a charged laser on the right button
+(the sun moved to middle-drag). Two new modules, `js/energy.js` and
+`js/laser.js`. Full write-up in **docs/HISTORY.md → v9.9**.
+
+⚠️ **The laser can pay for itself, and Nico should decide whether it should.**
+A shot costs 100; a tree harvested by the plane pays 1; the burn circle holds
+up to **435 cells**. Over dense flora that is **+335 net per shot** — the
+weapon becomes an energy engine rather than a cost. One burn measured in flight
+took 80 trees (−20 net), so it is density-dependent, not a guaranteed profit.
+Both rules are exactly as he specified so it ships that way. Closing it is one
+word: pass `quiet` on the laser's `collectTreeAt`, the way the alien harvest
+sweeps already do, and the burn pops the trees without scoring.
+
+⚠️ **Not flown by Nico.** Verified in the browser: charge arms at 2 s, the
+beam draws (87 288 pixels against a 49-pixel still-camera baseline), energy
+goes 200→100→0 and refuses the third shot, a short right-click still bombs
+for free, and middle-drag moves the sun. The ALIEN hit path is covered by
+`test_aliens.js` (one laser melts the relay; 7 shots the mothership, 4 a
+harvester) but has NOT been aimed at a live hull in flight.
+
+⚠️ Still outstanding from v9.8: the **ring-occlusion fix has never been
+flown** — staging a harvest behind a ridge needs a pilot.
 
 ### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
 

@@ -2,8 +2,8 @@
 <!--
   GENERATED FILE — do not edit.
 
-  Single-file build of Fractal Alps v9.8, produced from the modular
-  source (index.html + css/style.css + 20 js/ modules) by build.js.
+  Single-file build of Fractal Alps v9.9, produced from the modular
+  source (index.html + css/style.css + 22 js/ modules) by build.js.
   Edit those and run `node build.js`. Anything changed here is lost on the
   next build, and never reaches anyone playing the modular build.
 -->
@@ -12,7 +12,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Fractal Alps — Mandelbrot Flight v9.8</title>
+<title>Fractal Alps — Mandelbrot Flight v9.9</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -23,6 +23,11 @@ html, body {
 }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* laser armed (js/laser.js adds .laser-armed to <body> once the charge
+   completes): the crosshair becomes a target reticle, so the 2 s charge has a
+   visible end and not just an audible one. Inlined as a data: URI because the
+   single-file artifact has to run from file://, where every fetch fails. */
+body.laser-armed canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23b4ff8c' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%23b4ff8c'/%3E%3Cpath d='M16 1v7M16 24v7M1 16h7M24 16h7'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair; }
 #hud {
   position: fixed; top: 18px; left: 18px;
   color: rgba(220, 230, 245, 0.85);
@@ -144,7 +149,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 @keyframes crashIn { from { opacity: 0; } to { opacity: 1; } }
 #crash .big { font-size: 34px; font-weight: 700; text-shadow: 0 0 24px rgba(255,80,40,0.8); }
 #crash .sub { margin-top: 12px; font-size: 13px; opacity: 0.85; }
-#rings-score {
+#hud-score {
   position: fixed; top: 24px; left: 50%;
   transform: translateX(-50%);
   color: rgba(255, 215, 0, 0.95);
@@ -155,11 +160,12 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   display: flex; align-items: center; gap: 12px;
   transition: transform 0.15s ease-out;
 }
-#rings-score .label {
+#hud-score .label {
   font-size: 12px; letter-spacing: 3px; color: rgba(255, 215, 0, 0.7);
 }
-#rings-score .label.spores { color: rgba(160, 235, 170, 0.75); margin-left: 22px; }
-#rings-score .sporeval {
+/* the ENERGY readout dims below one laser's worth (js/energy.js) */
+#hud-score #energyScore.spent { color: rgba(255, 140, 120, 0.85); }
+#hud-score .sporeval {
   color: rgba(160, 235, 170, 0.95);
   text-shadow: 0 0 10px rgba(90, 220, 120, 0.6), 0 2px 4px rgba(0,0,0,0.95);
 }
@@ -349,28 +355,28 @@ body.touch #tune, body.touch #tuneA { display: none; }
    use the Aliens-panel green so the invasion reads as one colour family, and
    #defeated replaces them in place -- same font, same size -- once every hull
    is gone, rather than appearing somewhere else on screen. */
-#rings-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
-#rings-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
-#rings-score .alienval {
+#hud-score #fleetCounts { display: flex; align-items: center; gap: 12px; }
+#hud-score .label.alien { color: rgba(140, 255, 170, 0.75); margin-left: 22px; }
+#hud-score .alienval {
   color: rgba(140, 255, 170, 0.95);
   text-shadow: 0 0 10px rgba(90, 230, 130, 0.6), 0 2px 4px rgba(0,0,0,0.95);
 }
-#rings-score #defeated {
+#hud-score #defeated {
   display: none; margin-left: 22px;
   font-size: 28px; font-weight: 700; letter-spacing: 3px;
   color: rgba(140, 255, 170, 0.95);
   text-shadow: 0 0 14px rgba(90, 230, 130, 0.85), 0 2px 4px rgba(0,0,0,0.95);
 }
 /* swapped by hud.js: the counters go, the banner takes their place */
-#rings-score.defeated #fleetCounts { display: none; }
-#rings-score.defeated #defeated { display: inline; }
+#hud-score.defeated #fleetCounts { display: none; }
+#hud-score.defeated #defeated { display: inline; }
 </style>
 </head>
 <body>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <h1>Fractal Alps · Mandelbrot Flight <span style="opacity:.55">v9.8</span></h1>
+  <h1>Fractal Alps · Mandelbrot Flight <span style="opacity:.55">v9.9</span></h1>
   <div class="row"><span class="key">A</span><span class="key">D</span><span class="desc">roll · bank + pull to turn</span></div>
   <div class="row"><span class="key">SPACE</span><span class="desc">hold: free flight · no auto-level</span></div>
   <div class="row"><span class="key">W</span><span class="key">S</span><span class="desc">pitch · hold S for a loop</span></div>
@@ -378,9 +384,10 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <div class="row"><span class="key">SHIFT</span><span class="desc">throttle boost</span></div>
   <div class="row"><span class="key">CLICK</span><span class="desc">fire · hold = burst</span></div>
   <div class="row"><span class="key">R-CLICK</span><span class="desc">drop bomb</span></div>
+  <div class="row"><span class="key">R-HOLD</span><span class="desc">charge laser (2s) &middot; release to fire</span></div>
   <div class="row"><span class="key">R</span><span class="desc">reset / fly again</span></div>
   <div class="row"><span class="key" id="key-m">M</span><span class="desc">engine sound on/off</span></div>
-  <div class="row"><span class="key">R-DRAG</span><span class="desc">reposition sun</span></div>
+  <div class="row"><span class="key">M-DRAG</span><span class="desc">reposition sun</span></div>
   <div class="row"><span class="key" id="key-y">Y</span><span class="desc">mouse camera + zoom on/off</span></div>
   <div class="row"><span class="key" id="key-x">X</span><span class="desc">pilot view on/off</span></div>
   <div class="row"><span class="key" id="key-o">O</span><span class="desc">observation hover · arrows move · W/S up-down</span></div>
@@ -389,11 +396,9 @@ body.touch #tune, body.touch #tuneA { display: none; }
   <div class="row"><span class="key">M-CLICK</span><span class="desc">recenter the view on the cursor</span></div>
   <div class="touch-hint">stick: steer &amp; pitch · drag sky: sun<br>tilt: steer with phone orientation</div>
 </div>
-<div id="rings-score">
-  <span class="label">RINGS</span>
-  <span id="ringScore">0</span>
-  <span class="label spores">SPORES</span>
-  <span class="sporeval" id="score">0</span>
+<div id="hud-score">
+  <span class="label">ENERGY</span>
+  <span id="energyScore">200</span>
   <span id="fleetCounts">
     <span class="label alien">HARVESTERS</span><span class="alienval" id="harvCount">0</span>
   </span>
@@ -442,7 +447,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
 </div>
 <div id="start">
   <div>
-    <h1>FRACTAL ALPS<span>Mandelbrot Flight · v9.8</span></h1>
+    <h1>FRACTAL ALPS<span>Mandelbrot Flight · v9.9</span></h1>
     <div id="spinner"></div>
     <div id="loadStatus">waking up WebGL2 &hellip;</div>
     <div class="pilotrow">
@@ -582,6 +587,11 @@ const flags = { crashed: false };
 // latency — probe.pos is the craft position the current values answer for)
 const probe = { ground: null, plantD: 99, pos: [0, 0, 0] };
 
+// Player laser (v9.9). `holding` spans the right-button press, `charged` flips
+// once the hold passes LASER_CHARGE_MS, `shot` holds the drawn beam for ~0.4 s.
+// Mutated in place like everything else here, never reassigned.
+const laser = { holding: false, holdT0: 0, charged: false, shot: null };
+
 // ==================== js/shaders.js ====================
 // GLSL vertex + fragment shader sources.
 const vsSrc = `#version 300 es
@@ -633,6 +643,12 @@ uniform vec4 uRelay;          // relayship: xyz + radius (grows with harvest)
 uniform float uRelayMelt;
 uniform vec2  uAlienHit;         // x = hull id (matches mal.y), y = flash 1..0
 uniform vec4  uBolts[6];         // (source id 0..5 ship / 6 relay, head, tail, fade)
+// Player laser (v9.9). Unlike uBolts this carries its ENDPOINTS: the alien
+// beams run between hulls the shader already knows, but this one ends wherever
+// the pilot aimed, which no other uniform holds. w of A is the fade (0 = no
+// beam), w of B is unused.
+uniform vec4  uLaserA;
+uniform vec4  uLaserB;
 uniform float uBoltN;
 uniform vec4 uShipPos[6];     // harvesters: xyz + heading
 uniform float uShipLaser[6];  // 1 = harvest sheet active
@@ -2007,7 +2023,18 @@ void main() {
       lp = shipLocal(pos, uShipPos[si].xyz, ca2, sa2);
       sizeRef = uShipHalf.x;
     }
-    float oScale = 84.0 / max(sizeRef, 1.0);
+    // A hit flares the hull cold white-blue AND wrenches one fractal
+    // parameter: oScale is the self-similar zoom of the Julia filament
+    // lattice, so a strike makes the whole bio-pattern lurch ~1.9x finer and
+    // relax back as the flash decays. Picked over the colour-only flash
+    // because it is the one knob that reads as the SHIP being deformed rather
+    // than lit. One vec2 for the whole fleet -- the uniform budget is already
+    // over the 224-slot mobile minimum (see CLAUDE.md), and two hits on two
+    // different hulls inside the same flash window is not a real case. A laser
+    // strike and a bomb raise the same flare; the laser just carries six times
+    // the damage behind it.
+    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
+    float oScale = 84.0 / max(sizeRef, 1.0) * (1.0 + 0.9 * hitF);
     float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
     float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
     float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);
@@ -2018,11 +2045,6 @@ void main() {
     col += glowC * vein * (0.5 + 0.25 * sin(uTime * 2.0 + org * 9.0)) * (0.35 + 0.65 * detail);
     col += glowC * fres * 0.22;
     if (mal.y > 6.5) col += vec3(0.18, 0.50, 1.20) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
-    // bomb hit: this hull flares cold white-blue for a beat. One vec2 for the
-    // whole fleet rather than a per-hull array -- the uniform budget is already
-    // over the 224-slot mobile minimum (see CLAUDE.md), and two bombs landing
-    // on two different hulls inside the same flash window is not a real case.
-    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
     col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
     col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
     // Melt colour. Up to MELT_KNEE the wreck is molten and PULSES. Past the
@@ -2086,6 +2108,28 @@ void main() {
   // Only (source, head, tail, fade) is uploaded; the ENDPOINTS are read from
   // uShipPos / uRelay / uMotherPos, which cost nothing extra and keep a beam
   // welded to a harvester that is still moving.
+  // the plane's own laser: hot white-green, and occluded exactly like the
+  // alien beams above -- closest approach along the ray against the primary
+  // hit t, so it disappears behind a ridge instead of being painted over it
+  if (uLaserA.w > 0.001) {
+    vec3 ba = uLaserA.xyz, sg = uLaserB.xyz - ba;
+    float cc = dot(sg, sg);
+    if (cc > 1.0) {
+      vec3 w0 = ro - ba;
+      float Bc = dot(rd, sg), Dc = dot(rd, w0), Ec = dot(sg, w0);
+      float den = cc - Bc * Bc;
+      float u = (abs(den) < 1e-5) ? clamp(-Ec / cc, 0.0, 1.0)
+                                  : clamp((Ec - Bc * Dc) / den, 0.0, 1.0);
+      float sray = -Dc + u * Bc;
+      if (sray > 0.0 && sray <= t) {
+        float dist = length(ro + rd * sray - (ba + sg * u));
+        float halo = exp(-dist * dist / 144.0);       // wid 12
+        float core = exp(-dist * dist / 14.4);
+        col += vec3(0.70, 1.00, 0.55) * (halo * 0.50 + core * 2.2) * uLaserA.w;
+      }
+    }
+  }
+
   for (int i = 0; i < 6; i++) {
     if (float(i) >= uBoltN) break;
     vec4 bv = uBolts[i];
@@ -2248,7 +2292,7 @@ async function initRenderer(status, lock, fsText = fsSrc) {
 
   ['uResolution','uTime','uCamPos','uCamMat','uSunDir','uFov','uJitter','uPixScale','uDetailFade','uRayTol','uHitRefine','uMarchStride','uRelaxMtn','uTreePersp','uWaterLOD','uBoxRound','uDebugMask','uCraftPos','uCraftMat','uBulletPos','uBombPos','uBlastCell','uCloudPos','uCloudN',
    'uRingsPos','uRingMats','uLivery','uCockpit','uShadows','uFxPos',
-   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uAlienHit','uBolts','uBoltN','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
+   'uMotherPos','uMotherHalf','uMotherMelt','uRelay','uRelayMelt','uAlienHit','uBolts','uBoltN','uLaserA','uLaserB','uShipPos','uShipLaser','uShipMelt','uShipN','uShipHalf','uBoxParam','uOceanSlope','uOceanMax','uMassDecay','uMountAmp','uSnowLine','uFogDens','uJuliaC','uSnowFrac','uFloraDens','uFloraRange','uTreeSize','uTreeShare','uTreeTiers','uTreeFract','uCollected']
     .forEach(n => U[n] = gl.getUniformLocation(prog, n));
   return true;
 }
@@ -2258,10 +2302,10 @@ async function initRenderer(status, lock, fsText = fsSrc) {
 // Each knob: v = live value, d = default, min/max/step, fmt = display formatting.
 // ---- alien fleet knobs (v9.0): second panel, bottom-right ----
 const TUNEA = {
-  boxScale: { label: 'box scale',   v: 3,   d: 3,   min: -3,   max: 3,     step: 0.1,  fmt: x => x.toFixed(1) },
-  boxFold:  { label: 'box fold',    v: 1.4,   d: 1.4,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
-  boxMinR:  { label: 'box min r',   v: 0.1,   d: 0.1,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
-  bulbPow:  { label: 'bulb power',  v: 12,    d: 12,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
+  boxScale: { label: 'box scale',   v: 3,   d: 3,   min: -4,   max: 4,     step: 0.1,  fmt: x => x.toFixed(1) },
+  boxFold:  { label: 'box fold',    v: 1.4,   d: 1.4,   min: 0.2,  max: 3,   step: 0.05, fmt: x => x.toFixed(2) },
+  boxMinR:  { label: 'box min r',   v: 0.1,   d: 0.1,   min: 0.05,  max: 1.5,   step: 0.05, fmt: x => x.toFixed(2) },
+  bulbPow:  { label: 'bulb power',  v: 12,    d: 12,    min: 2,    max: 16,    step: 1,    fmt: x => x.toFixed(0) },
   // Corner fillet on the mothership and harvester hulls, as a fraction of
   // each hull's SMALLEST half-extent -- so it scales with the size sliders
   // instead of needing retuning every time a ship changes shape. 0 is the
@@ -2310,8 +2354,8 @@ const TUNE = {
   treeTiers:  { label: 'fronds',      v: 11,       d: 11,       min: 3,      max: 14,     step: 1,       fmt: x => x.toFixed(0) },
   treeFract:  { label: 'tree fractal',v: 0.45,     d: 0.45,    min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
   floraRange: { label: 'flora range', v: 5950,    d: 5950,    min: 150,    max: 6000,   step: 50,      fmt: x => x.toFixed(0) },
-  juliaRe:    { label: 'flora c·re',  v: 0.22,    d: 0.22,    min: -1.0,   max: 0.4,    step: 0.01,    fmt: x => x.toFixed(2) },
-  juliaIm:    { label: 'flora c·im',  v: 1,       d: 1,       min: -1.0,   max: 1.0,    step: 0.01,    fmt: x => x.toFixed(2) },
+  juliaRe:    { label: 'flora c·re',  v: 0.22,    d: 0.22,    min: -2,   max: 2,    step: 0.01,    fmt: x => x.toFixed(2) },
+  juliaIm:    { label: 'flora c·im',  v: 1,       d: 1,       min: -2,   max: 2,    step: 0.01,    fmt: x => x.toFixed(2) },
   bombAngle:  { label: 'bomb angle',  v: 3,       d: 3,       min: -45,    max: 45,     step: 1,       fmt: x => x.toFixed(0) + '°' },
   cloudCount: { label: 'cloud count', v: 16,       d: 16,       min: 0,      max: 16,     step: 1,       fmt: x => x.toFixed(0) },
   cloudSize:  { label: 'cloud size',  v: 280,     d: 280,     min: 60,     max: 280,    step: 5,       fmt: x => x.toFixed(0) + ' m' },
@@ -2728,6 +2772,84 @@ function zapSound() {
   o.start(T); o.stop(T + 0.22);
 }
 
+// ---- player laser (v9.9) --------------------------------------------------
+// The charge hum is a SUSTAINED voice, not a one-shot, because it has to last
+// exactly as long as the button is held — so it is started and stopped by the
+// caller and kept in a module-level handle. Two detuned saws through a rising
+// lowpass: the pitch and the brightness both climb over the 2 s charge, so the
+// sound tells you when the shot is ready without looking at the cursor.
+let CHARGE = null;
+function laserChargeStart(seconds) {
+  if (!AC || muted || CHARGE) return;
+  const T = AC.currentTime;
+  const o1 = AC.createOscillator(), o2 = AC.createOscillator();
+  const f = AC.createBiquadFilter(), g = AC.createGain();
+  o1.type = 'sawtooth'; o2.type = 'sawtooth';
+  o1.frequency.setValueAtTime(70, T);  o1.frequency.linearRampToValueAtTime(190, T + seconds);
+  o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
+  f.type = 'lowpass'; f.Q.value = 6;
+  f.frequency.setValueAtTime(220, T); f.frequency.linearRampToValueAtTime(2400, T + seconds);
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
+  o1.connect(f); o2.connect(f); f.connect(g); g.connect(AC.destination);
+  o1.start(T); o2.start(T);
+  CHARGE = { o1, o2, g };
+}
+function laserChargeStop() {
+  if (!CHARGE) return;
+  const { o1, o2, g } = CHARGE;
+  CHARGE = null;
+  if (!AC) return;
+  const T = AC.currentTime;
+  // ramp out rather than stop dead: cutting a sustained voice at full gain is
+  // a click, and this one can be cut on every bomb-length right-click
+  try {
+    g.gain.cancelScheduledValues(T);
+    g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), T);
+    g.gain.exponentialRampToValueAtTime(0.0001, T + 0.06);
+    o1.stop(T + 0.08); o2.stop(T + 0.08);
+  } catch (_) {}
+}
+
+function laserFireSound() {
+  // the discharge: a bright downward sweep with a noise transient on the front
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(2600, T);
+  o.frequency.exponentialRampToValueAtTime(240, T + 0.45);
+  f.type = 'bandpass'; f.frequency.value = 1600; f.Q.value = 1.4;
+  g.gain.setValueAtTime(0.0001, T);
+  g.gain.exponentialRampToValueAtTime(0.16, T + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 0.5);
+  o.connect(f); f.connect(g); g.connect(AC.destination);
+  o.start(T); o.stop(T + 0.52);
+}
+
+function laserCrackSound() {
+  // hull strike: electrical crackle — filtered noise chopped by a fast LFO on
+  // the gain, which reads as arcing rather than as an explosion
+  if (!AC || muted) return;
+  const T = AC.currentTime;
+  const nb = AC.createBuffer(1, Math.floor(AC.sampleRate * 0.5), AC.sampleRate);
+  const ch = nb.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) {
+    const k = i / ch.length;
+    ch[i] = (Math.random() * 2 - 1) * (Math.random() < 0.35 + 0.4 * (1 - k) ? 1 : 0.15);
+  }
+  const ns = AC.createBufferSource(); ns.buffer = nb;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.setValueAtTime(3200, T);
+  f.frequency.exponentialRampToValueAtTime(700, T + 0.4);
+  f.Q.value = 3;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.22, T);
+  g.gain.exponentialRampToValueAtTime(0.0001, T + 0.45);
+  ns.connect(f); f.connect(g); g.connect(AC.destination);
+  ns.start(T); ns.stop(T + 0.5);
+}
+
 function relayBlastSound() {
   // Relay -> mothership discharge: a rising-falling saw sweep, stretched to
   // cover the 2 s deflation in aliens.js (RELAY_SHRINK_MS). It used to finish
@@ -3127,8 +3249,8 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
         for (let v = 0; v <= RING_N; v++) {
           const vi = v % RING_N;
           const a = (vi / RING_N) * 6.28318;
-          const wx = p.x + Math.cos(a) * BLAST_R * fr;
-          const wz = p.z + Math.sin(a) * BLAST_R * fr;
+          const wx = p.x + Math.cos(a) * (p.R || BLAST_R) * fr;
+          const wz = p.z + Math.sin(a) * (p.R || BLAST_R) * fr;
           const wy = p.y + (p.ringH[vi] - p.y) * fr; // lerp center→sampled rim height
           const s = projectFx(camB, wx, wy, wz, W, H);
           if (!s) { started = false; continue; }     // vertex behind camera: break path
@@ -3207,6 +3329,59 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
   }
 }
 
+// ==================== js/energy.js ====================
+// ============ ENERGY (v9.9) ============
+// One pool replacing the old RINGS and SPORES counters, because it is now a
+// CURRENCY and not two scores: the ring course and the flora both feed it, and
+// the plane's laser spends it. Keeping two numbers would have meant choosing
+// which one a laser shot drains.
+//
+// Rates are deliberately lopsided. A ring is worth 100 — one laser — so the
+// course is the reliable way to re-arm, while a tree is worth 1, which makes
+// strafing flora a slow top-up rather than an alternative. START is 200 so the
+// first shot is available immediately and the second has to be earned.
+//
+// This module owns the number AND its element, and imports nothing: spores.js,
+// rings.js, laser.js and hud.js all feed it, so anything it imported back
+// would be a cycle. (js/fx.js once reached a name it never imported and the
+// modular build froze — see CLAUDE.md. Keeping the leaf a leaf avoids it.)
+
+const START_ENERGY = 200;
+const RING_ENERGY = 100;   // one ring passed = one laser shot
+const SPORE_ENERGY = 1;    // one tree harvested by the plane
+const LASER_COST = 100;
+
+let energy = START_ENERGY;
+const $energy = document.getElementById('energyScore');
+
+function getEnergy() { return energy; }
+function canFireLaser() { return energy >= LASER_COST; }
+
+function render() {
+  $energy.textContent = energy;
+  // The readout dims below one shot's worth: the laser refusing to fire has to
+  // be legible as "not enough energy" and not as "the button is broken".
+  $energy.classList.toggle('spent', energy < LASER_COST);
+}
+
+function addEnergy(n) {
+  energy += n;
+  render();
+}
+
+// Returns false and spends NOTHING when short, so the caller cannot half-fire.
+function spendEnergy(n) {
+  if (energy < n) return false;
+  energy -= n;
+  render();
+  return true;
+}
+
+function resetEnergy() {
+  energy = START_ENERGY;
+  render();
+}
+
 // ==================== js/spores.js ====================
 // ============ SPORE HARVEST (tree collection game) ============
 // Trees are collectibles: fly through one and it pops, vanishes, +1 spore.
@@ -3216,8 +3391,7 @@ function drawTrail(camB, now, bullets, bombs, impacts) {
 // harvesting a tree also clears its distant wrap-twins (invisible in play).
 let score = 0;
 function getScore() { return score; }
-function resetScore() { score = 0; $score.textContent = 0; }
-const $score = document.getElementById('score');
+function resetScore() { score = 0; }
 const collectedSet = new Set();
 let collectedTex = null;
 const onePix = new Uint8Array([255]);
@@ -3243,9 +3417,11 @@ function collectTreeAt(wx, wy, wz, sndDelay, quiet) {
   gl.bindTexture(gl.TEXTURE_2D, collectedTex);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, tx, ty, 1, 1, gl.RED, gl.UNSIGNED_BYTE, onePix);
   gl.activeTexture(gl.TEXTURE0);
+  // `quiet` marks an ALIEN harvest sweep: the invaders eating the flora must
+  // not pay the player for it. Only the plane's own kills feed the pool.
   if (!quiet) {
     score++;
-    $score.textContent = score;
+    addEnergy(SPORE_ENERGY);
   }
   popSound(sndDelay || 0, quiet ? 0.10 : 0);
   pops.push({ x: wx, y: wy, z: wz, t0: performance.now() + (sndDelay || 0) * 1000 });
@@ -3383,7 +3559,7 @@ function updateBombs(dt) {
   }
 }
 
-function ringHeights(x, y, z, overWater) {
+function ringHeights(x, y, z, overWater, R) {
   // sampled ONCE per detonation: actual terrain height at RING_N points on
   // the full-radius circle, so the visual ring drapes over the real slope
   // (JS terrain mirror; close enough for an overlay effect). Water flattens.
@@ -3391,7 +3567,7 @@ function ringHeights(x, y, z, overWater) {
   for (let k = 0; k < RING_N; k++) {
     if (overWater) { h[k] = y; continue; }
     const a = (k / RING_N) * 6.28318;
-    let gh = terrainShapeJ(x + Math.cos(a) * BLAST_R, z + Math.sin(a) * BLAST_R);
+    let gh = terrainShapeJ(x + Math.cos(a) * R, z + Math.sin(a) * R);
     if (gh < WATER_LEVEL) gh = WATER_LEVEL;
     h[k] = gh + 1.5;
   }
@@ -3399,7 +3575,7 @@ function ringHeights(x, y, z, overWater) {
 }
 
 function detonate(x, y, z, kind) {
-  impacts.push({ x, y, z, t0: performance.now(), kind: 3, ringH: ringHeights(x, y, z, kind === 2) });
+  impacts.push({ x, y, z, t0: performance.now(), kind: 3, R: BLAST_R, ringH: ringHeights(x, y, z, kind === 2, BLAST_R) });
   if (kind === 2) impacts.push({ x, y, z, t0: performance.now(), kind: 2 });
   explosionSound();
   // candidate cells: any cell whose tree (center jitter ±6 m) could sit
@@ -3417,6 +3593,32 @@ function detonate(x, y, z, kind) {
   cells.sort((a, b) => a.d - b.d);
   cells.length = Math.min(cells.length, BLASTC);
   if (cells.length) blastQueue.push({ cells, y, uploaded: false });
+}
+
+// A laser burn harvests a circle far wider than a bomb's, and that does not
+// fit the blast machinery in one go: BLASTC is 64 cells because the probe row
+// uploads them as uniforms, while a 300 m circle covers ~420 of the 26 m
+// cells. So it is SPLIT into batches and pushed as several queue entries --
+// resolveBlasts already drains one per frame, so the burn simply resolves over
+// a handful of frames, nearest cells first. No new GPU path, no new uniforms.
+function harvestCircle(x, y, z, R, overWater) {
+  impacts.push({ x, y, z, t0: performance.now(), kind: 3, R,
+                 ringH: ringHeights(x, y, z, overWater, R) });
+  const reach = R + 6;                       // + the cell centre jitter
+  const cells = [];
+  for (let cx = Math.floor((x - reach) / 26); cx <= Math.floor((x + reach) / 26); cx++) {
+    for (let cz = Math.floor((z - reach) / 26); cz <= Math.floor((z + reach) / 26); cz++) {
+      if (collectedSet.has(cx + ':' + cz)) continue;
+      const ccx = (cx + 0.5) * 26, ccz = (cz + 0.5) * 26;
+      const d = Math.hypot(ccx - x, ccz - z);
+      if (d <= reach) cells.push({ x: ccx, z: ccz, d });
+    }
+  }
+  cells.sort((a, b) => a.d - b.d);           // inner cells pop first
+  for (let i = 0; i < cells.length; i += BLASTC) {
+    blastQueue.push({ cells: cells.slice(i, i + BLASTC), y, uploaded: false });
+  }
+  return cells.length;
 }
 
 function resolveBlasts() {
@@ -3493,6 +3695,7 @@ function unCrash() {
   trail.length = 0;
   clearWeapons();
   resetScore();
+  resetEnergy();   // R returns the pool to START, not to whatever was left
 }
 
 // toast: transient messages (gyro permission hints etc.)
@@ -3512,7 +3715,7 @@ function hideToast() { $toast.style.display = 'none'; }
 // it) and lingers for ~116 s, so counting objects would leave the tally stuck
 // above zero long after the last kill and the defeated banner would never fire.
 const $harv = document.getElementById('harvCount');
-const $ringsScore = document.getElementById('rings-score');
+const $ringsScore = document.getElementById('hud-score');
 let lastFleet = '';
 
 function setFleetCounts(harv, relays, mothers) {
@@ -3530,526 +3733,6 @@ function setFleetCounts(harv, relays, mothers) {
 function resetFleetCounts() {
   lastFleet = '';
   $ringsScore.classList.remove('defeated');
-}
-
-// ==================== js/input.js ====================
-// All input sources: keyboard, mouse (fire / bomb / sun drag), virtual
-// joystick, touch buttons, and gyroscope tilt. Each source writes into its
-// own state object; the flight model sums and clamps them.
-
-const keys = Object.create(null);
-const touchInput = { steer: 0, pitch: 0, lift: 0, boost: false };
-const gyroInput = { steer: 0, pitch: 0 };
-const mouse = { lmbDown: false, lastAuto: 0 };   // hold-to-burst state, read by flight.js
-const mouseView = { x: window.innerWidth / 2, y: window.innerHeight / 2 };   // orbit-view cursor
-const viewOrigin = { x: window.innerWidth / 2, y: window.innerHeight / 2 };   // orbit center (middle-click moves it)
-
-const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-if (IS_TOUCH) document.body.classList.add('touch');
-
-function initInput(onReset) {
-window.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  ensureAudio();
-  if (e.code === 'KeyM') toggleMute();
-  if ((e.code === 'KeyY' || e.code === 'KeyZ') && !e.repeat) camMode.free = !camMode.free;   // KeyZ too: QWERTZ keyboards report the Y keycap as KeyZ
-  if (e.code === 'KeyX' && !e.repeat) camMode.pilot = !camMode.pilot;
-  if (e.code === 'KeyO' && !e.repeat) camMode.obs = !camMode.obs;
-  if (e.code === 'KeyR') onReset();
-  if (['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
-});
-canvas.addEventListener('pointerdown', ensureAudio);
-window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-// LEFT button: fire (hold = burst). RIGHT button: quick click drops a bomb,
-// press-and-move (or hold >260 ms) repositions the sun.
-let rbDown = false, rbStartT = 0, rbStartX = 0, rbStartY = 0, sunDragging = false;
-let lastMX = 0, lastMY = 0;
-// mouse-orbit view tracking (v7.5) — frozen while dragging the sun
-window.addEventListener('mousemove', e => {
-  if (rbDown) return;
-  mouseView.x = e.clientX; mouseView.y = e.clientY;
-});
-// wheel zoom (v7.5): down = farther (up to map scale), up = closer, past the
-// plane = cockpit view
-window.addEventListener('wheel', e => {
-  e.preventDefault();
-  if (!camMode.free) return;   // wheel zoom only while the Y camera mode is on
-  viewZoom.t = Math.max(0.07, Math.min(400, viewZoom.t * Math.exp(e.deltaY * 0.0012)));
-}, { passive: false });
-canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('mousedown', e => {
-  if (IS_TOUCH) return;   // touch uses the on-screen buttons + sun drag below
-  if (e.button === 1) {
-    e.preventDefault();   // suppress the middle-click autoscroll widget
-    viewOrigin.x = e.clientX; viewOrigin.y = e.clientY;   // view resets to center here
-    // zoom resets too, but ONLY from beyond the default: zoomed-in and
-    // cockpit views keep their zoom, middle-click just re-aims them (v7.5)
-    if (viewZoom.t > 1) viewZoom.t = 1;
-    return;
-  }
-  if (e.button === 0) {
-    fireGun();
-    mouse.lmbDown = true; mouse.lastAuto = performance.now();
-  } else if (e.button === 2) {
-    rbDown = true; sunDragging = false;
-    rbStartT = performance.now();
-    rbStartX = lastMX = e.clientX; rbStartY = lastMY = e.clientY;
-  }
-});
-window.addEventListener('mouseup', e => {
-  if (e.button === 0) mouse.lmbDown = false;
-  if (e.button === 2) {
-    if (rbDown && !sunDragging && performance.now() - rbStartT < 260) dropBomb();
-    rbDown = false; sunDragging = false;
-  }
-});
-window.addEventListener('mousemove', e => {
-  if (!rbDown) return;
-  if (!sunDragging) {
-    const moved = Math.abs(e.clientX - rbStartX) + Math.abs(e.clientY - rbStartY);
-    if (moved > 6 || performance.now() - rbStartT > 260) sunDragging = true;
-  }
-  if (sunDragging) {
-    sun.az += (e.clientX - lastMX) * 0.005;
-    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - lastMY) * 0.004));
-  }
-  lastMX = e.clientX; lastMY = e.clientY;
-});
-window.addEventListener('blur', () => {
-  for (const k in keys) keys[k] = false;
-  mouse.lmbDown = false; rbDown = false; sunDragging = false;
-});
-
-// ---- touch + gyro ----
-// Each input source writes its own state object; update() sums and clamps,
-// so keyboard, joystick and tilt can be combined freely.
-
-// setPointerCapture throws on synthetic events and must never block input
-function capture(el, id) { try { el.setPointerCapture(id); } catch (_) {} }
-
-if (IS_TOUCH) (function initTouch() {
-  // ---- sun drag on the canvas (pointer events) ----
-  let dragId = null, tLastX = 0, tLastY = 0;
-  canvas.addEventListener('pointerdown', e => {
-    if (dragId !== null) return;
-    e.preventDefault();          // also suppresses the synthetic mousedown
-    ensureAudio();
-    dragId = e.pointerId; tLastX = e.clientX; tLastY = e.clientY;
-    capture(canvas, e.pointerId);
-  });
-  canvas.addEventListener('pointermove', e => {
-    if (e.pointerId !== dragId) return;
-    sun.az += (e.clientX - tLastX) * 0.005;
-    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - tLastY) * 0.004));
-    tLastX = e.clientX; tLastY = e.clientY;
-  });
-  const endSunDrag = e => { if (e.pointerId === dragId) dragId = null; };
-  canvas.addEventListener('pointerup', endSunDrag);
-  canvas.addEventListener('pointercancel', endSunDrag);
-
-  // ---- virtual joystick ----
-  const joyEl = document.getElementById('joystick');
-  const stickEl = document.getElementById('stick');
-  let joyId = null;
-
-  function moveStick(e) {
-    const rect = joyEl.getBoundingClientRect();
-    let dx = e.clientX - (rect.left + rect.width / 2);
-    let dy = e.clientY - (rect.top + rect.height / 2);
-    const max = rect.width * 0.35;
-    const len = Math.hypot(dx, dy);
-    if (len > max) { dx *= max / len; dy *= max / len; }
-    stickEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-    touchInput.steer = -dx / max;  // stick right = bank right (matches D)
-    touchInput.pitch = dy / max;   // stick up = nose down (matches W)
-  }
-  joyEl.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    ensureAudio();
-    joyId = e.pointerId;
-    moveStick(e);
-    capture(joyEl, e.pointerId);
-  });
-  joyEl.addEventListener('pointermove', e => { if (e.pointerId === joyId) moveStick(e); });
-  const endJoy = e => {
-    if (e.pointerId !== joyId) return;
-    joyId = null;
-    touchInput.steer = 0; touchInput.pitch = 0;
-    stickEl.style.transform = 'translate(0px,0px)';
-  };
-  joyEl.addEventListener('pointerup', endJoy);
-  joyEl.addEventListener('pointercancel', endJoy);
-
-  // ---- hold buttons ----
-  function holdButton(id, on, off) {
-    const el = document.getElementById(id);
-    el.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      ensureAudio();
-      el.classList.add('on');
-      on();
-      capture(el, e.pointerId);
-    });
-    const end = () => { el.classList.remove('on'); off(); };
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-  }
-  holdButton('btn-boost', () => { touchInput.boost = true; }, () => { touchInput.boost = false; });
-  holdButton('btn-up',    () => { touchInput.lift = 1; },     () => { touchInput.lift = 0; });
-  holdButton('btn-down',  () => { touchInput.lift = -1; },    () => { touchInput.lift = 0; });
-  // FIRE reuses the desktop hold-to-burst path; BOMB is a tap
-  holdButton('btn-fire',  () => { fireGun(); lmbDown = true; lastAuto = performance.now(); },
-                          () => { lmbDown = false; });
-  document.getElementById('btn-bomb').addEventListener('pointerdown', e => {
-    e.preventDefault(); ensureAudio(); dropBomb();
-  });
-  document.getElementById('btn-reset').addEventListener('pointerdown', e => {
-    e.preventDefault(); onReset();
-  });
-
-  // Block iOS Safari scroll / pull-to-refresh / double-tap zoom
-  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-})();
-
-// ---- gyroscope tilt (works alongside the joystick) ----
-(function initGyro() {
-  const tiltBtn = document.getElementById('btn-tilt');
-  if (!tiltBtn) return;
-  const gyro = { on: false, needCal: false, calSteer: 0, calPitch: 0, lastData: -1, source: null, checkTimer: 0 };
-
-  function orientAngle() {
-    if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
-    return window.orientation || 0;
-  }
-
-  // Remap beta/gamma to steer/pitch for the current screen rotation
-  function tiltAxes(e) {
-    const a = ((orientAngle() % 360) + 360) % 360;
-    const beta = e.beta || 0, gamma = e.gamma || 0;
-    if (a === 90)  return { steer: beta,  pitch: -gamma };
-    if (a === 270) return { steer: -beta, pitch: gamma };
-    if (a === 180) return { steer: -gamma, pitch: -beta };
-    return { steer: gamma, pitch: beta };
-  }
-
-  function onTilt(e) {
-    if (e.beta === null && e.gamma === null) return; // sensor blocked/empty
-    if (e.type === 'deviceorientationabsolute') {
-      if (gyro.source === 'deviceorientation') return;
-    } else {
-      gyro.source = 'deviceorientation';
-    }
-    gyro.lastData = performance.now();
-    if (!gyro.on) return;
-    if (tiltBtn.classList.contains('err')) {
-      tiltBtn.classList.remove('err');
-      hideToast();
-    }
-    const ax = tiltAxes(e);
-    if (gyro.needCal) { gyro.calSteer = ax.steer; gyro.calPitch = ax.pitch; gyro.needCal = false; }
-    const DEAD = 2.5, RANGE = 22; // degrees: deadzone, then full input at DEAD+RANGE
-    const shape = d => {
-      const m = Math.abs(d) < DEAD ? 0 : (Math.abs(d) - DEAD) / RANGE;
-      return Math.sign(d) * Math.min(1, m);
-    };
-    gyroInput.steer = -shape(ax.steer - gyro.calSteer); // tilt right = bank right
-    gyroInput.pitch = shape(ax.pitch - gyro.calPitch);  // tilt forward = nose down
-  }
-  window.addEventListener('deviceorientation', onTilt);
-  window.addEventListener('deviceorientationabsolute', onTilt);
-  if (screen.orientation && screen.orientation.addEventListener) {
-    screen.orientation.addEventListener('change', () => { if (gyro.on) gyro.needCal = true; });
-  }
-
-  function setTilt(on) {
-    gyro.on = on;
-    gyro.needCal = on; // current pose becomes neutral on enable
-    gyroInput.steer = 0; gyroInput.pitch = 0;
-    tiltBtn.classList.toggle('on', on);
-    tiltBtn.classList.remove('err');
-    clearTimeout(gyro.checkTimer);
-    if (on) {
-      const enabledAt = performance.now();
-      gyro.checkTimer = setTimeout(() => {
-        if (gyro.on && gyro.lastData < enabledAt) {
-          tiltBtn.classList.add('err');
-          toast('NO MOTION SENSOR DATA — allow "Motion sensors" in your browser\u2019s site settings (Vanadium blocks them by default), then tap TILT again', 8000);
-        }
-      }, 1500);
-    } else {
-      hideToast();
-    }
-  }
-  tiltBtn.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    if (gyro.on) { setTilt(false); return; }
-    // iOS 13+ requires an explicit permission request from a user gesture
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission()
-        .then(state => setTilt(state === 'granted'))
-        .catch(() => setTilt(false));
-    } else {
-      setTilt(true);
-    }
-  });
-})();
-}
-
-// ==================== js/math.js ====================
-// Small vector / orientation helpers shared across modules.
-
-function clamp1(v) {
-  return Math.max(-1, Math.min(1, v));
-}
-
-function normalize3(v) {
-  const l = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / l, v[1] / l, v[2] / l];
-}
-function cross3(a, b) {
-  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-}
-// Rodrigues: rotate v around unit axis by ang (radians)
-function rotV(v, ax, ang) {
-  const c = Math.cos(ang), s = Math.sin(ang);
-  const cr = cross3(ax, v);
-  const d = ax[0]*v[0] + ax[1]*v[1] + ax[2]*v[2];
-  const t = d * (1 - c);
-  return [v[0]*c + cr[0]*s + ax[0]*t,
-          v[1]*c + cr[1]*s + ax[1]*t,
-          v[2]*c + cr[2]*s + ax[2]*t];
-}
-
-// ==================== js/rings.js ====================
-// ============ RING COURSE (ported from jul's fractal-flight) ============
-// Fly through rings to score. Spawning chains ring-to-ring and fans its
-// candidate directions wider on retries so the course turns back over
-// mountains instead of drifting out to sea (jul's land-seeking fix).
-const rings = [];
-let ringScore = 0;
-const ringsPosData = new Float32Array(MAX_RINGS * 4);
-const ringsMatsData = new Float32Array(MAX_RINGS * 9);
-const $ringScore = document.getElementById('ringScore');
-const $ringsBox = document.getElementById('rings-score');
-
-function initRings() {
-  ringScore = 0;
-  $ringScore.textContent = 0;
-  prevPos = null;
-  rings.length = 0;
-  for (let i = 0; i < MAX_RINGS; i++) {
-    rings.push({ pos: [0,0,0], fwd: [0,0,1], right: [1,0,0], up: [0,1,0], radius: 18, active: false, behindT: 0 });
-  }
-  let lastPos = [START.x, START.y, START.z];
-  let lastFwd = [0, 0, 1];
-  for (let i = 0; i < MAX_RINGS; i++) {
-    spawnRing(i, lastPos, lastFwd);
-    lastPos = rings[i].pos;
-    lastFwd = rings[i].fwd;
-  }
-}
-
-function spawnRing(index, fromPos, fromFwd) {
-  // Fan of candidate directions: early attempts follow the chain heading,
-  // later ones swing wider; fall back to the highest terrain seen.
-  const baseYaw = Math.atan2(fromFwd[0], fromFwd[2]);
-  let best = null;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const spread = 0.4 + 2.0 * attempt / 11;
-    const yaw = baseYaw + (Math.random() - 0.5) * spread;
-    const dist = 400 + Math.random() * 300;
-    const x = fromPos[0] + Math.sin(yaw) * dist;
-    const z = fromPos[2] + Math.cos(yaw) * dist;
-    const h = terrainShapeJ(x, z);
-    if (best === null || h > best.h) best = { x, z, h };
-    if (h > LAND_MIN_H) { best = { x, z, h }; break; }
-  }
-
-  // Above terrain with generous clearance, and a minimum flying altitude
-  const clearance = 100 + Math.random() * 120;
-  const pos = [best.x, Math.max(best.h + clearance, 150), best.z];
-
-  let fwd = normalize3([pos[0] - fromPos[0], pos[1] - fromPos[1], pos[2] - fromPos[2]]);
-  let right = normalize3(cross3(fwd, [0, 1, 0]));
-  if (!isFinite(right[0])) right = [1, 0, 0];
-  let up = cross3(right, fwd);
-
-  rings[index].pos = pos;
-  rings[index].fwd = fwd;
-  rings[index].right = right;
-  rings[index].up = up;
-  rings[index].radius = 18;
-  rings[index].behindT = 0;
-  rings[index].active = true;
-}
-
-let prevPos = null;   // last frame's craft position, for the plane-crossing test
-
-function updateRings(craftPos, craftFwd, dt) {
-  if (prevPos === null) prevPos = [craftPos[0], craftPos[1], craftPos[2]];
-  const segX = craftPos[0] - prevPos[0], segY = craftPos[1] - prevPos[1], segZ = craftPos[2] - prevPos[2];
-  const teleported = segX * segX + segY * segY + segZ * segZ > 400 * 400;   // R-reset jump: no false crossings
-
-  for (let i = 0; i < MAX_RINGS; i++) {
-    const r = rings[i];
-    if (!r.active) continue;
-
-    // Pass detection (v6.0): the old test was a sphere around the ring CENTER
-    // (0.8 x radius) plus an approach-angle gate, so passes near the rim were
-    // missed. Now the frame's flight segment is intersected with the ring's
-    // PLANE: a crossing anywhere inside the full opening counts, at any
-    // speed, from any angle.
-    if (!teleported) {
-      const pz = (prevPos[0] - r.pos[0]) * r.fwd[0] + (prevPos[1] - r.pos[1]) * r.fwd[1] + (prevPos[2] - r.pos[2]) * r.fwd[2];
-      const cz = (craftPos[0] - r.pos[0]) * r.fwd[0] + (craftPos[1] - r.pos[1]) * r.fwd[1] + (craftPos[2] - r.pos[2]) * r.fwd[2];
-      if ((pz < 0) !== (cz < 0)) {
-        const t = pz / (pz - cz);   // where the segment crosses the ring plane
-        const hx = prevPos[0] + segX * t - r.pos[0];
-        const hy = prevPos[1] + segY * t - r.pos[1];
-        const hz = prevPos[2] + segZ * t - r.pos[2];
-        const rx = hx * r.right[0] + hy * r.right[1] + hz * r.right[2];
-        const ry = hx * r.up[0] + hy * r.up[1] + hz * r.up[2];
-        if (rx * rx + ry * ry <= r.radius * r.radius) {
-          ringScore++;
-          $ringScore.textContent = ringScore;
-          pulseRingScore();
-          ringSound();
-          r.active = false;
-          spawnNextRing(i, craftPos);
-          continue;
-        }
-      }
-    }
-
-    // Behind housekeeping (v6.0): recycling used to be INSTANT — during a
-    // loop the forward vector reverses for a couple of seconds, every ring
-    // read as "behind", and the whole course respawned far away (the rings
-    // seemed to vanish). A ring must now stay behind for 4 continuous
-    // seconds, longer than any loop's reversed phase, before recycling.
-    const behindDot = (r.pos[0] - craftPos[0]) * craftFwd[0] +
-                      (r.pos[1] - craftPos[1]) * craftFwd[1] +
-                      (r.pos[2] - craftPos[2]) * craftFwd[2];
-    if (behindDot < -200) {
-      r.behindT += dt;
-      if (r.behindT > 4.0) {
-        r.active = false;
-        spawnNextRing(i, craftPos);
-      }
-    } else {
-      r.behindT = 0;
-    }
-  }
-
-  prevPos[0] = craftPos[0]; prevPos[1] = craftPos[1]; prevPos[2] = craftPos[2];
-}
-
-function spawnNextRing(index, craftPos) {
-  // Chain from the furthest active ring so the course keeps extending
-  let furthestIdx = -1;
-  let maxDistSq = -1;
-  for (let j = 0; j < MAX_RINGS; j++) {
-    if (rings[j].active) {
-      const fdx = rings[j].pos[0] - craftPos[0];
-      const fdy = rings[j].pos[1] - craftPos[1];
-      const fdz = rings[j].pos[2] - craftPos[2];
-      const dsq = fdx * fdx + fdy * fdy + fdz * fdz;
-      if (dsq > maxDistSq) { maxDistSq = dsq; furthestIdx = j; }
-    }
-  }
-  if (furthestIdx === -1) {
-    const hf = normalize3([craft.f[0], 0, craft.f[2]]);
-    spawnRing(index, craftPos, isFinite(hf[0]) ? hf : [0, 0, 1]);
-  } else {
-    spawnRing(index, rings[furthestIdx].pos, rings[furthestIdx].fwd);
-  }
-}
-
-function packRingData() {
-  for (let i = 0; i < MAX_RINGS; i++) {
-    const r = rings[i];
-    // Debug 'rings' hidden: radius -1 is the shader's own "no ring here"
-    if (r.active && DBG.ringsOn > 0.5) {
-      ringsPosData[i*4]   = r.pos[0];
-      ringsPosData[i*4+1] = r.pos[1];
-      ringsPosData[i*4+2] = r.pos[2];
-      ringsPosData[i*4+3] = r.radius;
-      ringsMatsData[i*9]   = r.right[0];
-      ringsMatsData[i*9+1] = r.right[1];
-      ringsMatsData[i*9+2] = r.right[2];
-      ringsMatsData[i*9+3] = r.up[0];
-      ringsMatsData[i*9+4] = r.up[1];
-      ringsMatsData[i*9+5] = r.up[2];
-      ringsMatsData[i*9+6] = r.fwd[0];
-      ringsMatsData[i*9+7] = r.fwd[1];
-      ringsMatsData[i*9+8] = r.fwd[2];
-    } else {
-      ringsPosData[i*4+3] = -1.0;
-    }
-  }
-}
-
-function pulseRingScore() {
-  $ringsBox.style.transform = 'translateX(-50%) scale(1.3)';
-  setTimeout(() => { $ringsBox.style.transform = 'translateX(-50%) scale(1)'; }, 150);
-}
-
-// ==================== js/clouds.js ====================
-// Cumulonimbus clusters: generated once at startup (positions seek fitting
-// terrain via the CPU mirror), drift together in one random wind. Pure
-// visuals: no collision. Count and size are live tune-panel sliders.
-
-const clouds = [];
-let windX = 0, windZ = 0;
-function genClouds() {
-  clouds.length = 0;
-  const wa = Math.random() * Math.PI * 2;       // wind: random heading,
-  const ws = 1.6 + Math.random() * 1.6;         // 1.6–3.2 m/s — a slow drift
-  windX = Math.cos(wa) * ws; windZ = Math.sin(wa) * ws;
-  // size classes (v4.4): 4 big, 6 middle, 6 small. Placement seeks terrain
-  // to match: BIG clouds over lowlands/sea, SMALL ones over snowy peaks,
-  // mids anywhere — up to 14 random probes of the terrain mirror each.
-  for (let i = 0; i < MAXCLOUD; i++) {
-    const cl = i < 4 ? 2 : (i < 10 ? 1 : 0);    // 2 big · 1 mid · 0 small
-    let x = 0, z = 0, gh = 0;
-    for (let tries = 0; tries < 14; tries++) {
-      x = START.x + (Math.random() - 0.5) * 8400;
-      z = START.z + (Math.random() - 0.5) * 8400;
-      gh = terrainShapeJ(x, z);
-      if (cl === 2 && gh < 120) break;          // big: found lowland
-      if (cl === 0 && gh > 280) break;          // small: found a high peak
-      if (cl === 1) break;
-    }
-    const f = cl === 2 ? 1.45 + Math.random() * 0.55
-            : cl === 1 ? 0.85 + Math.random() * 0.40
-            :            0.50 + Math.random() * 0.28;
-    const y = (gh > 230)
-      ? gh + 90 + Math.random() * 90            // riding a mountain top
-      : 250 + Math.random() * 190;              // hovering in open air
-    clouds.push({ x, y, z, f });
-  }
-}
-const cloudArr = new Float32Array(MAXCLOUD * 4);
-
-function cloudImmersion() {
-  // 0..1 how deep the craft sits inside the nearest cloud (soft edge)
-  let cim = 0;
-  const cn = Math.min(MAXCLOUD, Math.round(TUNE.cloudCount.v));
-  for (let i = 0; i < cn; i++) {
-    const c = clouds[i], r = c.f * TUNE.cloudSize.v;
-    const qx = (craft.pos[0] - c.x) / r;
-    const qy = (craft.pos[1] - c.y) / (r * 0.80);   // covers base + bubbles
-    const qz = (craft.pos[2] - c.z) / r;
-    const d = Math.sqrt(qx * qx + qy * qy + qz * qz);
-    const a = Math.max(0, Math.min(1, (1.05 - d) / 0.35));
-    if (a > cim) cim = a;
-  }
-  return cim;
-}
-
-function driftClouds(dt) {
-  for (let ci = 0; ci < MAXCLOUD; ci++) { clouds[ci].x += windX * dt; clouds[ci].z += windZ * dt; }
 }
 
 // ==================== js/aliens.js ====================
@@ -4218,6 +3901,40 @@ function hullHit(id, B, frame, hull, rot) {
                  hull, rot, lp: frame.lp, u: frame.u, v: frame.v,
                  n: frame.n, curv: frame.curv, maxR: frame.maxR });
   hullExplosionSound();
+}
+
+// A laser strike is six bomb hits landing at once (LASER_DAMAGE), so the
+// relay -- HP_RELAY = 6 -- melts on a single shot, which is the whole point of
+// aiming at it. Geometry is NOT re-derived here: the caller has already traced
+// the aim ray and says which hull it found, so this only has to apply damage
+// and raise the same hit flare a bomb does. hullAlive is still the gate, so a
+// falling or melting wreck absorbs nothing.
+const LASER_DAMAGE = 6;
+
+function alienLaserHit(id, px, py, pz) {
+  const B = { x: px, y: py, z: pz };
+  if (id === 0) {
+    const m = alien.mother;
+    if (m.gone || m.falling || m.melt > 0) return false;
+    m.hp -= LASER_DAMAGE;
+    hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
+    if (m.hp <= 0) m.falling = true;
+    return true;
+  }
+  if (id === 7) {
+    const r = alien.relay;
+    if (r.gone || r.falling || r.melt > 0) return false;
+    r.hp -= LASER_DAMAGE;
+    hullHit(7.0, B, sphereFace(B, r, r.r), r, false);
+    if (r.hp <= 0) r.falling = true;
+    return true;
+  }
+  const s = alien.ships[id - 1];
+  if (!s || s.falling || s.melt > 0) return false;
+  s.hp -= LASER_DAMAGE;
+  hullHit(id, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
+  if (s.hp <= 0) s.falling = true;
+  return true;
 }
 
 function alienBombHits(bombs) {
@@ -4501,6 +4218,708 @@ function packAlienUniforms(out) {
   const hitAge = (performance.now() - hitT0) / 1000;
   const fl = hitAge < HIT_FLASH ? 1.0 - hitAge / HIT_FLASH : 0.0;
   out.alienHit = [hitId, fl * fl];       // squared: flares hard, fades off quickly
+}
+
+// ==================== js/laser.js ====================
+// ============ PLAYER LASER (v9.9) ============
+// Hold the RIGHT button: after LASER_CHARGE_MS the shot is armed (rising hum,
+// target cursor). Release and a beam fires from the plane to whatever the
+// CURSOR was pointing at in the 3D world. A hull takes LASER_DAMAGE (six bomb
+// hits — enough to melt the relay outright); open ground burns a harvest
+// circle three times a bomb's radius. Every shot costs LASER_COST energy.
+//
+// ⚠️ The aim ray is traced in JS, NOT through the GPU probe row, and that is a
+// deliberate trade. The probe row is the COLLISION AUTHORITY and is already
+// 15.1% of the inlined program (docs/COMPILE.md); adding a full marchTerrain +
+// marchAliens there to shade one more pixel would cost seconds of driver
+// compile for a reticle. Aiming is not collision — being a metre off picks the
+// same target — so this uses the fp64 terrain mirror and analytic hull tests
+// and costs the shader nothing.
+
+const LASER_CHARGE_MS = 2000;
+const LASER_BURN_R = BLAST_R * 3;   // the burn is 3x a bomb's circle
+const T_MAX = 9000;                        // give up past this: it is sky
+
+let camRef = null;                         // latest camera basis, for the release
+
+// ---- ray vs the alien fleet (analytic, same shapes marchAliens uses) -------
+function slab(ox, oy, oz, dx, dy, dz, hx, hy, hz) {
+  // returns entry distance, or -1: an axis-aligned box centred at the origin
+  let tn = -1e18, tf = 1e18;
+  const o = [ox, oy, oz], d = [dx, dy, dz], h = [hx, hy, hz];
+  for (let i = 0; i < 3; i++) {
+    const inv = 1 / (d[i] || 1e-9);
+    let a = (-h[i] - o[i]) * inv, b = (h[i] - o[i]) * inv;
+    if (a > b) { const t = a; a = b; b = t; }
+    if (a > tn) tn = a;
+    if (b < tf) tf = b;
+  }
+  if (tn > tf || tf < 0) return -1;
+  return Math.max(tn, 0);
+}
+
+// Nearest live hull along the ray. Returns { t, id } or null; ids match the
+// shader's mal.y — 0 mothership, 1..6 harvesters, 7 relay.
+function traceFleet(ro, rd) {
+  let bt = 1e18, bid = -1;
+  const m = alien.mother;
+  if (!m.gone && !m.falling && m.melt <= 0) {
+    const t = slab(ro[0] - m.x, ro[1] - m.y, ro[2] - m.z, rd[0], rd[1], rd[2],
+                   TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2);
+    if (t >= 0 && t < bt) { bt = t; bid = 0; }
+  }
+  const r = alien.relay;
+  if (!r.gone && !r.falling && r.melt <= 0) {
+    const ox = ro[0] - r.x, oy = ro[1] - r.y, oz = ro[2] - r.z;
+    const b = ox * rd[0] + oy * rd[1] + oz * rd[2];
+    const c = ox * ox + oy * oy + oz * oz - r.r * r.r;
+    const disc = b * b - c;
+    if (disc > 0) {
+      const t = -b - Math.sqrt(disc);
+      if (t >= 0 && t < bt) { bt = t; bid = 7; }
+    }
+  }
+  for (let i = 0; i < alien.ships.length; i++) {
+    const s = alien.ships[i];
+    if (s.falling || s.melt > 0) continue;
+    // into the hull's yawed frame — the same rotation shipLocal applies
+    const ca = Math.cos(s.a), sa = Math.sin(s.a);
+    const ox = ro[0] - s.x, oz = ro[2] - s.z;
+    const t = slab(ox * ca - oz * sa, ro[1] - s.y, ox * sa + oz * ca,
+                   rd[0] * ca - rd[2] * sa, rd[1], rd[0] * sa + rd[2] * ca,
+                   TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2);
+    if (t >= 0 && t < bt) { bt = t; bid = i + 1; }
+  }
+  return bid < 0 ? null : { t: bt, id: bid };
+}
+
+// ---- ray vs the ground ----------------------------------------------------
+// A sphere-trace on the fp64 mirror, relaxed the same way the shader's march
+// is. It only has to be close enough to pick a spot to burn.
+function traceGround(ro, rd) {
+  let t = 2;
+  for (let i = 0; i < 400 && t < T_MAX; i++) {
+    const px = ro[0] + rd[0] * t, py = ro[1] + rd[1] * t, pz = ro[2] + rd[2] * t;
+    const h = terrainShapeJ(px, pz);
+    const gap = py - Math.max(h, WATER_LEVEL);
+    if (gap < 0.6) return t;
+    t += Math.max(gap * 0.4, 1.5 + t * 0.0015);
+  }
+  return -1;
+}
+
+// Screen pixel -> world ray. The vertical flip is the trap: clientY runs DOWN
+// from the top while the shader's gl_FragCoord.y runs UP from the bottom, so
+// an unflipped cursor aims at its own mirror image across the horizon.
+function aimRay(cam, cx, cy) {
+  const W = window.innerWidth, H = window.innerHeight;
+  const ux = ((2 * cx - W) / H) * TAN_HALF_FOV;
+  const uy = ((H - 2 * cy) / H) * TAN_HALF_FOV;
+  const d = [cam.right[0] * ux + cam.up[0] * uy + cam.fwd[0],
+             cam.right[1] * ux + cam.up[1] * uy + cam.fwd[1],
+             cam.right[2] * ux + cam.up[2] * uy + cam.fwd[2]];
+  const l = Math.hypot(d[0], d[1], d[2]) || 1;
+  return [d[0] / l, d[1] / l, d[2] / l];
+}
+
+// ---- the button -----------------------------------------------------------
+function laserPress(now) {
+  laser.holding = true;
+  laser.holdT0 = now;
+  laser.charged = false;
+}
+
+// Called every frame: arms the shot once the hold passes the charge time, and
+// ages the drawn beam. The charge is checked here rather than on a timer so it
+// cannot fire while the tab is backgrounded and rAF is paused.
+function updateLaser(now, cam) {
+  if (cam) camRef = cam;
+  if (laser.holding && !laser.charged && now - laser.holdT0 >= LASER_CHARGE_MS) {
+    laser.charged = true;
+    document.body.classList.add('laser-armed');
+  }
+  if (laser.shot && now - laser.shot.t0 > 420) laser.shot = null;
+}
+
+// Returns true if a shot was fired. input.js drops a bomb when it returns
+// false, so a quick right-click keeps doing exactly what it always did.
+function laserRelease(now, cx, cy) {
+  const wasCharged = laser.charged;
+  laser.holding = false;
+  laser.charged = false;
+  laserChargeStop();
+  document.body.classList.remove('laser-armed');
+  if (!wasCharged || !camRef) return false;
+  // Charged but broke: refuse and say so with the readout, rather than firing
+  // a beam that does nothing. spendEnergy is all-or-nothing by design.
+  if (!canFireLaser() || !spendEnergy(LASER_COST)) return true;
+
+  const ro = [craft.pos[0], craft.pos[1], craft.pos[2]];
+  const rd = aimRay(camRef, cx, cy);
+  const hull = traceFleet(ro, rd);
+  const tg = traceGround(ro, rd);
+  // nearest wins; a hull in front of the ground is the target
+  let t = T_MAX, kind = 'sky';
+  if (tg >= 0) { t = tg; kind = 'ground'; }
+  if (hull && hull.t < t) { t = hull.t; kind = 'hull'; }
+
+  const hit = [ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t];
+  laser.shot = { a: ro.slice(), b: hit, t0: now };
+  laserFireSound();
+
+  if (kind === 'hull') {
+    if (alienLaserHit(hull.id, hit[0], hit[1], hit[2])) laserCrackSound();
+  } else if (kind === 'ground') {
+    const gh = terrainShapeJ(hit[0], hit[2]);
+    harvestCircle(hit[0], Math.max(gh, WATER_LEVEL) + 1.5, hit[2], LASER_BURN_R, gh < WATER_LEVEL);
+  }
+  return true;
+}
+
+function laserCancel() {
+  laser.holding = false;
+  laser.charged = false;
+  laser.shot = null;
+  laserChargeStop();
+  document.body.classList.remove('laser-armed');
+}
+
+// ==================== js/input.js ====================
+// All input sources: keyboard, mouse (fire / bomb / sun drag), virtual
+// joystick, touch buttons, and gyroscope tilt. Each source writes into its
+// own state object; the flight model sums and clamps them.
+
+const keys = Object.create(null);
+const touchInput = { steer: 0, pitch: 0, lift: 0, boost: false };
+const gyroInput = { steer: 0, pitch: 0 };
+const mouse = { lmbDown: false, lastAuto: 0 };   // hold-to-burst state, read by flight.js
+const mouseView = { x: window.innerWidth / 2, y: window.innerHeight / 2 };   // orbit-view cursor
+const viewOrigin = { x: window.innerWidth / 2, y: window.innerHeight / 2 };   // orbit center (middle-click moves it)
+
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (IS_TOUCH) document.body.classList.add('touch');
+
+function initInput(onReset) {
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  ensureAudio();
+  if (e.code === 'KeyM') toggleMute();
+  if ((e.code === 'KeyY' || e.code === 'KeyZ') && !e.repeat) camMode.free = !camMode.free;   // KeyZ too: QWERTZ keyboards report the Y keycap as KeyZ
+  if (e.code === 'KeyX' && !e.repeat) camMode.pilot = !camMode.pilot;
+  if (e.code === 'KeyO' && !e.repeat) camMode.obs = !camMode.obs;
+  if (e.code === 'KeyR') onReset();
+  if (['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+canvas.addEventListener('pointerdown', ensureAudio);
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// LEFT button: fire (hold = burst).
+// MIDDLE button: quick click recenters the view; press-and-move repositions
+//   the sun. The sun moved here in v9.9 to free the right button for the
+//   laser, and it keeps the same click-vs-drag split the right button used:
+//   short press = the old action, movement = the drag.
+// RIGHT button: quick click drops a bomb; holding past LASER_CHARGE_MS arms
+//   the laser and releasing fires it.
+let mbDown = false, mbStartT = 0, mbStartX = 0, mbStartY = 0, sunDragging = false;
+let lastMX = 0, lastMY = 0;
+let rbDown = false;
+// mouse-orbit view tracking (v7.5) — frozen while dragging the sun, but NOT
+// while the laser is charging: the cursor is the aim point, so it has to keep
+// tracking through the whole right-button hold.
+window.addEventListener('mousemove', e => {
+  if (sunDragging) return;
+  mouseView.x = e.clientX; mouseView.y = e.clientY;
+});
+// wheel zoom (v7.5): down = farther (up to map scale), up = closer, past the
+// plane = cockpit view
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (!camMode.free) return;   // wheel zoom only while the Y camera mode is on
+  viewZoom.t = Math.max(0.07, Math.min(400, viewZoom.t * Math.exp(e.deltaY * 0.0012)));
+}, { passive: false });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('mousedown', e => {
+  if (IS_TOUCH) return;   // touch uses the on-screen buttons + sun drag below
+  if (e.button === 1) {
+    e.preventDefault();   // suppress the middle-click autoscroll widget
+    mbDown = true; sunDragging = false;
+    mbStartT = performance.now();
+    mbStartX = lastMX = e.clientX; mbStartY = lastMY = e.clientY;
+    return;
+  }
+  if (e.button === 0) {
+    fireGun();
+    mouse.lmbDown = true; mouse.lastAuto = performance.now();
+  } else if (e.button === 2) {
+    rbDown = true;
+    laserPress(performance.now());
+    laserChargeStart(LASER_CHARGE_MS / 1000);   // hum rises for exactly the charge
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (e.button === 0) mouse.lmbDown = false;
+  if (e.button === 1 && mbDown) {
+    // a middle press that never became a drag still recenters the view, and
+    // zoom resets too — but ONLY from beyond the default, so zoomed-in and
+    // cockpit views keep their zoom and are just re-aimed (v7.5)
+    if (!sunDragging && performance.now() - mbStartT < 400) {
+      viewOrigin.x = e.clientX; viewOrigin.y = e.clientY;
+      if (viewZoom.t > 1) viewZoom.t = 1;
+    }
+    mbDown = false; sunDragging = false;
+  }
+  if (e.button === 2 && rbDown) {
+    rbDown = false;
+    // a charged release fires; anything shorter is still a bomb, so the
+    // right button keeps the behaviour it has had since v3
+    if (!laserRelease(performance.now(), e.clientX, e.clientY)) dropBomb();
+  }
+});
+window.addEventListener('mousemove', e => {
+  if (!mbDown) return;
+  if (!sunDragging) {
+    const moved = Math.abs(e.clientX - mbStartX) + Math.abs(e.clientY - mbStartY);
+    if (moved > 6 || performance.now() - mbStartT > 400) sunDragging = true;
+  }
+  if (sunDragging) {
+    sun.az += (e.clientX - lastMX) * 0.005;
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - lastMY) * 0.004));
+  }
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  mouse.lmbDown = false; rbDown = false; mbDown = false; sunDragging = false;
+  laserCancel();   // a charge held across a focus loss must not survive it
+});
+
+// ---- touch + gyro ----
+// Each input source writes its own state object; update() sums and clamps,
+// so keyboard, joystick and tilt can be combined freely.
+
+// setPointerCapture throws on synthetic events and must never block input
+function capture(el, id) { try { el.setPointerCapture(id); } catch (_) {} }
+
+if (IS_TOUCH) (function initTouch() {
+  // ---- sun drag on the canvas (pointer events) ----
+  let dragId = null, tLastX = 0, tLastY = 0;
+  canvas.addEventListener('pointerdown', e => {
+    if (dragId !== null) return;
+    e.preventDefault();          // also suppresses the synthetic mousedown
+    ensureAudio();
+    dragId = e.pointerId; tLastX = e.clientX; tLastY = e.clientY;
+    capture(canvas, e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerId !== dragId) return;
+    sun.az += (e.clientX - tLastX) * 0.005;
+    sun.el = Math.min(SUN_EL_MAX, Math.max(SUN_EL_MIN, sun.el - (e.clientY - tLastY) * 0.004));
+    tLastX = e.clientX; tLastY = e.clientY;
+  });
+  const endSunDrag = e => { if (e.pointerId === dragId) dragId = null; };
+  canvas.addEventListener('pointerup', endSunDrag);
+  canvas.addEventListener('pointercancel', endSunDrag);
+
+  // ---- virtual joystick ----
+  const joyEl = document.getElementById('joystick');
+  const stickEl = document.getElementById('stick');
+  let joyId = null;
+
+  function moveStick(e) {
+    const rect = joyEl.getBoundingClientRect();
+    let dx = e.clientX - (rect.left + rect.width / 2);
+    let dy = e.clientY - (rect.top + rect.height / 2);
+    const max = rect.width * 0.35;
+    const len = Math.hypot(dx, dy);
+    if (len > max) { dx *= max / len; dy *= max / len; }
+    stickEl.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    touchInput.steer = -dx / max;  // stick right = bank right (matches D)
+    touchInput.pitch = dy / max;   // stick up = nose down (matches W)
+  }
+  joyEl.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    ensureAudio();
+    joyId = e.pointerId;
+    moveStick(e);
+    capture(joyEl, e.pointerId);
+  });
+  joyEl.addEventListener('pointermove', e => { if (e.pointerId === joyId) moveStick(e); });
+  const endJoy = e => {
+    if (e.pointerId !== joyId) return;
+    joyId = null;
+    touchInput.steer = 0; touchInput.pitch = 0;
+    stickEl.style.transform = 'translate(0px,0px)';
+  };
+  joyEl.addEventListener('pointerup', endJoy);
+  joyEl.addEventListener('pointercancel', endJoy);
+
+  // ---- hold buttons ----
+  function holdButton(id, on, off) {
+    const el = document.getElementById(id);
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      ensureAudio();
+      el.classList.add('on');
+      on();
+      capture(el, e.pointerId);
+    });
+    const end = () => { el.classList.remove('on'); off(); };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+  holdButton('btn-boost', () => { touchInput.boost = true; }, () => { touchInput.boost = false; });
+  holdButton('btn-up',    () => { touchInput.lift = 1; },     () => { touchInput.lift = 0; });
+  holdButton('btn-down',  () => { touchInput.lift = -1; },    () => { touchInput.lift = 0; });
+  // FIRE reuses the desktop hold-to-burst path; BOMB is a tap
+  holdButton('btn-fire',  () => { fireGun(); lmbDown = true; lastAuto = performance.now(); },
+                          () => { lmbDown = false; });
+  document.getElementById('btn-bomb').addEventListener('pointerdown', e => {
+    e.preventDefault(); ensureAudio(); dropBomb();
+  });
+  document.getElementById('btn-reset').addEventListener('pointerdown', e => {
+    e.preventDefault(); onReset();
+  });
+
+  // Block iOS Safari scroll / pull-to-refresh / double-tap zoom
+  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+})();
+
+// ---- gyroscope tilt (works alongside the joystick) ----
+(function initGyro() {
+  const tiltBtn = document.getElementById('btn-tilt');
+  if (!tiltBtn) return;
+  const gyro = { on: false, needCal: false, calSteer: 0, calPitch: 0, lastData: -1, source: null, checkTimer: 0 };
+
+  function orientAngle() {
+    if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+    return window.orientation || 0;
+  }
+
+  // Remap beta/gamma to steer/pitch for the current screen rotation
+  function tiltAxes(e) {
+    const a = ((orientAngle() % 360) + 360) % 360;
+    const beta = e.beta || 0, gamma = e.gamma || 0;
+    if (a === 90)  return { steer: beta,  pitch: -gamma };
+    if (a === 270) return { steer: -beta, pitch: gamma };
+    if (a === 180) return { steer: -gamma, pitch: -beta };
+    return { steer: gamma, pitch: beta };
+  }
+
+  function onTilt(e) {
+    if (e.beta === null && e.gamma === null) return; // sensor blocked/empty
+    if (e.type === 'deviceorientationabsolute') {
+      if (gyro.source === 'deviceorientation') return;
+    } else {
+      gyro.source = 'deviceorientation';
+    }
+    gyro.lastData = performance.now();
+    if (!gyro.on) return;
+    if (tiltBtn.classList.contains('err')) {
+      tiltBtn.classList.remove('err');
+      hideToast();
+    }
+    const ax = tiltAxes(e);
+    if (gyro.needCal) { gyro.calSteer = ax.steer; gyro.calPitch = ax.pitch; gyro.needCal = false; }
+    const DEAD = 2.5, RANGE = 22; // degrees: deadzone, then full input at DEAD+RANGE
+    const shape = d => {
+      const m = Math.abs(d) < DEAD ? 0 : (Math.abs(d) - DEAD) / RANGE;
+      return Math.sign(d) * Math.min(1, m);
+    };
+    gyroInput.steer = -shape(ax.steer - gyro.calSteer); // tilt right = bank right
+    gyroInput.pitch = shape(ax.pitch - gyro.calPitch);  // tilt forward = nose down
+  }
+  window.addEventListener('deviceorientation', onTilt);
+  window.addEventListener('deviceorientationabsolute', onTilt);
+  if (screen.orientation && screen.orientation.addEventListener) {
+    screen.orientation.addEventListener('change', () => { if (gyro.on) gyro.needCal = true; });
+  }
+
+  function setTilt(on) {
+    gyro.on = on;
+    gyro.needCal = on; // current pose becomes neutral on enable
+    gyroInput.steer = 0; gyroInput.pitch = 0;
+    tiltBtn.classList.toggle('on', on);
+    tiltBtn.classList.remove('err');
+    clearTimeout(gyro.checkTimer);
+    if (on) {
+      const enabledAt = performance.now();
+      gyro.checkTimer = setTimeout(() => {
+        if (gyro.on && gyro.lastData < enabledAt) {
+          tiltBtn.classList.add('err');
+          toast('NO MOTION SENSOR DATA — allow "Motion sensors" in your browser\u2019s site settings (Vanadium blocks them by default), then tap TILT again', 8000);
+        }
+      }, 1500);
+    } else {
+      hideToast();
+    }
+  }
+  tiltBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (gyro.on) { setTilt(false); return; }
+    // iOS 13+ requires an explicit permission request from a user gesture
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then(state => setTilt(state === 'granted'))
+        .catch(() => setTilt(false));
+    } else {
+      setTilt(true);
+    }
+  });
+})();
+}
+
+// ==================== js/math.js ====================
+// Small vector / orientation helpers shared across modules.
+
+function clamp1(v) {
+  return Math.max(-1, Math.min(1, v));
+}
+
+function normalize3(v) {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+function cross3(a, b) {
+  return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+}
+// Rodrigues: rotate v around unit axis by ang (radians)
+function rotV(v, ax, ang) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const cr = cross3(ax, v);
+  const d = ax[0]*v[0] + ax[1]*v[1] + ax[2]*v[2];
+  const t = d * (1 - c);
+  return [v[0]*c + cr[0]*s + ax[0]*t,
+          v[1]*c + cr[1]*s + ax[1]*t,
+          v[2]*c + cr[2]*s + ax[2]*t];
+}
+
+// ==================== js/rings.js ====================
+// ============ RING COURSE (ported from jul's fractal-flight) ============
+// Fly through rings to score. Spawning chains ring-to-ring and fans its
+// candidate directions wider on retries so the course turns back over
+// mountains instead of drifting out to sea (jul's land-seeking fix).
+const rings = [];
+let ringScore = 0;
+const ringsPosData = new Float32Array(MAX_RINGS * 4);
+const ringsMatsData = new Float32Array(MAX_RINGS * 9);
+const $ringsBox = document.getElementById('hud-score');
+
+function initRings() {
+  ringScore = 0;
+  prevPos = null;
+  rings.length = 0;
+  for (let i = 0; i < MAX_RINGS; i++) {
+    rings.push({ pos: [0,0,0], fwd: [0,0,1], right: [1,0,0], up: [0,1,0], radius: 18, active: false, behindT: 0 });
+  }
+  let lastPos = [START.x, START.y, START.z];
+  let lastFwd = [0, 0, 1];
+  for (let i = 0; i < MAX_RINGS; i++) {
+    spawnRing(i, lastPos, lastFwd);
+    lastPos = rings[i].pos;
+    lastFwd = rings[i].fwd;
+  }
+}
+
+function spawnRing(index, fromPos, fromFwd) {
+  // Fan of candidate directions: early attempts follow the chain heading,
+  // later ones swing wider; fall back to the highest terrain seen.
+  const baseYaw = Math.atan2(fromFwd[0], fromFwd[2]);
+  let best = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const spread = 0.4 + 2.0 * attempt / 11;
+    const yaw = baseYaw + (Math.random() - 0.5) * spread;
+    const dist = 400 + Math.random() * 300;
+    const x = fromPos[0] + Math.sin(yaw) * dist;
+    const z = fromPos[2] + Math.cos(yaw) * dist;
+    const h = terrainShapeJ(x, z);
+    if (best === null || h > best.h) best = { x, z, h };
+    if (h > LAND_MIN_H) { best = { x, z, h }; break; }
+  }
+
+  // Above terrain with generous clearance, and a minimum flying altitude
+  const clearance = 100 + Math.random() * 120;
+  const pos = [best.x, Math.max(best.h + clearance, 150), best.z];
+
+  let fwd = normalize3([pos[0] - fromPos[0], pos[1] - fromPos[1], pos[2] - fromPos[2]]);
+  let right = normalize3(cross3(fwd, [0, 1, 0]));
+  if (!isFinite(right[0])) right = [1, 0, 0];
+  let up = cross3(right, fwd);
+
+  rings[index].pos = pos;
+  rings[index].fwd = fwd;
+  rings[index].right = right;
+  rings[index].up = up;
+  rings[index].radius = 18;
+  rings[index].behindT = 0;
+  rings[index].active = true;
+}
+
+let prevPos = null;   // last frame's craft position, for the plane-crossing test
+
+function updateRings(craftPos, craftFwd, dt) {
+  if (prevPos === null) prevPos = [craftPos[0], craftPos[1], craftPos[2]];
+  const segX = craftPos[0] - prevPos[0], segY = craftPos[1] - prevPos[1], segZ = craftPos[2] - prevPos[2];
+  const teleported = segX * segX + segY * segY + segZ * segZ > 400 * 400;   // R-reset jump: no false crossings
+
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const r = rings[i];
+    if (!r.active) continue;
+
+    // Pass detection (v6.0): the old test was a sphere around the ring CENTER
+    // (0.8 x radius) plus an approach-angle gate, so passes near the rim were
+    // missed. Now the frame's flight segment is intersected with the ring's
+    // PLANE: a crossing anywhere inside the full opening counts, at any
+    // speed, from any angle.
+    if (!teleported) {
+      const pz = (prevPos[0] - r.pos[0]) * r.fwd[0] + (prevPos[1] - r.pos[1]) * r.fwd[1] + (prevPos[2] - r.pos[2]) * r.fwd[2];
+      const cz = (craftPos[0] - r.pos[0]) * r.fwd[0] + (craftPos[1] - r.pos[1]) * r.fwd[1] + (craftPos[2] - r.pos[2]) * r.fwd[2];
+      if ((pz < 0) !== (cz < 0)) {
+        const t = pz / (pz - cz);   // where the segment crosses the ring plane
+        const hx = prevPos[0] + segX * t - r.pos[0];
+        const hy = prevPos[1] + segY * t - r.pos[1];
+        const hz = prevPos[2] + segZ * t - r.pos[2];
+        const rx = hx * r.right[0] + hy * r.right[1] + hz * r.right[2];
+        const ry = hx * r.up[0] + hy * r.up[1] + hz * r.up[2];
+        if (rx * rx + ry * ry <= r.radius * r.radius) {
+          ringScore++;
+          addEnergy(RING_ENERGY);   // the course is how you re-arm the laser
+          pulseRingScore();
+          ringSound();
+          r.active = false;
+          spawnNextRing(i, craftPos);
+          continue;
+        }
+      }
+    }
+
+    // Behind housekeeping (v6.0): recycling used to be INSTANT — during a
+    // loop the forward vector reverses for a couple of seconds, every ring
+    // read as "behind", and the whole course respawned far away (the rings
+    // seemed to vanish). A ring must now stay behind for 4 continuous
+    // seconds, longer than any loop's reversed phase, before recycling.
+    const behindDot = (r.pos[0] - craftPos[0]) * craftFwd[0] +
+                      (r.pos[1] - craftPos[1]) * craftFwd[1] +
+                      (r.pos[2] - craftPos[2]) * craftFwd[2];
+    if (behindDot < -200) {
+      r.behindT += dt;
+      if (r.behindT > 4.0) {
+        r.active = false;
+        spawnNextRing(i, craftPos);
+      }
+    } else {
+      r.behindT = 0;
+    }
+  }
+
+  prevPos[0] = craftPos[0]; prevPos[1] = craftPos[1]; prevPos[2] = craftPos[2];
+}
+
+function spawnNextRing(index, craftPos) {
+  // Chain from the furthest active ring so the course keeps extending
+  let furthestIdx = -1;
+  let maxDistSq = -1;
+  for (let j = 0; j < MAX_RINGS; j++) {
+    if (rings[j].active) {
+      const fdx = rings[j].pos[0] - craftPos[0];
+      const fdy = rings[j].pos[1] - craftPos[1];
+      const fdz = rings[j].pos[2] - craftPos[2];
+      const dsq = fdx * fdx + fdy * fdy + fdz * fdz;
+      if (dsq > maxDistSq) { maxDistSq = dsq; furthestIdx = j; }
+    }
+  }
+  if (furthestIdx === -1) {
+    const hf = normalize3([craft.f[0], 0, craft.f[2]]);
+    spawnRing(index, craftPos, isFinite(hf[0]) ? hf : [0, 0, 1]);
+  } else {
+    spawnRing(index, rings[furthestIdx].pos, rings[furthestIdx].fwd);
+  }
+}
+
+function packRingData() {
+  for (let i = 0; i < MAX_RINGS; i++) {
+    const r = rings[i];
+    // Debug 'rings' hidden: radius -1 is the shader's own "no ring here"
+    if (r.active && DBG.ringsOn > 0.5) {
+      ringsPosData[i*4]   = r.pos[0];
+      ringsPosData[i*4+1] = r.pos[1];
+      ringsPosData[i*4+2] = r.pos[2];
+      ringsPosData[i*4+3] = r.radius;
+      ringsMatsData[i*9]   = r.right[0];
+      ringsMatsData[i*9+1] = r.right[1];
+      ringsMatsData[i*9+2] = r.right[2];
+      ringsMatsData[i*9+3] = r.up[0];
+      ringsMatsData[i*9+4] = r.up[1];
+      ringsMatsData[i*9+5] = r.up[2];
+      ringsMatsData[i*9+6] = r.fwd[0];
+      ringsMatsData[i*9+7] = r.fwd[1];
+      ringsMatsData[i*9+8] = r.fwd[2];
+    } else {
+      ringsPosData[i*4+3] = -1.0;
+    }
+  }
+}
+
+function pulseRingScore() {
+  $ringsBox.style.transform = 'translateX(-50%) scale(1.3)';
+  setTimeout(() => { $ringsBox.style.transform = 'translateX(-50%) scale(1)'; }, 150);
+}
+
+// ==================== js/clouds.js ====================
+// Cumulonimbus clusters: generated once at startup (positions seek fitting
+// terrain via the CPU mirror), drift together in one random wind. Pure
+// visuals: no collision. Count and size are live tune-panel sliders.
+
+const clouds = [];
+let windX = 0, windZ = 0;
+function genClouds() {
+  clouds.length = 0;
+  const wa = Math.random() * Math.PI * 2;       // wind: random heading,
+  const ws = 1.6 + Math.random() * 1.6;         // 1.6–3.2 m/s — a slow drift
+  windX = Math.cos(wa) * ws; windZ = Math.sin(wa) * ws;
+  // size classes (v4.4): 4 big, 6 middle, 6 small. Placement seeks terrain
+  // to match: BIG clouds over lowlands/sea, SMALL ones over snowy peaks,
+  // mids anywhere — up to 14 random probes of the terrain mirror each.
+  for (let i = 0; i < MAXCLOUD; i++) {
+    const cl = i < 4 ? 2 : (i < 10 ? 1 : 0);    // 2 big · 1 mid · 0 small
+    let x = 0, z = 0, gh = 0;
+    for (let tries = 0; tries < 14; tries++) {
+      x = START.x + (Math.random() - 0.5) * 8400;
+      z = START.z + (Math.random() - 0.5) * 8400;
+      gh = terrainShapeJ(x, z);
+      if (cl === 2 && gh < 120) break;          // big: found lowland
+      if (cl === 0 && gh > 280) break;          // small: found a high peak
+      if (cl === 1) break;
+    }
+    const f = cl === 2 ? 1.45 + Math.random() * 0.55
+            : cl === 1 ? 0.85 + Math.random() * 0.40
+            :            0.50 + Math.random() * 0.28;
+    const y = (gh > 230)
+      ? gh + 90 + Math.random() * 90            // riding a mountain top
+      : 250 + Math.random() * 190;              // hovering in open air
+    clouds.push({ x, y, z, f });
+  }
+}
+const cloudArr = new Float32Array(MAXCLOUD * 4);
+
+function cloudImmersion() {
+  // 0..1 how deep the craft sits inside the nearest cloud (soft edge)
+  let cim = 0;
+  const cn = Math.min(MAXCLOUD, Math.round(TUNE.cloudCount.v));
+  for (let i = 0; i < cn; i++) {
+    const c = clouds[i], r = c.f * TUNE.cloudSize.v;
+    const qx = (craft.pos[0] - c.x) / r;
+    const qy = (craft.pos[1] - c.y) / (r * 0.80);   // covers base + bubbles
+    const qz = (craft.pos[2] - c.z) / r;
+    const d = Math.sqrt(qx * qx + qy * qy + qz * qz);
+    const a = Math.max(0, Math.min(1, (1.05 - d) / 0.35));
+    if (a > cim) cim = a;
+  }
+  return cim;
+}
+
+function driftClouds(dt) {
+  for (let ci = 0; ci < MAXCLOUD; ci++) { clouds[ci].x += windX * dt; clouds[ci].z += windZ * dt; }
 }
 
 // ==================== js/flight.js ====================
@@ -5248,6 +5667,18 @@ async function main() {
   gl.uniform2fv(U.uAlienHit, alienU.alienHit);
   gl.uniform4fv(U.uBolts, alienU.bolts);
   gl.uniform1f(U.uBoltN, alienU.boltN);
+  // player laser: the beam lives ~0.4 s, faded out over its last third so it
+  // retracts rather than vanishing. Zero fade = the branch is skipped entirely.
+  updateLaser(now, camBasis);
+  if (laser.shot) {
+    const age = (now - laser.shot.t0) / 420;
+    const fade = Math.max(0, 1 - age * age);
+    gl.uniform4f(U.uLaserA, laser.shot.a[0], laser.shot.a[1], laser.shot.a[2], fade);
+    gl.uniform4f(U.uLaserB, laser.shot.b[0], laser.shot.b[1], laser.shot.b[2], 0);
+  } else {
+    gl.uniform4f(U.uLaserA, 0, 0, 0, 0);
+    gl.uniform4f(U.uLaserB, 0, 0, 0, 0);
+  }
   gl.uniform4fv(U.uShipPos, alienU.shipPos);
   gl.uniform1fv(U.uShipLaser, alienU.shipLaser);
   gl.uniform1fv(U.uShipMelt, alienU.shipMelt);

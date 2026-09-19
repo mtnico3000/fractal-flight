@@ -288,8 +288,8 @@ export function drawTrail(camB, now, bullets, bombs, impacts) {
         for (let v = 0; v <= RING_N; v++) {
           const vi = v % RING_N;
           const a = (vi / RING_N) * 6.28318;
-          const wx = p.x + Math.cos(a) * BLAST_R * fr;
-          const wz = p.z + Math.sin(a) * BLAST_R * fr;
+          const wx = p.x + Math.cos(a) * (p.R || BLAST_R) * fr;
+          const wz = p.z + Math.sin(a) * (p.R || BLAST_R) * fr;
           const wy = p.y + (p.ringH[vi] - p.y) * fr; // lerp center→sampled rim height
           const s = projectFx(camB, wx, wy, wz, W, H);
           if (!s) { started = false; continue; }     // vertex behind camera: break path

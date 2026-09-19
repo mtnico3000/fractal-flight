@@ -2,10 +2,10 @@
 // Each knob: v = live value, d = default, min/max/step, fmt = display formatting.
 // ---- alien fleet knobs (v9.0): second panel, bottom-right ----
 export const TUNEA = {
-  boxScale: { label: 'box scale',   v: 3,   d: 3,   min: -3,   max: 3,     step: 0.1,  fmt: x => x.toFixed(1) },
-  boxFold:  { label: 'box fold',    v: 1.4,   d: 1.4,   min: 0.3,  max: 1.6,   step: 0.05, fmt: x => x.toFixed(2) },
-  boxMinR:  { label: 'box min r',   v: 0.1,   d: 0.1,   min: 0.1,  max: 1.0,   step: 0.05, fmt: x => x.toFixed(2) },
-  bulbPow:  { label: 'bulb power',  v: 12,    d: 12,    min: 2,    max: 12,    step: 1,    fmt: x => x.toFixed(0) },
+  boxScale: { label: 'box scale',   v: 3,   d: 3,   min: -4,   max: 4,     step: 0.1,  fmt: x => x.toFixed(1) },
+  boxFold:  { label: 'box fold',    v: 1.4,   d: 1.4,   min: 0.2,  max: 3,   step: 0.05, fmt: x => x.toFixed(2) },
+  boxMinR:  { label: 'box min r',   v: 0.1,   d: 0.1,   min: 0.05,  max: 1.5,   step: 0.05, fmt: x => x.toFixed(2) },
+  bulbPow:  { label: 'bulb power',  v: 12,    d: 12,    min: 2,    max: 16,    step: 1,    fmt: x => x.toFixed(0) },
   // Corner fillet on the mothership and harvester hulls, as a fraction of
   // each hull's SMALLEST half-extent -- so it scales with the size sliders
   // instead of needing retuning every time a ship changes shape. 0 is the
@@ -54,8 +54,8 @@ export const TUNE = {
   treeTiers:  { label: 'fronds',      v: 11,       d: 11,       min: 3,      max: 14,     step: 1,       fmt: x => x.toFixed(0) },
   treeFract:  { label: 'tree fractal',v: 0.45,     d: 0.45,    min: 0,      max: 1,      step: 0.05,    fmt: x => (x*100).toFixed(0) + '%' },
   floraRange: { label: 'flora range', v: 5950,    d: 5950,    min: 150,    max: 6000,   step: 50,      fmt: x => x.toFixed(0) },
-  juliaRe:    { label: 'flora c·re',  v: 0.22,    d: 0.22,    min: -1.0,   max: 0.4,    step: 0.01,    fmt: x => x.toFixed(2) },
-  juliaIm:    { label: 'flora c·im',  v: 1,       d: 1,       min: -1.0,   max: 1.0,    step: 0.01,    fmt: x => x.toFixed(2) },
+  juliaRe:    { label: 'flora c·re',  v: 0.22,    d: 0.22,    min: -2,   max: 2,    step: 0.01,    fmt: x => x.toFixed(2) },
+  juliaIm:    { label: 'flora c·im',  v: 1,       d: 1,       min: -2,   max: 2,    step: 0.01,    fmt: x => x.toFixed(2) },
   bombAngle:  { label: 'bomb angle',  v: 3,       d: 3,       min: -45,    max: 45,     step: 1,       fmt: x => x.toFixed(0) + '°' },
   cloudCount: { label: 'cloud count', v: 16,       d: 16,       min: 0,      max: 16,     step: 1,       fmt: x => x.toFixed(0) },
   cloudSize:  { label: 'cloud size',  v: 280,     d: 280,     min: 60,     max: 280,    step: 5,       fmt: x => x.toFixed(0) + ' m' },

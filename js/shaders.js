@@ -48,6 +48,12 @@ uniform vec4 uRelay;          // relayship: xyz + radius (grows with harvest)
 uniform float uRelayMelt;
 uniform vec2  uAlienHit;         // x = hull id (matches mal.y), y = flash 1..0
 uniform vec4  uBolts[6];         // (source id 0..5 ship / 6 relay, head, tail, fade)
+// Player laser (v9.9). Unlike uBolts this carries its ENDPOINTS: the alien
+// beams run between hulls the shader already knows, but this one ends wherever
+// the pilot aimed, which no other uniform holds. w of A is the fade (0 = no
+// beam), w of B is unused.
+uniform vec4  uLaserA;
+uniform vec4  uLaserB;
 uniform float uBoltN;
 uniform vec4 uShipPos[6];     // harvesters: xyz + heading
 uniform float uShipLaser[6];  // 1 = harvest sheet active
@@ -1422,7 +1428,18 @@ void main() {
       lp = shipLocal(pos, uShipPos[si].xyz, ca2, sa2);
       sizeRef = uShipHalf.x;
     }
-    float oScale = 84.0 / max(sizeRef, 1.0);
+    // A hit flares the hull cold white-blue AND wrenches one fractal
+    // parameter: oScale is the self-similar zoom of the Julia filament
+    // lattice, so a strike makes the whole bio-pattern lurch ~1.9x finer and
+    // relax back as the flash decays. Picked over the colour-only flash
+    // because it is the one knob that reads as the SHIP being deformed rather
+    // than lit. One vec2 for the whole fleet -- the uniform budget is already
+    // over the 224-slot mobile minimum (see CLAUDE.md), and two hits on two
+    // different hulls inside the same flash window is not a real case. A laser
+    // strike and a bomb raise the same flare; the laser just carries six times
+    // the damage behind it.
+    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
+    float oScale = 84.0 / max(sizeRef, 1.0) * (1.0 + 0.9 * hitF);
     float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
     float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
     float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);
@@ -1433,11 +1450,6 @@ void main() {
     col += glowC * vein * (0.5 + 0.25 * sin(uTime * 2.0 + org * 9.0)) * (0.35 + 0.65 * detail);
     col += glowC * fres * 0.22;
     if (mal.y > 6.5) col += vec3(0.18, 0.50, 1.20) * (0.3 + 0.25 * sin(uTime * 3.0)) * fres;
-    // bomb hit: this hull flares cold white-blue for a beat. One vec2 for the
-    // whole fleet rather than a per-hull array -- the uniform budget is already
-    // over the 224-slot mobile minimum (see CLAUDE.md), and two bombs landing
-    // on two different hulls inside the same flash window is not a real case.
-    float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
     col = mix(col, vec3(0.72, 0.86, 1.15), hitF * 0.30);
     col += vec3(0.16, 0.40, 0.85) * hitF * (0.22 + fres * 0.6);
     // Melt colour. Up to MELT_KNEE the wreck is molten and PULSES. Past the
@@ -1501,6 +1513,28 @@ void main() {
   // Only (source, head, tail, fade) is uploaded; the ENDPOINTS are read from
   // uShipPos / uRelay / uMotherPos, which cost nothing extra and keep a beam
   // welded to a harvester that is still moving.
+  // the plane's own laser: hot white-green, and occluded exactly like the
+  // alien beams above -- closest approach along the ray against the primary
+  // hit t, so it disappears behind a ridge instead of being painted over it
+  if (uLaserA.w > 0.001) {
+    vec3 ba = uLaserA.xyz, sg = uLaserB.xyz - ba;
+    float cc = dot(sg, sg);
+    if (cc > 1.0) {
+      vec3 w0 = ro - ba;
+      float Bc = dot(rd, sg), Dc = dot(rd, w0), Ec = dot(sg, w0);
+      float den = cc - Bc * Bc;
+      float u = (abs(den) < 1e-5) ? clamp(-Ec / cc, 0.0, 1.0)
+                                  : clamp((Ec - Bc * Dc) / den, 0.0, 1.0);
+      float sray = -Dc + u * Bc;
+      if (sray > 0.0 && sray <= t) {
+        float dist = length(ro + rd * sray - (ba + sg * u));
+        float halo = exp(-dist * dist / 144.0);       // wid 12
+        float core = exp(-dist * dist / 14.4);
+        col += vec3(0.70, 1.00, 0.55) * (halo * 0.50 + core * 2.2) * uLaserA.w;
+      }
+    }
+  }
+
   for (int i = 0; i < 6; i++) {
     if (float(i) >= uBoltN) break;
     vec4 bv = uBolts[i];
