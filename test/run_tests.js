@@ -22,6 +22,19 @@ for (const t of tests) {
   if (r.status !== 0) failed++;
 }
 
+// mutants.js is NOT run here (slow, and it writes to js/), but it has twice
+// been committed in a state where it could not parse at all -- and because
+// nothing here loaded it, all sixteen suites stayed green over a battery that
+// would not start. `node --check` parses without executing, which is exactly
+// the amount of checking this file needs from the fast suite.
+console.log('');
+console.log('=== mutants.js parses ===');
+{
+  const rMut = spawnSync(process.execPath, ['--check', path.join(here, 'mutants.js')], { stdio: 'inherit' });
+  if (rMut.status !== 0) { console.log('  FAIL mutants.js does not parse'); failed++; }
+  else console.log('  ok   the mutation battery is still loadable');
+}
+
 console.log('\n=== check_module_refs.py ===');
 let ran = false;
 for (const py of ['python', 'python3']) {

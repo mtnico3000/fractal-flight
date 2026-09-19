@@ -7,6 +7,7 @@ import { HULL_BLAST_R } from './config.js';
 import { bombs, impacts, blastQueue } from './weapons.js';
 import { hullExplosionSound, zapSound, relayBlastSound } from './audio.js';
 import { doCrash, setFleetCounts, resetFleetCounts } from './hud.js';
+import { addEnergy } from './energy.js';
 
 // ============ ALIEN INVASION (v9.0) ============
 // A rectangular-mandelbox MOTHERSHIP parks high over the island. Harvester
@@ -55,7 +56,7 @@ function spawnHarvester(fromMother) {
     tx: spot.x, tz: spot.z,             // current plains target
     hp: HP_SHIP, melt: 0, falling: false, vy: 0,
     deploying: !!fromMother,
-    absorbed: 0, lastShot: 0, sweepAcc: 0, retarget: 0,
+    absorbed: 0, loot: 0, lastShot: 0, sweepAcc: 0, retarget: 0,
   };
   alien.ships.push(s);
 }
@@ -63,7 +64,7 @@ function spawnHarvester(fromMother) {
 export function initAliens() {
   alien.mother.x = 400; alien.mother.z = 1800;
   alien.mother.y = TUNEA.moAlt.v;
-  alien.mother.hp = HP_MOTHER; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false;
+  alien.mother.hp = HP_MOTHER; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false; alien.mother.loot = 0;
   // relay: the highest mountaintop we can find near the island center
   let peak = { x: 0, z: 0, h: -999 };
   for (let i = 0; i < 500; i++) {
@@ -76,7 +77,7 @@ export function initAliens() {
   alien.relay.baseR = TUNEA.relSize.v / 2;
   alien.relay.r = alien.relay.baseR;
   alien.relay.y = peak.h + 30 + alien.relay.r;
-  alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
+  alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false; alien.relay.loot = 0;
   alien.relay.shrinkT0 = undefined; alien.relay.shrinkFrom = 0; alien.relay.shots = 0;
   resetFleetCounts();
   alien.ships.length = 0;
@@ -277,12 +278,31 @@ function hullDist(lx, ly, lz, half) {
 const motherHalf = () => [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
 const shipHalf   = () => [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
 
+// Everything an invader gathered comes back to the plane the moment it starts
+// melting. This is the ONE transition for all three hull kinds, which is why
+// it lives in fallAndMelt rather than in three damage paths.
+//
+// The tallies are LIFETIME, not a flow: a harvester keeps counting every tree
+// it ever ate even after shipping the energy on, and the relay and mothership
+// bank their own arrivals. So the same tree can be recovered more than once if
+// you kill the whole chain. That is deliberate -- it makes every hull worth
+// shooting, and a long-lived mothership a jackpot -- rather than an accounting
+// slip. A harvester's live `absorbed` would have paid at most 2.
+function payOutLoot(o) {
+  if (!o.loot) return;
+  addEnergy(o.loot);
+  o.loot = 0;
+}
+
 function fallAndMelt(o, halfH, groundAt, dt) {
   // shared down-fall + terrain-melt state machine; returns true when gone
   if (o.falling) {
     o.vy -= 20 * dt;
     o.y += o.vy * dt;
-    if (o.y - halfH <= groundAt) { o.falling = false; o.melt = 1e-4; o.vy = 0; }
+    if (o.y - halfH <= groundAt) {
+      o.falling = false; o.melt = 1e-4; o.vy = 0;
+      payOutLoot(o);
+    }
     return false;
   }
   if (o.melt > 0) {
@@ -383,9 +403,10 @@ export function updateAliens(dt, now) {
     if (b.done || now < b.t0 + b.dur) continue;
     b.done = true;
     if (b.big) {
-      if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
+      if (!m.gone && !m.falling) { m.loot = (m.loot || 0) + RELAY_SHOTS * 3; spawnHarvester(true); }   // mothership builds one more
     } else if (!r.gone && !r.falling && r.shrinkT0 === undefined) {
       r.shots = (r.shots || 0) + 1;
+      r.loot = (r.loot || 0) + 3;      // an energy shot is three trees' worth
       // swell, but never past the ceiling even if the knob is wound right up
       r.r = Math.min(r.r + r.baseR * TUNEA.relGrow.v, r.baseR * RELAY_GROW);
       if (r.shots >= RELAY_SHOTS) {

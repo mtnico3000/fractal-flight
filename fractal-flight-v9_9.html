@@ -590,7 +590,7 @@ const probe = { ground: null, plantD: 99, pos: [0, 0, 0] };
 // Player laser (v9.9). `holding` spans the right-button press, `charged` flips
 // once the hold passes LASER_CHARGE_MS, `shot` holds the drawn beam for ~0.4 s.
 // Mutated in place like everything else here, never reassigned.
-const laser = { holding: false, holdT0: 0, charged: false, shot: null };
+const laser = { holding: false, holdT0: 0, charged: false, matured: false, armable: false, shot: null };
 
 // ==================== js/shaders.js ====================
 // GLSL vertex + fragment shader sources.
@@ -2123,8 +2123,15 @@ void main() {
       float sray = -Dc + u * Bc;
       if (sray > 0.0 && sray <= t) {
         float dist = length(ro + rd * sray - (ba + sg * u));
-        float halo = exp(-dist * dist / 144.0);       // wid 12
-        float core = exp(-dist * dist / 14.4);
+        // The width GROWS from the muzzle instead of being constant, and that
+        // is what makes it read as a shot rather than a glowing rod. A fixed
+        // 12 m halo is 12 m wide at the nose too -- and the nose is ~15 m from
+        // a chase camera, so the source subtended a huge angle and bloomed
+        // into a blob. Starting at 0.3 m and opening with distance travelled
+        // puts a point at the emitter and keeps the far end a proper beam.
+        float wid = min(0.30 + u * sqrt(cc) * 0.012, 12.0);
+        float halo = exp(-dist * dist / (wid * wid));
+        float core = exp(-dist * dist / (wid * wid * 0.10));
         col += vec3(0.70, 1.00, 0.55) * (halo * 0.50 + core * 2.2) * uLaserA.w;
       }
     }
@@ -2779,19 +2786,39 @@ function zapSound() {
 // lowpass: the pitch and the brightness both climb over the 2 s charge, so the
 // sound tells you when the shot is ready without looking at the cursor.
 let CHARGE = null;
-function laserChargeStart(seconds) {
+// `armable` false = there is not enough energy for a shot. The spin-up is the
+// same either way -- you always hear the weapon TRY -- but a dud rises and
+// then falls back to silence instead of settling into the sustained hum, so
+// the ear learns the difference before the reticle ever appears. The electric
+// hum is reserved for a charge that will actually fire.
+function laserChargeStart(seconds, armable) {
   if (!AC || muted || CHARGE) return;
   const T = AC.currentTime;
   const o1 = AC.createOscillator(), o2 = AC.createOscillator();
   const f = AC.createBiquadFilter(), g = AC.createGain();
   o1.type = 'sawtooth'; o2.type = 'sawtooth';
-  o1.frequency.setValueAtTime(70, T);  o1.frequency.linearRampToValueAtTime(190, T + seconds);
-  o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
   f.type = 'lowpass'; f.Q.value = 6;
-  f.frequency.setValueAtTime(220, T); f.frequency.linearRampToValueAtTime(2400, T + seconds);
-  g.gain.setValueAtTime(0.0001, T);
-  g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
   o1.connect(f); o2.connect(f); f.connect(g); g.connect(AC.destination);
+  if (armable) {
+    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(190, T + seconds);
+    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
+    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(2400, T + seconds);
+    g.gain.setValueAtTime(0.0001, T);
+    g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
+  } else {
+    // dud: climbs to about two thirds and sags away, everything decaying
+    // together so it dies rather than being cut off
+    const peak = T + seconds * 0.55;
+    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(128, peak);
+    o1.frequency.linearRampToValueAtTime(52, T + seconds);
+    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(130, peak);
+    o2.frequency.linearRampToValueAtTime(53, T + seconds);
+    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(900, peak);
+    f.frequency.linearRampToValueAtTime(160, T + seconds);
+    g.gain.setValueAtTime(0.0001, T);
+    g.gain.exponentialRampToValueAtTime(0.040, peak);
+    g.gain.exponentialRampToValueAtTime(0.0001, T + seconds);
+  }
   o1.start(T); o2.start(T);
   CHARGE = { o1, o2, g };
 }
@@ -3628,7 +3655,10 @@ function resolveBlasts() {
       if (gpuBlastPlant[j] < 38) {   // shader says: living tree in this cell
         const c = activeBlast.cells[j];
         const got = collectTreeAt(c.x, activeBlast.y, c.z, Math.min(j * 0.03, 1.1), !!activeBlast.harvest);   // staggered pops; alien harvests score nothing
-        if (got && activeBlast.harvest) activeBlast.harvest.absorbed++;
+        if (got && activeBlast.harvest) {
+          activeBlast.harvest.absorbed++;
+          activeBlast.harvest.loot++;     // what bombing this hull would give back
+        }
       }
     }
     activeBlast = null;
@@ -3783,7 +3813,7 @@ function spawnHarvester(fromMother) {
     tx: spot.x, tz: spot.z,             // current plains target
     hp: HP_SHIP, melt: 0, falling: false, vy: 0,
     deploying: !!fromMother,
-    absorbed: 0, lastShot: 0, sweepAcc: 0, retarget: 0,
+    absorbed: 0, loot: 0, lastShot: 0, sweepAcc: 0, retarget: 0,
   };
   alien.ships.push(s);
 }
@@ -3791,7 +3821,7 @@ function spawnHarvester(fromMother) {
 function initAliens() {
   alien.mother.x = 400; alien.mother.z = 1800;
   alien.mother.y = TUNEA.moAlt.v;
-  alien.mother.hp = HP_MOTHER; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false;
+  alien.mother.hp = HP_MOTHER; alien.mother.melt = 0; alien.mother.falling = false; alien.mother.vy = 0; alien.mother.gone = false; alien.mother.loot = 0;
   // relay: the highest mountaintop we can find near the island center
   let peak = { x: 0, z: 0, h: -999 };
   for (let i = 0; i < 500; i++) {
@@ -3804,7 +3834,7 @@ function initAliens() {
   alien.relay.baseR = TUNEA.relSize.v / 2;
   alien.relay.r = alien.relay.baseR;
   alien.relay.y = peak.h + 30 + alien.relay.r;
-  alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false;
+  alien.relay.hp = HP_RELAY; alien.relay.melt = 0; alien.relay.falling = false; alien.relay.vy = 0; alien.relay.gone = false; alien.relay.loot = 0;
   alien.relay.shrinkT0 = undefined; alien.relay.shrinkFrom = 0; alien.relay.shots = 0;
   resetFleetCounts();
   alien.ships.length = 0;
@@ -4005,12 +4035,31 @@ function hullDist(lx, ly, lz, half) {
 const motherHalf = () => [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
 const shipHalf   = () => [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
 
+// Everything an invader gathered comes back to the plane the moment it starts
+// melting. This is the ONE transition for all three hull kinds, which is why
+// it lives in fallAndMelt rather than in three damage paths.
+//
+// The tallies are LIFETIME, not a flow: a harvester keeps counting every tree
+// it ever ate even after shipping the energy on, and the relay and mothership
+// bank their own arrivals. So the same tree can be recovered more than once if
+// you kill the whole chain. That is deliberate -- it makes every hull worth
+// shooting, and a long-lived mothership a jackpot -- rather than an accounting
+// slip. A harvester's live `absorbed` would have paid at most 2.
+function payOutLoot(o) {
+  if (!o.loot) return;
+  addEnergy(o.loot);
+  o.loot = 0;
+}
+
 function fallAndMelt(o, halfH, groundAt, dt) {
   // shared down-fall + terrain-melt state machine; returns true when gone
   if (o.falling) {
     o.vy -= 20 * dt;
     o.y += o.vy * dt;
-    if (o.y - halfH <= groundAt) { o.falling = false; o.melt = 1e-4; o.vy = 0; }
+    if (o.y - halfH <= groundAt) {
+      o.falling = false; o.melt = 1e-4; o.vy = 0;
+      payOutLoot(o);
+    }
     return false;
   }
   if (o.melt > 0) {
@@ -4111,9 +4160,10 @@ function updateAliens(dt, now) {
     if (b.done || now < b.t0 + b.dur) continue;
     b.done = true;
     if (b.big) {
-      if (!m.gone && !m.falling) spawnHarvester(true);   // mothership builds one more
+      if (!m.gone && !m.falling) { m.loot = (m.loot || 0) + RELAY_SHOTS * 3; spawnHarvester(true); }   // mothership builds one more
     } else if (!r.gone && !r.falling && r.shrinkT0 === undefined) {
       r.shots = (r.shots || 0) + 1;
+      r.loot = (r.loot || 0) + 3;      // an energy shot is three trees' worth
       // swell, but never past the ceiling even if the knob is wound right up
       r.r = Math.min(r.r + r.baseR * TUNEA.relGrow.v, r.baseR * RELAY_GROW);
       if (r.shots >= RELAY_SHOTS) {
@@ -4238,6 +4288,9 @@ function packAlienUniforms(out) {
 
 const LASER_CHARGE_MS = 2000;
 const LASER_BURN_R = BLAST_R * 3;   // the burn is 3x a bomb's circle
+// The muzzle sits on the nose, not at the craft origin. sdCraft's fuselage is
+// an ellipsoid with a 2.30 half-length, so this is just off the tip.
+const MUZZLE_Z = 2.4;
 const T_MAX = 9000;                        // give up past this: it is sky
 
 let camRef = null;                         // latest camera basis, for the release
@@ -4323,10 +4376,17 @@ function aimRay(cam, cx, cy) {
 }
 
 // ---- the button -----------------------------------------------------------
+// `armable` is decided HERE, at the press, because that is what the charge
+// sound has to commit to: the spin-up tells you up front whether this one is
+// going to fire. `matured` records that the hold ran long enough regardless,
+// so a dud press is still a laser attempt and never falls through to a bomb.
 function laserPress(now) {
   laser.holding = true;
   laser.holdT0 = now;
   laser.charged = false;
+  laser.matured = false;
+  laser.armable = canFireLaser();
+  return laser.armable;
 }
 
 // Called every frame: arms the shot once the hold passes the charge time, and
@@ -4334,9 +4394,14 @@ function laserPress(now) {
 // cannot fire while the tab is backgrounded and rAF is paused.
 function updateLaser(now, cam) {
   if (cam) camRef = cam;
-  if (laser.holding && !laser.charged && now - laser.holdT0 >= LASER_CHARGE_MS) {
-    laser.charged = true;
-    document.body.classList.add('laser-armed');
+  if (laser.holding && !laser.matured && now - laser.holdT0 >= LASER_CHARGE_MS) {
+    laser.matured = true;
+    // the reticle appears only for a shot that can be taken; a dud charge
+    // stays a plain crosshair, so the cursor never promises a shot it owes
+    if (laser.armable) {
+      laser.charged = true;
+      document.body.classList.add('laser-armed');
+    }
   }
   if (laser.shot && now - laser.shot.t0 > 420) laser.shot = null;
 }
@@ -4344,17 +4409,24 @@ function updateLaser(now, cam) {
 // Returns true if a shot was fired. input.js drops a bomb when it returns
 // false, so a quick right-click keeps doing exactly what it always did.
 function laserRelease(now, cx, cy) {
-  const wasCharged = laser.charged;
+  const wasCharged = laser.charged, wasLong = laser.matured;
   laser.holding = false;
   laser.charged = false;
+  laser.matured = false;
   laserChargeStop();
   document.body.classList.remove('laser-armed');
-  if (!wasCharged || !camRef) return false;
-  // Charged but broke: refuse and say so with the readout, rather than firing
-  // a beam that does nothing. spendEnergy is all-or-nothing by design.
+  // A long hold is a laser attempt whatever came of it -- returning false here
+  // would drop a BOMB at the end of a two-second charge.
+  if (!wasCharged || !camRef) return wasLong;
+  // Energy can drain between the press and the release (an alien sweep cannot
+  // take it, but a second shot can), so re-check rather than trusting the arm.
   if (!canFireLaser() || !spendEnergy(LASER_COST)) return true;
 
-  const ro = [craft.pos[0], craft.pos[1], craft.pos[2]];
+  // TRACE from the camera along the cursor ray -- what is under the cursor is
+  // what gets hit, which is only true if the ray starts at the eye. DRAWING
+  // starts at the muzzle instead (below), so the beam leaves the nose while
+  // still landing exactly where the reticle was.
+  const ro = [viewPos[0], viewPos[1], viewPos[2]];
   const rd = aimRay(camRef, cx, cy);
   const hull = traceFleet(ro, rd);
   const tg = traceGround(ro, rd);
@@ -4364,7 +4436,10 @@ function laserRelease(now, cx, cy) {
   if (hull && hull.t < t) { t = hull.t; kind = 'hull'; }
 
   const hit = [ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t];
-  laser.shot = { a: ro.slice(), b: hit, t0: now };
+  const muzzle = [craft.pos[0] + craft.f[0] * MUZZLE_Z,
+                  craft.pos[1] + craft.f[1] * MUZZLE_Z,
+                  craft.pos[2] + craft.f[2] * MUZZLE_Z];
+  laser.shot = { a: muzzle, b: hit, t0: now };
   laserFireSound();
 
   if (kind === 'hull') {
@@ -4379,6 +4454,7 @@ function laserRelease(now, cx, cy) {
 function laserCancel() {
   laser.holding = false;
   laser.charged = false;
+  laser.matured = false;
   laser.shot = null;
   laserChargeStop();
   document.body.classList.remove('laser-armed');
@@ -4452,8 +4528,10 @@ canvas.addEventListener('mousedown', e => {
     mouse.lmbDown = true; mouse.lastAuto = performance.now();
   } else if (e.button === 2) {
     rbDown = true;
-    laserPress(performance.now());
-    laserChargeStart(LASER_CHARGE_MS / 1000);   // hum rises for exactly the charge
+    // the press answers whether there is energy for a shot, and the charge
+    // sound commits to that answer: a rising hum, or a dud that sags to silence
+    const armable = laserPress(performance.now());
+    laserChargeStart(LASER_CHARGE_MS / 1000, armable);
   }
 });
 window.addEventListener('mouseup', e => {

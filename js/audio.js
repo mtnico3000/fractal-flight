@@ -296,19 +296,39 @@ export function zapSound() {
 // lowpass: the pitch and the brightness both climb over the 2 s charge, so the
 // sound tells you when the shot is ready without looking at the cursor.
 let CHARGE = null;
-export function laserChargeStart(seconds) {
+// `armable` false = there is not enough energy for a shot. The spin-up is the
+// same either way -- you always hear the weapon TRY -- but a dud rises and
+// then falls back to silence instead of settling into the sustained hum, so
+// the ear learns the difference before the reticle ever appears. The electric
+// hum is reserved for a charge that will actually fire.
+export function laserChargeStart(seconds, armable) {
   if (!AC || muted || CHARGE) return;
   const T = AC.currentTime;
   const o1 = AC.createOscillator(), o2 = AC.createOscillator();
   const f = AC.createBiquadFilter(), g = AC.createGain();
   o1.type = 'sawtooth'; o2.type = 'sawtooth';
-  o1.frequency.setValueAtTime(70, T);  o1.frequency.linearRampToValueAtTime(190, T + seconds);
-  o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
   f.type = 'lowpass'; f.Q.value = 6;
-  f.frequency.setValueAtTime(220, T); f.frequency.linearRampToValueAtTime(2400, T + seconds);
-  g.gain.setValueAtTime(0.0001, T);
-  g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
   o1.connect(f); o2.connect(f); f.connect(g); g.connect(AC.destination);
+  if (armable) {
+    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(190, T + seconds);
+    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(193, T + seconds);  // beat detune
+    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(2400, T + seconds);
+    g.gain.setValueAtTime(0.0001, T);
+    g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
+  } else {
+    // dud: climbs to about two thirds and sags away, everything decaying
+    // together so it dies rather than being cut off
+    const peak = T + seconds * 0.55;
+    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(128, peak);
+    o1.frequency.linearRampToValueAtTime(52, T + seconds);
+    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(130, peak);
+    o2.frequency.linearRampToValueAtTime(53, T + seconds);
+    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(900, peak);
+    f.frequency.linearRampToValueAtTime(160, T + seconds);
+    g.gain.setValueAtTime(0.0001, T);
+    g.gain.exponentialRampToValueAtTime(0.040, peak);
+    g.gain.exponentialRampToValueAtTime(0.0001, T + seconds);
+  }
   o1.start(T); o2.start(T);
   CHARGE = { o1, o2, g };
 }

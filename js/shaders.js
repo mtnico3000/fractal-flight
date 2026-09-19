@@ -1528,8 +1528,15 @@ void main() {
       float sray = -Dc + u * Bc;
       if (sray > 0.0 && sray <= t) {
         float dist = length(ro + rd * sray - (ba + sg * u));
-        float halo = exp(-dist * dist / 144.0);       // wid 12
-        float core = exp(-dist * dist / 14.4);
+        // The width GROWS from the muzzle instead of being constant, and that
+        // is what makes it read as a shot rather than a glowing rod. A fixed
+        // 12 m halo is 12 m wide at the nose too -- and the nose is ~15 m from
+        // a chase camera, so the source subtended a huge angle and bloomed
+        // into a blob. Starting at 0.3 m and opening with distance travelled
+        // puts a point at the emitter and keeps the far end a proper beam.
+        float wid = min(0.30 + u * sqrt(cc) * 0.012, 12.0);
+        float halo = exp(-dist * dist / (wid * wid));
+        float core = exp(-dist * dist / (wid * wid * 0.10));
         col += vec3(0.70, 1.00, 0.55) * (halo * 0.50 + core * 2.2) * uLaserA.w;
       }
     }

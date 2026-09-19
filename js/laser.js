@@ -14,7 +14,7 @@
 // and costs the shader nothing.
 
 import { TAN_HALF_FOV, WATER_LEVEL, BLAST_R } from './config.js';
-import { laser, craft } from './state.js';
+import { laser, craft, viewPos } from './state.js';
 import { TUNEA } from './tune.js';
 import { terrainShapeJ } from './terrain.js';
 import { alien, alienLaserHit } from './aliens.js';
@@ -24,6 +24,9 @@ import { LASER_COST, spendEnergy, canFireLaser } from './energy.js';
 
 export const LASER_CHARGE_MS = 2000;
 export const LASER_BURN_R = BLAST_R * 3;   // the burn is 3x a bomb's circle
+// The muzzle sits on the nose, not at the craft origin. sdCraft's fuselage is
+// an ellipsoid with a 2.30 half-length, so this is just off the tip.
+const MUZZLE_Z = 2.4;
 const T_MAX = 9000;                        // give up past this: it is sky
 
 let camRef = null;                         // latest camera basis, for the release
@@ -109,10 +112,17 @@ function aimRay(cam, cx, cy) {
 }
 
 // ---- the button -----------------------------------------------------------
+// `armable` is decided HERE, at the press, because that is what the charge
+// sound has to commit to: the spin-up tells you up front whether this one is
+// going to fire. `matured` records that the hold ran long enough regardless,
+// so a dud press is still a laser attempt and never falls through to a bomb.
 export function laserPress(now) {
   laser.holding = true;
   laser.holdT0 = now;
   laser.charged = false;
+  laser.matured = false;
+  laser.armable = canFireLaser();
+  return laser.armable;
 }
 
 // Called every frame: arms the shot once the hold passes the charge time, and
@@ -120,9 +130,14 @@ export function laserPress(now) {
 // cannot fire while the tab is backgrounded and rAF is paused.
 export function updateLaser(now, cam) {
   if (cam) camRef = cam;
-  if (laser.holding && !laser.charged && now - laser.holdT0 >= LASER_CHARGE_MS) {
-    laser.charged = true;
-    document.body.classList.add('laser-armed');
+  if (laser.holding && !laser.matured && now - laser.holdT0 >= LASER_CHARGE_MS) {
+    laser.matured = true;
+    // the reticle appears only for a shot that can be taken; a dud charge
+    // stays a plain crosshair, so the cursor never promises a shot it owes
+    if (laser.armable) {
+      laser.charged = true;
+      document.body.classList.add('laser-armed');
+    }
   }
   if (laser.shot && now - laser.shot.t0 > 420) laser.shot = null;
 }
@@ -130,17 +145,24 @@ export function updateLaser(now, cam) {
 // Returns true if a shot was fired. input.js drops a bomb when it returns
 // false, so a quick right-click keeps doing exactly what it always did.
 export function laserRelease(now, cx, cy) {
-  const wasCharged = laser.charged;
+  const wasCharged = laser.charged, wasLong = laser.matured;
   laser.holding = false;
   laser.charged = false;
+  laser.matured = false;
   laserChargeStop();
   document.body.classList.remove('laser-armed');
-  if (!wasCharged || !camRef) return false;
-  // Charged but broke: refuse and say so with the readout, rather than firing
-  // a beam that does nothing. spendEnergy is all-or-nothing by design.
+  // A long hold is a laser attempt whatever came of it -- returning false here
+  // would drop a BOMB at the end of a two-second charge.
+  if (!wasCharged || !camRef) return wasLong;
+  // Energy can drain between the press and the release (an alien sweep cannot
+  // take it, but a second shot can), so re-check rather than trusting the arm.
   if (!canFireLaser() || !spendEnergy(LASER_COST)) return true;
 
-  const ro = [craft.pos[0], craft.pos[1], craft.pos[2]];
+  // TRACE from the camera along the cursor ray -- what is under the cursor is
+  // what gets hit, which is only true if the ray starts at the eye. DRAWING
+  // starts at the muzzle instead (below), so the beam leaves the nose while
+  // still landing exactly where the reticle was.
+  const ro = [viewPos[0], viewPos[1], viewPos[2]];
   const rd = aimRay(camRef, cx, cy);
   const hull = traceFleet(ro, rd);
   const tg = traceGround(ro, rd);
@@ -150,7 +172,10 @@ export function laserRelease(now, cx, cy) {
   if (hull && hull.t < t) { t = hull.t; kind = 'hull'; }
 
   const hit = [ro[0] + rd[0] * t, ro[1] + rd[1] * t, ro[2] + rd[2] * t];
-  laser.shot = { a: ro.slice(), b: hit, t0: now };
+  const muzzle = [craft.pos[0] + craft.f[0] * MUZZLE_Z,
+                  craft.pos[1] + craft.f[1] * MUZZLE_Z,
+                  craft.pos[2] + craft.f[2] * MUZZLE_Z];
+  laser.shot = { a: muzzle, b: hit, t0: now };
   laserFireSound();
 
   if (kind === 'hull') {
@@ -165,6 +190,7 @@ export function laserRelease(now, cx, cy) {
 export function laserCancel() {
   laser.holding = false;
   laser.charged = false;
+  laser.matured = false;
   laser.shot = null;
   laserChargeStop();
   document.body.classList.remove('laser-armed');

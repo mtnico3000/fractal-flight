@@ -274,6 +274,23 @@ const MUTANTS = [
   // RAW newline in a string literal and took the whole battery down.
   ['reset keeps whatever energy was left', 'js/energy.js',
    '  energy = START_ENERGY;', '  energy = energy;', 'test_energy.js'],
+
+  // --- v9.9b: an invader hands back what it gathered -----------------------
+  // The chain is trees -> harvester -> relay -> mothership, and each link
+  // banks what the one below it spent. Every one of these is a link going
+  // quietly to zero, which pays out nothing however long the invasion ran.
+  ['the loot payout fires at the KILL instead of the melt', 'js/aliens.js',
+   '    if (r.hp <= 0) r.falling = true;', '    if (r.hp <= 0) { payOutLoot(r); r.falling = true; }', 'test_aliens.js'],
+  ['a melting hull pays out its loot every frame', 'js/aliens.js',
+   '  o.loot = 0;', '  o.loot = o.loot;', 'test_aliens.js'],
+  ['an empty hull still calls addEnergy', 'js/aliens.js',
+   'if (!o.loot) return;', 'if (o.loot < 0) return;', 'test_aliens.js'],
+  ['the relay banks nothing from an arrival', 'js/aliens.js',
+   'r.loot = (r.loot || 0) + 3;', 'r.loot = (r.loot || 0) + 0;', 'test_aliens.js'],
+  ['the mothership banks nothing from a discharge', 'js/aliens.js',
+   'm.loot = (m.loot || 0) + RELAY_SHOTS * 3;', 'm.loot = (m.loot || 0) + 0;', 'test_aliens.js'],
+  ['a harvester cannot count the trees it eats', 'js/aliens.js',
+   'absorbed: 0, loot: 0,', 'absorbed: 0, loot: undefined,', 'test_aliens.js'],
 ];
 
 function mutate(src, find, repl, all) {

@@ -38,4 +38,4 @@ export const probe = { ground: null, plantD: 99, pos: [0, 0, 0] };
 // Player laser (v9.9). `holding` spans the right-button press, `charged` flips
 // once the hold passes LASER_CHARGE_MS, `shot` holds the drawn beam for ~0.4 s.
 // Mutated in place like everything else here, never reassigned.
-export const laser = { holding: false, holdT0: 0, charged: false, shot: null };
+export const laser = { holding: false, holdT0: 0, charged: false, matured: false, armable: false, shot: null };

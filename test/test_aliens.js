@@ -26,6 +26,7 @@ function fresh() {
   const crashes = [];
   const blasts = [];
   const counts = { harv: -1, relays: -1, mothers: -1 };
+  const paid = [];                          // every addEnergy the fleet triggers
   const aliens = loadModule('aliens.js', {
     TUNEA,
     DBG: { invasion: 1 },
@@ -37,6 +38,7 @@ function fresh() {
     impacts: [],
     blastQueue: [],
     hullExplosionSound: () => {},
+    addEnergy: (n) => { paid.push(n); },
     zapSound: () => {},
     relayBlastSound: () => { blasts.push(1); },
     doCrash: (why) => crashes.push(why),
@@ -47,7 +49,7 @@ function fresh() {
       'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
       'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE']);
   aliens.initAliens();
-  return { aliens, craft, crashes, blasts, counts, TUNEA };
+  return { aliens, craft, crashes, blasts, counts, TUNEA, paid };
 }
 
 // Drop a bomb dead-centre in `target`, one per frame, until its hp runs out.
@@ -443,6 +445,78 @@ check('a laser needs six times fewer hits than a bomb on every hull', () => {
   let n = 0;
   while (s0.hp > 0 && n < 50) { a2.alienLaserHit(1, s0.x, s0.y, s0.z); n++; }
   eq(n, Math.ceil(a2.HP_SHIP / a2.LASER_DAMAGE), 'harvester shots');
+});
+
+check('an invader hands its gathered energy back when it starts melting', () => {
+  // The payout is on the melt TRANSITION, which is the one moment all three
+  // hull kinds pass through — that is why it lives in fallAndMelt and not in
+  // three separate damage paths.
+  const { aliens, paid } = fresh();
+  const r = aliens.alien.relay;
+  r.loot = 42;
+  aliens.alienLaserHit(7, r.x, r.y, r.z);     // one shot melts it
+  ok(r.falling, 'the relay should be on its way down');
+  eq(paid.length, 0, 'nothing may be paid while it is still FALLING');
+
+  for (let i = 0; i < 400 && !r.melt; i++) aliens.updateAliens(0.05, 1000 + i * 50);
+  ok(r.melt > 0, 'the relay never reached the melt phase');
+  eq(paid.length, 1, 'exactly one payout');
+  eq(paid[0], 42, 'the plane gets what the hull had gathered');
+  eq(r.loot, 0, 'the hull must not be able to pay twice');
+
+  // and it stays paid out across the whole melt
+  const before = paid.length;
+  for (let i = 0; i < 100; i++) aliens.updateAliens(0.05, 40000 + i * 50);
+  eq(paid.length, before, 'melting must not keep paying every frame');
+});
+
+check('the relay banks what a harvester ships it', () => {
+  // The chain is trees -> harvester -> relay -> mothership, and each link has
+  // to bank what the one below it spent, or killing the upper links pays out
+  // nothing however long the invasion ran. A harvester spends 3 absorbed trees
+  // per energy shot, so an arrival is worth exactly 3.
+  const { aliens } = fresh();
+  const r = aliens.alien.relay;
+  r.loot = 0;
+  const before = r.loot;
+  // an energy bolt that has already completed its flight
+  aliens.alien.bolts.push({ x0: r.x, y0: r.y + 50, z0: r.z, x1: r.x, y1: r.y, z1: r.z,
+                            t0: 0, dur: 1, big: false, done: false, ship: null, src: 0 });
+  aliens.updateAliens(0.05, 5000);
+  eq(r.loot - before, 3, 'an arrival must bank the three trees the harvester spent');
+});
+
+check('the mothership banks what the relay discharges into it', () => {
+  const { aliens } = fresh();
+  const m = aliens.alien.mother, r = aliens.alien.relay;
+  m.loot = 0;
+  aliens.alien.bolts.push({ x0: r.x, y0: r.y, z0: r.z, x1: m.x, y1: m.y, z1: m.z,
+                            t0: 0, dur: 1, big: true, done: false, ship: null, src: 6 });
+  aliens.updateAliens(0.05, 5000);
+  eq(m.loot, aliens.RELAY_SHOTS * 3,
+     'a discharge is a full relay cycle: RELAY_SHOTS arrivals of three trees each');
+});
+
+check('a harvester starts able to count what it eats', () => {
+  // weapons.js does `harvest.loot++` on every tree an alien sweep takes, so
+  // the field has to exist as a NUMBER at spawn -- undefined++ is NaN, and a
+  // NaN payout is silently nothing.
+  const { aliens } = fresh();
+  for (const s of aliens.alien.ships) {
+    eq(typeof s.loot, 'number', 'harvester loot type');
+    eq(s.loot, 0, 'a fresh harvester has gathered nothing');
+  }
+  ok(aliens.alien.ships.length > 0, 'the fleet must start with a harvester');
+});
+
+check('a hull that gathered nothing pays nothing', () => {
+  const { aliens, paid } = fresh();
+  const r = aliens.alien.relay;
+  r.loot = 0;
+  aliens.alienLaserHit(7, r.x, r.y, r.z);
+  for (let i = 0; i < 400 && !r.melt; i++) aliens.updateAliens(0.05, 1000 + i * 50);
+  ok(r.melt > 0, 'the relay never reached the melt phase');
+  eq(paid.length, 0, 'an empty hull must not call addEnergy at all');
 });
 
 // ---- informational: how the hull sits against its own hover altitude ------

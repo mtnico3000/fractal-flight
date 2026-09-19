@@ -73,8 +73,10 @@ canvas.addEventListener('mousedown', e => {
     mouse.lmbDown = true; mouse.lastAuto = performance.now();
   } else if (e.button === 2) {
     rbDown = true;
-    laserPress(performance.now());
-    laserChargeStart(LASER_CHARGE_MS / 1000);   // hum rises for exactly the charge
+    // the press answers whether there is energy for a shot, and the charge
+    // sound commits to that answer: a rising hum, or a dud that sags to silence
+    const armable = laserPress(performance.now());
+    laserChargeStart(LASER_CHARGE_MS / 1000, armable);
   }
 });
 window.addEventListener('mouseup', e => {

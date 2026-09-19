@@ -200,7 +200,10 @@ export function resolveBlasts() {
       if (gpuBlastPlant[j] < 38) {   // shader says: living tree in this cell
         const c = activeBlast.cells[j];
         const got = collectTreeAt(c.x, activeBlast.y, c.z, Math.min(j * 0.03, 1.1), !!activeBlast.harvest);   // staggered pops; alien harvests score nothing
-        if (got && activeBlast.harvest) activeBlast.harvest.absorbed++;
+        if (got && activeBlast.harvest) {
+          activeBlast.harvest.absorbed++;
+          activeBlast.harvest.loot++;     // what bombing this hull would give back
+        }
       }
     }
     activeBlast = null;
