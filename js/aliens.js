@@ -32,15 +32,37 @@ export const alien = {
   bolts: [],
 };
 
-function alienPlainsSpot(cx, cz, radius) {
-  // find a low, harvestable spot (the plains): terrain 8..60 m
-  let best = null;
+// How far a harvester tries to stay from the others. They are 1200 m long, so
+// anything under about a length still reads as a pile.
+const SHIP_SEP = 1800;
+
+function nearestShipDist(x, z, self) {
+  let d = 1e9;
+  for (const o of alien.ships) {
+    if (o === self || o.falling || o.melt > 0) continue;
+    // against the TARGET as well as the position: two ships converging on one
+    // plain are already clustered even while they are still far apart
+    d = Math.min(d, Math.hypot(o.x - x, o.z - z), Math.hypot((o.tx || o.x) - x, (o.tz || o.z) - z));
+  }
+  return d;
+}
+
+function alienPlainsSpot(cx, cz, radius, self) {
+  // A low, harvestable spot (terrain 8..60 m) that is also AWAY FROM THE
+  // OTHERS. The old version returned the first candidate inside the height
+  // band and considered nothing else, so every harvester walked onto the same
+  // plain and sat overlapping. Now all 40 candidates are scored and the best
+  // wins, with separation weighted above a perfect plain -- they still share
+  // ground sometimes, which is fine, but they no longer pile up.
+  let best = null, bestScore = -1e9;
   for (let i = 0; i < 40; i++) {
     const a = Math.random() * 6.2832, d = 300 + Math.random() * radius;
     const x = cx + Math.sin(a) * d, z = cz + Math.cos(a) * d;
     const h = terrainShapeJ(x, z);
-    if (h > 8 && h < 60) return { x, z };
-    if (best === null || Math.abs(h - 30) < Math.abs(best.h - 30)) best = { x, z, h };
+    const fit = 1 - Math.min(1, Math.abs(h - 34) / 26);          // 1 mid-band, 0 at the edges
+    const sep = Math.min(nearestShipDist(x, z, self), SHIP_SEP) / SHIP_SEP;
+    const score = fit + sep * 1.6;
+    if (score > bestScore) { bestScore = score; best = { x, z, h }; }
   }
   return best;
 }
@@ -355,7 +377,7 @@ export function updateAliens(dt, now) {
     s.retarget -= dt;
     const dx = s.tx - s.x, dz = s.tz - s.z;
     if (Math.hypot(dx, dz) < 120 || s.retarget <= 0) {
-      const spot = alienPlainsSpot(s.x, s.z, 1600);
+      const spot = alienPlainsSpot(s.x, s.z, 1600, s);   // `s` so it avoids its OWN target too
       s.tx = spot.x; s.tz = spot.z; s.retarget = 90;
     }
     const wantA = Math.atan2(s.tx - s.x, s.tz - s.z);

@@ -316,18 +316,24 @@ export function laserChargeStart(seconds, armable) {
     g.gain.setValueAtTime(0.0001, T);
     g.gain.exponentialRampToValueAtTime(0.055, T + 0.25);
   } else {
-    // dud: climbs to about two thirds and sags away, everything decaying
-    // together so it dies rather than being cut off
-    const peak = T + seconds * 0.55;
-    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(128, peak);
-    o1.frequency.linearRampToValueAtTime(52, T + seconds);
-    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(130, peak);
-    o2.frequency.linearRampToValueAtTime(53, T + seconds);
-    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(900, peak);
-    f.frequency.linearRampToValueAtTime(160, T + seconds);
+    // Dud: climbs, HOLDS near its peak, then sags away. The first version
+    // peaked at 0.55 of the charge and was gone by the end of it, which read
+    // as a blip rather than as a weapon failing to spin up. It now peaks at
+    // 0.5, sustains to 1.15 and only dies at 1.9x the charge window, so it
+    // outlasts the press and is clearly audible.
+    const peak = T + seconds * 0.50;
+    const hold = T + seconds * 1.15;
+    const end  = T + seconds * 1.90;
+    o1.frequency.setValueAtTime(70, T);   o1.frequency.linearRampToValueAtTime(138, peak);
+    o1.frequency.setValueAtTime(138, hold); o1.frequency.linearRampToValueAtTime(46, end);
+    o2.frequency.setValueAtTime(70.9, T); o2.frequency.linearRampToValueAtTime(140, peak);
+    o2.frequency.setValueAtTime(140, hold); o2.frequency.linearRampToValueAtTime(47, end);
+    f.frequency.setValueAtTime(220, T);   f.frequency.linearRampToValueAtTime(1100, peak);
+    f.frequency.setValueAtTime(1100, hold); f.frequency.linearRampToValueAtTime(150, end);
     g.gain.setValueAtTime(0.0001, T);
-    g.gain.exponentialRampToValueAtTime(0.040, peak);
-    g.gain.exponentialRampToValueAtTime(0.0001, T + seconds);
+    g.gain.exponentialRampToValueAtTime(0.050, peak);
+    g.gain.setValueAtTime(0.050, hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, end);
   }
   o1.start(T); o2.start(T);
   CHARGE = { o1, o2, g };

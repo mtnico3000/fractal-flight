@@ -137,15 +137,15 @@ check('the terrain march: budget is a hit, not a hole; refine only while closing
 });
 
 check('the hull marches keep their tangency budget', () => {
-  const mm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ rd \* t, uMotherHalf\);/.exec(glsl);
-  const hm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ ld \* t, uShipHalf\);/.exec(glsl);
+  const mm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ rd \* t, uMotherHalf, mMinR2\);/.exec(glsl);
+  const hm = /for \(int i = 0; i < (\d+); i\+\+\)[\s\S]{0,60}?float d = shipDE\(lo \+ ld \* t, uShipHalf, sMinR2\);/.exec(glsl);
   ok(mm, 'could not find the mothership march loop');
   ok(hm, 'could not find the harvester march loop');
   ok(Number(mm[1]) >= 384, 'mothership march is down to ' + mm[1] +
      ' iterations; below ~384 tangent rays start missing the hull');
   ok(Number(hm[1]) >= 384, 'harvester march is down to ' + hm[1] + ' iterations');
   // relaxation measured WORSE here; the steps must stay full length
-  ok(/float d = shipDE\(lo \+ rd \* t, uMotherHalf\);[\s\S]{0,200}?t \+= d;/.test(glsl),
+  ok(/float d = shipDE\(lo \+ rd \* t, uMotherHalf, mMinR2\);[\s\S]{0,200}?t \+= d;/.test(glsl),
      'the mothership march must step t += d, not a relaxed fraction');
 });
 
@@ -242,6 +242,29 @@ check('nightfall continues where dusk saturates', () => {
      'the sea body colour is unlit and must be faded at night');
   ok(/shade \*= mix\(vec3\(1\.0 - 0\.96 \* nightAmount\(sun\)\), sunLightCol\(sun\) \* 0\.78, 0\.5\);/.test(glsl),
      'only half the cloud shade is sun-lit; the other half must fade at night');
+});
+
+check('a hit drives the struck hull’s sphere fold to the slider maximum', () => {
+  // The hit no longer just recolours: hullMinR2 pushes uBoxParam.y to
+  // BOX_MINR2_MAX for the struck hull and lets it fall back, so the mandelbox
+  // blows open. That constant is TUNEA.boxMinR's MAX, squared, and nothing in
+  // the code connects the two -- widen the slider and the flash silently stops
+  // reaching the end of its own range.
+  const m = /const float BOX_MINR2_MAX = ([\d.]+);/.exec(glsl);
+  ok(m, 'BOX_MINR2_MAX must be declared');
+  const tune = fs.readFileSync(path.join(__dirname, '..', 'js', 'tune.js'), 'utf8');
+  const knob = /boxMinR:\s*\{[^}]*?max:\s*([\d.]+)/.exec(tune);
+  ok(knob, 'could not find TUNEA.boxMinR');
+  const want = Number(knob[1]) * Number(knob[1]);
+  ok(Math.abs(Number(m[1]) - want) < 1e-9,
+     'BOX_MINR2_MAX is ' + m[1] + ' but boxMinR maxes at ' + knob[1] + ' (squared: ' + want + ')');
+  ok(/float hullMinR2\(float id\)/.test(glsl), 'hullMinR2 must exist');
+  ok(/mix\(uBoxParam\.y, BOX_MINR2_MAX, hit\)/.test(glsl),
+     'the hit must interpolate the sphere fold toward the maximum');
+  // the normal has to be taken on the SAME perturbed surface as the march, or
+  // the hull is lit as its undeformed self while its silhouette moves
+  ok(/#define SDE\(P\) shipDE\(shipLocal\(P, c, ca, sa\), h, hullMinR2\(id\)\)/.test(glsl),
+     'alienNormal must use the same perturbed fold the march used');
 });
 
 check('no backtick inside the GLSL templates', () => {

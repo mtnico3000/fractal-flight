@@ -873,10 +873,18 @@ vec3 ringNormal(vec3 wp) {
 // silhouette is guaranteed (any aspect ratio works) while the mandelbox
 // carves the hull detail. Fold/clamp math only — no trig — and every ship is
 // gated by a ray/box test, so rays that miss pay almost nothing.
-float mandelboxDE(vec3 p) {
+// BOX_MINR2_MAX is TUNEA.boxMinR's slider MAXIMUM, squared (1.5 * 1.5). A
+// strike drives a hull's sphere-fold radius all the way here and lets it fall
+// back, which blows the fractal open instead of merely sliding it. Kept in
+// step with tune.js by test_shader.js, because nothing else connects them.
+const float BOX_MINR2_MAX = 2.25;
+
+// minR2 is a PARAMETER rather than a straight read of uBoxParam.y so a single
+// hull can be perturbed without touching the rest of the fleet.
+float mandelboxDE(vec3 p, float minR2) {
   vec3 q = p;
   float dr = 1.0;
-  float fixR2 = 1.0, minR2 = uBoxParam.y;
+  float fixR2 = 1.0;
   for (int i = 0; i < 8; i++) {
     q = clamp(q, -uBoxParam.z, uBoxParam.z) * 2.0 - q;   // box fold
     float r2 = dot(q, q);
@@ -888,9 +896,9 @@ float mandelboxDE(vec3 p) {
   return length(q) / abs(dr);
 }
 
-float shipDE(vec3 l, vec3 h) {  // l = local coords, h = half extents
+float shipDE(vec3 l, vec3 h, float minR2) {  // l = local coords, h = half extents
   float hmin = min(h.x, min(h.y, h.z));
-  float mb = mandelboxDE(l / h * 1.15) / 1.15 * hmin;   // conservative for the stretch
+  float mb = mandelboxDE(l / h * 1.15, minR2) / 1.15 * hmin;   // conservative for the stretch
   // Rounded corners for free: shrink the box by r, then add r back to the
   // distance. Same outer dimensions, an r-radius fillet on every edge. This
   // only works because sdBox above is the EXACT box SDF -- the cheap
@@ -928,6 +936,13 @@ vec2 boxGate(vec3 lo, vec3 ld, vec3 h) {
   return vec2(max(max(tmin.x, tmin.y), tmin.z), min(min(tmax.x, tmax.y), tmax.z));
 }
 
+// The struck hull's sphere fold, driven to maximum by the hit flash and
+// relaxing back with it. Evaluated ONCE per hull, never inside a march loop.
+float hullMinR2(float id) {
+  float hit = (abs(uAlienHit.x - id) < 0.5) ? uAlienHit.y : 0.0;
+  return mix(uBoxParam.y, BOX_MINR2_MAX, hit);
+}
+
 // returns vec2(t, id): id 0 = mothership, 1..6 harvester, 7 = relay bulb
 vec2 marchAliens(vec3 ro, vec3 rd) {
   float tBest = 1e9;
@@ -938,6 +953,7 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, rd, uMotherHalf + 2.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
+      float mMinR2 = hullMinR2(0.0);
       // Budget, not precision. A ray nearly TANGENT to the hull converges
       // geometrically slowly in sphere tracing, and the corner fillet made
       // tangency common: a flat face is tangent at one grazing angle, a 90 m
@@ -959,7 +975,7 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
       // already agreed with a 0.35-relax reference to ~1 m wherever it
       // converged. Relaxation just spends iterations to arrive slower.
       for (int i = 0; i < 384; i++) {
-        float d = shipDE(lo + rd * t, uMotherHalf);
+        float d = shipDE(lo + rd * t, uMotherHalf, mMinR2);
         if (d < 0.5 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 0.0; } break; }
         t += d;
         if (t > g.y) break;
@@ -976,10 +992,11 @@ vec2 marchAliens(vec3 ro, vec3 rd) {
     vec2 g = boxGate(lo, ld, uShipHalf + 1.0);
     if (g.x < g.y && g.y > 0.0) {
       float t = max(g.x, 0.0);
+      float sMinR2 = hullMinR2(1.0 + float(s));
       // same tangency budget as the mothership above -- harvesters are
       // smaller but their fillet is proportional, so the band is just as wide
       for (int i = 0; i < 384; i++) {
-        float d = shipDE(lo + ld * t, uShipHalf);
+        float d = shipDE(lo + ld * t, uShipHalf, sMinR2);
         if (d < 0.15 + t * 0.001) { if (t < tBest) { tBest = t; idBest = 1.0 + float(s); } break; }
         t += d;
         if (t > g.y) break;
@@ -1026,7 +1043,7 @@ vec3 alienNormal(vec3 wp, float id) {
     c = uShipPos[s].xyz; h = uShipHalf;
     ca = cos(uShipPos[s].w); sa = sin(uShipPos[s].w);
   }
-  #define SDE(P) shipDE(shipLocal(P, c, ca, sa), h)
+  #define SDE(P) shipDE(shipLocal(P, c, ca, sa), h, hullMinR2(id))
   vec3 n = normalize(vec3(SDE(wp + e.xyy) - SDE(wp - e.xyy), SDE(wp + e.yxy) - SDE(wp - e.yxy), SDE(wp + e.yyx) - SDE(wp - e.yyx)));
   #undef SDE
   return n;
@@ -1428,18 +1445,17 @@ void main() {
       lp = shipLocal(pos, uShipPos[si].xyz, ca2, sa2);
       sizeRef = uShipHalf.x;
     }
-    // A hit flares the hull cold white-blue AND wrenches one fractal
-    // parameter: oScale is the self-similar zoom of the Julia filament
-    // lattice, so a strike makes the whole bio-pattern lurch ~1.9x finer and
-    // relax back as the flash decays. Picked over the colour-only flash
-    // because it is the one knob that reads as the SHIP being deformed rather
-    // than lit. One vec2 for the whole fleet -- the uniform budget is already
-    // over the 224-slot mobile minimum (see CLAUDE.md), and two hits on two
-    // different hulls inside the same flash window is not a real case. A laser
-    // strike and a bomb raise the same flare; the laser just carries six times
-    // the damage behind it.
+    // A hit flares the hull cold white-blue, and the GEOMETRY itself lurches:
+    // hullMinR2 drives the struck hull's sphere-fold radius to BOX_MINR2_MAX
+    // and back inside marchAliens, so the mandelbox blows open and re-closes.
+    // v9.9 shifted the shading pattern's zoom instead, which only slid the
+    // filaments a few metres -- the fold is the knob that deforms the ship.
+    // One vec2 for the whole fleet: the uniform budget is already over the
+    // 224-slot mobile minimum (CLAUDE.md), and two hits on two different hulls
+    // inside one flash window is not a real case. A laser and a bomb raise the
+    // same flare; the laser just carries six times the damage behind it.
     float hitF = (abs(uAlienHit.x - mal.y) < 0.5) ? uAlienHit.y : 0.0;
-    float oScale = 84.0 / max(sizeRef, 1.0) * (1.0 + 0.9 * hitF);
+    float oScale = 84.0 / max(sizeRef, 1.0);
     float detail = 1.0 - smoothstep(1200.0, 4000.0, t);
     float org = (detail > 0.01) ? alienFlora(vec2(lp.x + lp.y * 0.6, lp.z - lp.y * 0.45) * oScale) : 0.35;
     float mott = fbm(lp.xz * (oScale * 0.05) + lp.y * 0.02, 3);

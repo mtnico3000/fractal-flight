@@ -47,7 +47,7 @@ function fresh() {
     resetFleetCounts: () => {},
   }, ['HP_MOTHER', 'HP_SHIP', 'HP_RELAY', 'hullAlive', 'bombs', 'craft',
       'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
-      'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE']);
+      'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE', 'spawnHarvester', 'SHIP_SEP']);
   aliens.initAliens();
   return { aliens, craft, crashes, blasts, counts, TUNEA, paid };
 }
@@ -484,6 +484,29 @@ check('the relay banks what a harvester ships it', () => {
                             t0: 0, dur: 1, big: false, done: false, ship: null, src: 0 });
   aliens.updateAliens(0.05, 5000);
   eq(r.loot - before, 3, 'an arrival must bank the three trees the harvester spent');
+});
+
+check('harvesters spread out instead of piling onto one plain', () => {
+  // alienPlainsSpot used to return the FIRST candidate inside the 8..60 m
+  // height band and weigh nothing else, so every harvester walked onto the
+  // same plain: measured over 200 trials, the closest pair had a median of
+  // 499 m and 95% of trials put two 1200 m hulls inside one hull length of
+  // each other. Scoring separation alongside the height fit takes the median
+  // to 1810 m and the overlap rate to 0%.
+  const len = 1200;                                  // a hull length to beat
+  for (let trial = 0; trial < 12; trial++) {
+    const { aliens } = fresh();
+    while (aliens.alien.ships.length < 6) aliens.spawnHarvester(false);
+    const t = aliens.alien.ships;
+    let mn = Infinity, pair = '';
+    for (let i = 0; i < t.length; i++)
+      for (let j = i + 1; j < t.length; j++) {
+        const d = Math.hypot(t[i].tx - t[j].tx, t[i].tz - t[j].tz);
+        if (d < mn) { mn = d; pair = i + '/' + j; }
+      }
+    ok(mn > len, 'trial ' + trial + ': harvesters ' + pair + ' are ' + Math.round(mn) +
+       ' m apart, inside one ' + len + ' m hull length');
+  }
 });
 
 check('the mothership banks what the relay discharges into it', () => {
