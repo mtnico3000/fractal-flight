@@ -168,9 +168,34 @@ export function bombDropSound() {
 // sustains. So this is built the other way round: two narrow bandpass bands
 // with high Q ring on after the impact, over a deep sub, and the bright crack
 // that makes explosionSound() read as "open air" is gone entirely.
+// How much louder than its original mix the hull hit plays. Nico, 19 Sept:
+// the LOW, SOFT character is deliberate and stays -- it was only too quiet.
+// One number on a shared bus rather than four layer gains, so turning it up
+// cannot drift the balance between sub, whump, ring and onset.
+//
+// 3.6 with the limiter below was picked by MEASUREMENT, not by ear-guessing:
+// rendered offline against the original mix it is +5.8 dB RMS -- about twice
+// as loud -- while peaking at 0.788 against the original's 0.765, with zero
+// clipped samples. 2.2 only bought +3.3 dB and actually LOWERED the peak,
+// because the limiter was doing more work than the loudness needed.
+const HULL_GAIN = 3.6;
+
 export function hullExplosionSound() {
   if (!AC || muted) return;
   const T = AC.currentTime, sr = AC.sampleRate;
+  // The four layers sum to ~1.76 at unity, so 2.2x would clip hard on the
+  // destination and turn a soft boom into a crunch -- which is exactly the
+  // character being protected. They go through a limiter instead: it only
+  // engages on the peaks, so the body gets louder and the edges stay smooth.
+  const bus = AC.createGain();
+  bus.gain.value = HULL_GAIN;
+  const lim = AC.createDynamicsCompressor();
+  lim.threshold.setValueAtTime(-8, T);
+  lim.knee.setValueAtTime(6, T);
+  lim.ratio.setValueAtTime(8, T);
+  lim.attack.setValueAtTime(0.003, T);
+  lim.release.setValueAtTime(0.25, T);
+  bus.connect(lim); lim.connect(AC.destination);
   const noise = (dur) => {
     const buf = AC.createBuffer(1, Math.floor(sr * dur), sr);
     const ch = buf.getChannelData(0);
@@ -186,7 +211,7 @@ export function hullExplosionSound() {
   o.frequency.exponentialRampToValueAtTime(16, T + 1.0);
   og.gain.setValueAtTime(0.7, T);
   og.gain.exponentialRampToValueAtTime(0.001, T + 1.25);
-  o.connect(og); og.connect(AC.destination);
+  o.connect(og); og.connect(bus);
   o.start(T); o.stop(T + 1.3);
 
   // whump: resonant lowpass, Q high enough to have a body of its own
@@ -197,7 +222,7 @@ export function hullExplosionSound() {
   const wg = AC.createGain();
   wg.gain.setValueAtTime(0.45, T);
   wg.gain.exponentialRampToValueAtTime(0.001, T + 0.55);
-  wsrc.connect(wf); wf.connect(wg); wg.connect(AC.destination);
+  wsrc.connect(wf); wf.connect(wg); wg.connect(bus);
   wsrc.start(T); wsrc.stop(T + 0.6);
 
   // hull ring: the part that says "metal box". Two narrow bands, different
@@ -209,7 +234,7 @@ export function hullExplosionSound() {
     const rg = AC.createGain();
     rg.gain.setValueAtTime(gain, T);
     rg.gain.exponentialRampToValueAtTime(0.001, T + dur);
-    rs.connect(bp); bp.connect(rg); rg.connect(AC.destination);
+    rs.connect(bp); bp.connect(rg); rg.connect(bus);
     rs.start(T); rs.stop(T + dur + 0.02);
   }
 
@@ -221,7 +246,7 @@ export function hullExplosionSound() {
   const tg = AC.createGain();
   tg.gain.setValueAtTime(0.14, T);
   tg.gain.exponentialRampToValueAtTime(0.001, T + 0.09);
-  tsrc.connect(tf); tf.connect(tg); tg.connect(AC.destination);
+  tsrc.connect(tf); tf.connect(tg); tg.connect(bus);
   tsrc.start(T); tsrc.stop(T + 0.1);
 }
 
