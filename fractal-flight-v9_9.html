@@ -244,6 +244,27 @@ body.touch #tune, body.touch #tuneA { display: none; }
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   color: rgba(220, 230, 245, 0.9); text-align: center;
 }
+/* GPU hint (v9.9): shown on the start page only when the context did NOT land
+   on a discrete GPU. A 3x performance cliff is otherwise invisible -- the game
+   just quietly runs at a lower resolution, because the adaptive scaler hides
+   it. Dismissible, and absent entirely on a machine that is already fine. */
+#gpuHint {
+  display: none; margin: 18px auto 0; max-width: 560px; padding: 9px 12px;
+  border: 1px solid rgba(255, 170, 60, 0.35); border-radius: 4px;
+  background: rgba(60, 40, 10, 0.45); color: rgba(255, 215, 165, 0.92);
+  font-size: 10px; letter-spacing: 0.6px; line-height: 1.55; text-align: left;
+}
+#gpuHint.show { display: block; }
+#gpuHint code {
+  display: block; margin-top: 5px; padding: 5px 6px; font-size: 9.5px;
+  background: rgba(0,0,0,0.42); border-radius: 3px; color: rgba(190, 235, 255, 0.95);
+  white-space: pre-wrap; word-break: break-all; letter-spacing: 0;
+}
+#gpuHint button {
+  float: right; margin-left: 10px; background: none; border: none; cursor: pointer;
+  color: rgba(255, 200, 130, 0.65); font-size: 12px; line-height: 1; padding: 0;
+}
+#gpuHint button:hover { color: rgba(255, 220, 170, 1); }
 #start h1 { font-size: 26px; letter-spacing: 6px; color: rgba(255, 200, 130, 0.95); text-shadow: 0 0 24px rgba(255,170,60,0.35); }
 #start h1 span { display: block; font-size: 12px; letter-spacing: 3px; opacity: 0.6; margin-top: 6px; }
 #spinner {
@@ -455,6 +476,7 @@ body.touch #tune, body.touch #tuneA { display: none; }
         <input id="liveryColor" type="color" value="#e05a51" title="custom color (native HTML5 picker — works offline)">
       </div>
     </div>
+    <div id="gpuHint"><span id="gpuHintText"></span> <button id="gpuHintClose" title="dismiss">✕</button></div>
     <button id="startBtn">START</button>
   </div>
 </div>
@@ -2218,6 +2240,53 @@ void main() {
 
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
+
+// ---- which GPU did we actually land on? (v9.9) ----------------------------
+// powerPreference above is only a HINT, and on a Windows hybrid laptop it is
+// routinely ignored: the adapter is chosen when the browser's GPU process
+// starts, long before this page exists, from a per-app registry preference or
+// a command-line flag. A page cannot change that. What it CAN do is notice and
+// say so -- otherwise a 3x performance cliff is completely invisible, because
+// the adaptive scaler just quietly drops the resolution to compensate.
+//
+// Measured on this project: the same code, same machine, ran at 1707x932 on
+// the RTX and was pinned to the scaler's 683x359 floor on the Intel iGPU.
+function gpuRenderer() {
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!ext) return null;                       // privacy-restricted: say nothing
+    return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || null;
+  } catch (_) { return null; }
+}
+
+// 'discrete' | 'integrated' | 'software' | null (unknown -- stay quiet)
+function gpuClass(name) {
+  if (!name) return null;
+  const s = name.toLowerCase();
+  // software first: SwiftShader and WARP both name a vendor too, so an
+  // integrated test would otherwise claim them
+  if (/swiftshader|llvmpipe|basic render|software|microsoft basic/.test(s)) return 'software';
+  if (/\b(rtx|geforce|quadro|radeon rx|radeon pro|arc a\d)/.test(s)) return 'discrete';
+  if (/apple m\d/.test(s)) return 'discrete';   // Apple silicon has no slower option
+  if (/intel|iris|uhd graphics|hd graphics|vega \d|radeon graphics|adreno|mali|powervr/.test(s)) return 'integrated';
+  return null;
+}
+
+// A renderer string fit to show a human. ANGLE wraps its names as
+//   ANGLE (VENDOR, RENDERER DETAILS, BACKEND)
+// so naive trimming to the first ")" yields "Intel, Intel(R" -- the vendor
+// twice and nothing useful. Unwrap, take the RENDERER field, and drop the
+// device id and the D3D suffix. Non-ANGLE names pass through untouched.
+function gpuShortName(name) {
+  if (!name) return '';
+  let s = name.replace(/^ANGLE \((.*)\)\s*$/, '$1');
+  const parts = s.split(', ');
+  if (parts.length >= 2) s = parts[1];
+  return s.replace(/\s*\(0x[0-9A-Fa-f]+\)/, '')
+          .replace(/\s+Direct3D.*$/, '')
+          .replace(/\s+vs_\d.*$/, '')
+          .trim();
+}
 
 function fatal(msg) {
   const e = document.getElementById('err');
@@ -5846,6 +5915,41 @@ let running = false;
 const $status = document.getElementById('loadStatus');
 const $startOv = document.getElementById('start');
 const $startBtn = document.getElementById('startBtn');
+
+// Tell the player when the context did NOT land on a discrete GPU (v9.9).
+//
+// The browser picks its adapter when the GPU process starts -- long before
+// this page exists -- from a per-app OS preference or a command-line flag.
+// A page cannot change that, and `powerPreference: 'high-performance'` is only
+// a hint that a Windows hybrid laptop routinely ignores. So the page does the
+// one useful thing it can: it notices and says so. Otherwise the cliff is
+// invisible, because the adaptive scaler quietly drops the resolution to
+// compensate -- measured on this project as 1707x932 on the RTX against the
+// scaler's 683x359 floor on the same machine's Intel iGPU.
+//
+// Silent when the GPU is discrete, when the renderer string is withheld for
+// privacy, and when it is simply unrecognised. A machine that has no discrete
+// GPU at all cannot be distinguished from one that is not using it, so the
+// wording says "if this machine has one" rather than asserting.
+function showGpuHint() {
+  const name = gpuRenderer();
+  const cls = gpuClass(name);
+  if (cls !== 'integrated' && cls !== 'software') return;
+  const box = document.getElementById('gpuHint');
+  const txt = document.getElementById('gpuHintText');
+  if (!box || !txt) return;
+  const short = gpuShortName(name);
+  const lead = cls === 'software'
+    ? 'Running on a SOFTWARE renderer (' + short + ') — expect single-digit frame rates.'
+    : 'Running on the integrated GPU (' + short + ').';
+  txt.textContent = lead + ' If this machine has a discrete GPU, launching Chrome like this uses it:';
+  const code = document.createElement('code');
+  code.textContent = '& "$env:ProgramFiles/Google/Chrome/Application/chrome.exe" --user-data-dir="$env:TEMP/ff-gpu" --force-high-performance-gpu "<file-or-url>"';
+  txt.appendChild(code);
+  box.classList.add('show');
+  const x = document.getElementById('gpuHintClose');
+  if (x) x.addEventListener('click', () => box.classList.remove('show'));
+}
 const $pilotName = document.getElementById('pilotName');
 const $livery = document.getElementById('liveryColor');
 const $pilotTag = document.getElementById('pilotTag');
@@ -6089,6 +6193,7 @@ async function main() {
   setStatus('Ready for flight');
   $startOv.classList.add('ready');   // spinner disappears, status grows
   $startBtn.style.display = 'inline-block';
+  showGpuHint();
 
   $startBtn.addEventListener('click', () => {
     try {

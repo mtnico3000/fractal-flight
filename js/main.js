@@ -4,7 +4,7 @@
 
 import { TAN_HALF_FOV, MAXB, MAXBOMB, BLASTC, MAXCLOUD, FXQ } from './config.js';
 import { craft, camPos, viewPos, viewZoom, sun, probe, laser } from './state.js';
-import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame } from './renderer.js';
+import { canvas, gl, U, initRenderer, resize, adjustQuality, setRenderScale, getRenderScale, nextFrame, gpuRenderer, gpuClass, gpuShortName } from './renderer.js';
 import { fsSrc } from './shaders.js';
 import { TUNE, buildTunePanel } from './tune.js';
 import { DBG } from './dbg.js';
@@ -40,6 +40,41 @@ let running = false;
 const $status = document.getElementById('loadStatus');
 const $startOv = document.getElementById('start');
 const $startBtn = document.getElementById('startBtn');
+
+// Tell the player when the context did NOT land on a discrete GPU (v9.9).
+//
+// The browser picks its adapter when the GPU process starts -- long before
+// this page exists -- from a per-app OS preference or a command-line flag.
+// A page cannot change that, and `powerPreference: 'high-performance'` is only
+// a hint that a Windows hybrid laptop routinely ignores. So the page does the
+// one useful thing it can: it notices and says so. Otherwise the cliff is
+// invisible, because the adaptive scaler quietly drops the resolution to
+// compensate -- measured on this project as 1707x932 on the RTX against the
+// scaler's 683x359 floor on the same machine's Intel iGPU.
+//
+// Silent when the GPU is discrete, when the renderer string is withheld for
+// privacy, and when it is simply unrecognised. A machine that has no discrete
+// GPU at all cannot be distinguished from one that is not using it, so the
+// wording says "if this machine has one" rather than asserting.
+function showGpuHint() {
+  const name = gpuRenderer();
+  const cls = gpuClass(name);
+  if (cls !== 'integrated' && cls !== 'software') return;
+  const box = document.getElementById('gpuHint');
+  const txt = document.getElementById('gpuHintText');
+  if (!box || !txt) return;
+  const short = gpuShortName(name);
+  const lead = cls === 'software'
+    ? 'Running on a SOFTWARE renderer (' + short + ') — expect single-digit frame rates.'
+    : 'Running on the integrated GPU (' + short + ').';
+  txt.textContent = lead + ' If this machine has a discrete GPU, launching Chrome like this uses it:';
+  const code = document.createElement('code');
+  code.textContent = '& "$env:ProgramFiles/Google/Chrome/Application/chrome.exe" --user-data-dir="$env:TEMP/ff-gpu" --force-high-performance-gpu "<file-or-url>"';
+  txt.appendChild(code);
+  box.classList.add('show');
+  const x = document.getElementById('gpuHintClose');
+  if (x) x.addEventListener('click', () => box.classList.remove('show'));
+}
 const $pilotName = document.getElementById('pilotName');
 const $livery = document.getElementById('liveryColor');
 const $pilotTag = document.getElementById('pilotTag');
@@ -293,6 +328,7 @@ async function main() {
   setStatus('Ready for flight');
   $startOv.classList.add('ready');   // spinner disappears, status grows
   $startBtn.style.display = 'inline-block';
+  showGpuHint();
 
   $startBtn.addEventListener('click', () => {
     try {

@@ -228,6 +228,27 @@ body.touch #tune, body.touch #tuneA { display: none; }
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   color: rgba(220, 230, 245, 0.9); text-align: center;
 }
+/* GPU hint (v9.9): shown on the start page only when the context did NOT land
+   on a discrete GPU. A 3x performance cliff is otherwise invisible -- the game
+   just quietly runs at a lower resolution, because the adaptive scaler hides
+   it. Dismissible, and absent entirely on a machine that is already fine. */
+#gpuHint {
+  display: none; margin: 18px auto 0; max-width: 560px; padding: 9px 12px;
+  border: 1px solid rgba(255, 170, 60, 0.35); border-radius: 4px;
+  background: rgba(60, 40, 10, 0.45); color: rgba(255, 215, 165, 0.92);
+  font-size: 10px; letter-spacing: 0.6px; line-height: 1.55; text-align: left;
+}
+#gpuHint.show { display: block; }
+#gpuHint code {
+  display: block; margin-top: 5px; padding: 5px 6px; font-size: 9.5px;
+  background: rgba(0,0,0,0.42); border-radius: 3px; color: rgba(190, 235, 255, 0.95);
+  white-space: pre-wrap; word-break: break-all; letter-spacing: 0;
+}
+#gpuHint button {
+  float: right; margin-left: 10px; background: none; border: none; cursor: pointer;
+  color: rgba(255, 200, 130, 0.65); font-size: 12px; line-height: 1; padding: 0;
+}
+#gpuHint button:hover { color: rgba(255, 220, 170, 1); }
 #start h1 { font-size: 26px; letter-spacing: 6px; color: rgba(255, 200, 130, 0.95); text-shadow: 0 0 24px rgba(255,170,60,0.35); }
 #start h1 span { display: block; font-size: 12px; letter-spacing: 3px; opacity: 0.6; margin-top: 6px; }
 #spinner {

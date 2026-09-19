@@ -359,6 +359,36 @@ Key chips in the HUD glow green when a toggle is active.
   itself** — repeated `readPixels` syncs stall the rAF loop, and `frame()`
   clamps dt to 0.05 s, so the world also goes into slow motion and a dropped
   bomb appears to hover. Do not read the fps counter while benchmarking.
+- 🖥️ **A page CANNOT choose its GPU, so it says so instead (v9.9).** The
+  browser picks its adapter when the GPU process starts, before the page
+  exists, from a per-app OS preference or a command-line flag;
+  `powerPreference: 'high-performance'` is only a hint and Windows hybrid
+  laptops routinely ignore it. `gpuRenderer()`/`gpuClass()`/`gpuShortName()` in
+  renderer.js classify the renderer string and the start page warns on
+  `integrated` or `software`, staying silent on `discrete`, on an unknown name,
+  and when the extension is withheld for privacy. `launch-rtx.ps1` at the repo
+  root is the disposable fix: `--force-high-performance-gpu` plus a THROWAWAY
+  `--user-data-dir`, deleted on exit. The temp profile is not optional — Chrome
+  is single-instance per profile, so with one already running a plain launch
+  hands over the URL and discards every flag. `test/test_gpu.js` pins the
+  classifier against real renderer strings.
+- ☠️ **Escapes COLLAPSE when code is written through a patch script, and the
+  damage is invisible.** Writing `` into js/renderer.js produced a literal
+  **backspace byte (0x08)** inside a regex, so `/(rtx|geforce|...)/` demanded
+  a control character before the vendor name and classified every discrete GPU
+  as "unknown". The same mechanism has produced a raw newline inside a JS
+  string literal FOUR times in one session (twice in test/mutants.js, which
+  then could not parse at all). Python interprets known escapes — `` `
+`
+  `` `	` — and leaves unknown ones like `\d` `\s` `\(` alone, which is why
+  some survive and some do not. ⚠️ **docs/ROADMAP.md carried a literal FORM
+  FEED in its Chrome command from v9.2 until 13 Sept** for exactly this reason.
+  Rules: prefer single-line anchors; use real newlines in template literals,
+  never `
+`; avoid backslashes in generated strings entirely where a forward
+  slash will do (Windows accepts them); and grep the result for control bytes
+  before believing a green test run. `test_gpu.js` now asserts renderer.js has
+  none.
 - 🧪 **`hullAlive()` is the liveness predicate; nothing may re-derive it.**
   Four sites had hand-rolled `!gone && !falling`, which omits the melt term —
   so harvesters went on shipping energy into a relay that was already a molten

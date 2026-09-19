@@ -7,6 +7,53 @@ import { vsSrc, fsSrc } from './shaders.js';
 export const canvas = document.getElementById('c');
 export const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
 
+// ---- which GPU did we actually land on? (v9.9) ----------------------------
+// powerPreference above is only a HINT, and on a Windows hybrid laptop it is
+// routinely ignored: the adapter is chosen when the browser's GPU process
+// starts, long before this page exists, from a per-app registry preference or
+// a command-line flag. A page cannot change that. What it CAN do is notice and
+// say so -- otherwise a 3x performance cliff is completely invisible, because
+// the adaptive scaler just quietly drops the resolution to compensate.
+//
+// Measured on this project: the same code, same machine, ran at 1707x932 on
+// the RTX and was pinned to the scaler's 683x359 floor on the Intel iGPU.
+export function gpuRenderer() {
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!ext) return null;                       // privacy-restricted: say nothing
+    return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || null;
+  } catch (_) { return null; }
+}
+
+// 'discrete' | 'integrated' | 'software' | null (unknown -- stay quiet)
+export function gpuClass(name) {
+  if (!name) return null;
+  const s = name.toLowerCase();
+  // software first: SwiftShader and WARP both name a vendor too, so an
+  // integrated test would otherwise claim them
+  if (/swiftshader|llvmpipe|basic render|software|microsoft basic/.test(s)) return 'software';
+  if (/\b(rtx|geforce|quadro|radeon rx|radeon pro|arc a\d)/.test(s)) return 'discrete';
+  if (/apple m\d/.test(s)) return 'discrete';   // Apple silicon has no slower option
+  if (/intel|iris|uhd graphics|hd graphics|vega \d|radeon graphics|adreno|mali|powervr/.test(s)) return 'integrated';
+  return null;
+}
+
+// A renderer string fit to show a human. ANGLE wraps its names as
+//   ANGLE (VENDOR, RENDERER DETAILS, BACKEND)
+// so naive trimming to the first ")" yields "Intel, Intel(R" -- the vendor
+// twice and nothing useful. Unwrap, take the RENDERER field, and drop the
+// device id and the D3D suffix. Non-ANGLE names pass through untouched.
+export function gpuShortName(name) {
+  if (!name) return '';
+  let s = name.replace(/^ANGLE \((.*)\)\s*$/, '$1');
+  const parts = s.split(', ');
+  if (parts.length >= 2) s = parts[1];
+  return s.replace(/\s*\(0x[0-9A-Fa-f]+\)/, '')
+          .replace(/\s+Direct3D.*$/, '')
+          .replace(/\s+vs_\d.*$/, '')
+          .trim();
+}
+
 export function fatal(msg) {
   const e = document.getElementById('err');
   e.textContent = 'SHADER / GL ERROR\n\n' + msg;
