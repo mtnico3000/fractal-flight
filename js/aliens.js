@@ -143,6 +143,48 @@ let hitId = -1, hitT0 = -1e9;            // hull id (matches mal.y), and when
 //   half  = local half-extents. For a ship that is [len/2, hei/2, wid/2] along
 //           (lx, y, lz) -- the same axes alienBombHits tests against.
 //   rot   = does the hull carry a heading (ships yes, mothership no).
+// Where a detonation actually SITS on a hull (v9.9c).
+//
+// boxFace below snaps the ring out to the BOUNDING BOX skin, which was correct
+// while collision was the box. Now a bomb detonates on the visible mandelbox --
+// possibly far inside the box, on the far wall of a hole -- so the ring has to
+// sit THERE and tilt to the surface it struck, or it floats out on the box like
+// a decal on glass while the explosion happened somewhere else entirely.
+//
+// The normal comes from the gradient of the SAME shipDEJ the collision used, so
+// the ring lies on the surface that stopped the bomb. Where the gradient is
+// degenerate -- deep inside solid, the DE goes flat and its gradient is noise --
+// it falls back to the box face, which is the honest answer there anyway.
+function fractalFace(B, hull, half, rot) {
+  const ox = B.x - hull.x, oy = B.y - hull.y, oz = B.z - hull.z;
+  let lx = ox, lz = oz;
+  if (rot) {
+    const ca = Math.cos(hull.a), sa = Math.sin(hull.a);
+    lx = ox * ca - oz * sa; lz = ox * sa + oz * ca;
+  }
+  const e = 0.35;                      // the epsilon alienNormal uses in the shader
+  let nx = shipDEJ(lx + e, oy, lz, half) - shipDEJ(lx - e, oy, lz, half);
+  let ny = shipDEJ(lx, oy + e, lz, half) - shipDEJ(lx, oy - e, lz, half);
+  let nz = shipDEJ(lx, oy, lz + e, half) - shipDEJ(lx, oy, lz - e, half);
+  const len = Math.hypot(nx, ny, nz);
+  if (!(len > 1e-4)) return boxFace(B, hull, half, rot);
+  nx /= len; ny /= len; nz /= len;
+  // sit just proud of the surface, the way boxFace sits proud of the skin
+  const lp = [lx + nx * 0.8, oy + ny * 0.8, lz + nz * 0.8];
+  // any unit vector perpendicular to n: start from the axis LEAST aligned with
+  // it, or the cross product collapses when the normal happens to be axial
+  const a = Math.abs(nx) < Math.abs(ny)
+          ? (Math.abs(nx) < Math.abs(nz) ? [1, 0, 0] : [0, 0, 1])
+          : (Math.abs(ny) < Math.abs(nz) ? [0, 1, 0] : [0, 0, 1]);
+  let ux = ny * a[2] - nz * a[1], uy = nz * a[0] - nx * a[2], uz = nx * a[1] - ny * a[0];
+  const ul = Math.hypot(ux, uy, uz) || 1;
+  ux /= ul; uy /= ul; uz /= ul;
+  const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+  // curv stays 0 so fx.js draws the flat disc, not the bulb's geodesic cap
+  return { lp, u: [ux, uy, uz], v: [vx, vy, vz], n: [nx, ny, nz], curv: 0,
+           maxR: Math.min(HULL_BLAST_R, Math.min(half[0], Math.min(half[1], half[2])) * 0.92) };
+}
+
 function boxFace(B, hull, half, rot) {
   const ox = B.x - hull.x, oy = B.y - hull.y, oz = B.z - hull.z;
   let lx = ox, lz = oz;
@@ -212,7 +254,7 @@ export function alienLaserHit(id, px, py, pz) {
     const m = alien.mother;
     if (m.gone || m.falling || m.melt > 0) return false;
     m.hp -= LASER_DAMAGE;
-    hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
+    hullHit(0.0, B, fractalFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
     if (m.hp <= 0) m.falling = true;
     return true;
   }
@@ -227,7 +269,7 @@ export function alienLaserHit(id, px, py, pz) {
   const s = alien.ships[id - 1];
   if (!s || s.falling || s.melt > 0) return false;
   s.hp -= LASER_DAMAGE;
-  hullHit(id, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
+  hullHit(id, B, fractalFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
   if (s.hp <= 0) s.falling = true;
   return true;
 }
@@ -241,7 +283,7 @@ function alienBombHits(bombs) {
     const m = alien.mother;
     if (hullAlive(m) && hullSolidAt(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf(), 3)) {
       bombs[i] = null; m.hp--;
-      hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
+      hullHit(0.0, B, fractalFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
       continue;
     }
@@ -262,7 +304,7 @@ function alienBombHits(bombs) {
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
       if (hullSolidAt(lx, B.y - s.y, lz, shipHalf(), 3)) {
         bombs[i] = null; s.hp--;
-        hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
+        hullHit(si + 1.0, B, fractalFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
         break;
       }

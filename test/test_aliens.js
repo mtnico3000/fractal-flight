@@ -48,7 +48,7 @@ function fresh() {
   }, ['HP_MOTHER', 'HP_SHIP', 'HP_RELAY', 'hullAlive', 'bombs', 'craft',
       'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
       'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE', 'spawnHarvester', 'SHIP_SEP',
-      'hullSolidAt', 'shipDEJ', 'mandelboxDEJ', 'HULL_SKIN']);
+      'hullSolidAt', 'shipDEJ', 'mandelboxDEJ', 'HULL_SKIN', 'fractalFace']);
   aliens.initAliens();
   return { aliens, craft, crashes, blasts, counts, TUNEA, paid };
 }
@@ -255,6 +255,49 @@ check('the ring is clamped to the face it lies on', () => {
   const live = aliens.boxFace({ x: 0, y: 100, z: half[2] - 1 }, ship, half, true);
   ok(live.maxR <= Math.min(R, half[1]) + 1e-9,
      'the shipped hull overhangs its own flank: ' + live.maxR + ' on a ' + half[1] + ' m half-height');
+});
+
+check('a hull burst lands on the fractal surface, not on the bounding box', () => {
+  // boxFace snaps the ring out to the box skin. That was right while collision
+  // WAS the box; now a bomb detonates on the visible mandelbox, which can be
+  // deep inside, and a ring pinned to the skin floats out on the box like a
+  // decal on glass while the explosion happened somewhere else.
+  const { aliens, TUNEA } = fresh();
+  const half = [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
+  const hull = { x: 0, y: 0, z: 0, a: 0 };
+
+  // find a solid point WELL inside the box — the case the old code got wrong
+  let found = null;
+  for (let i = -12; i <= 12 && !found; i++)
+    for (let j = -12; j <= 12 && !found; j++) {
+      const lx = i / 13 * half[0], lz = j / 13 * half[2];
+      if (Math.abs(lx) > half[0] * 0.55) continue;
+      if (Math.abs(lz) > half[2] * 0.55) continue;
+      if (aliens.hullSolidAt(lx, 0, lz, half)) found = [lx, 0, lz];
+    }
+  ok(found, 'no solid interior point to bomb');
+
+  const B = { x: found[0], y: found[1], z: found[2] };
+  const fr = aliens.fractalFace(B, hull, half, false);
+  const bx = aliens.boxFace(B, hull, half, false);
+
+  // the old frame is pinned to a box face; the new one stays at the hit
+  const offFace = Math.max(Math.abs(bx.lp[0]) / half[0], Math.max(Math.abs(bx.lp[1]) / half[1], Math.abs(bx.lp[2]) / half[2]));
+  ok(offFace > 0.99, 'boxFace should sit on the skin, got ' + offFace.toFixed(2));
+  const dHit = Math.hypot(fr.lp[0] - B.x, fr.lp[1] - B.y, fr.lp[2] - B.z);
+  ok(dHit < 2, 'the burst must sit ON the hit, but it is ' + dHit.toFixed(1) + ' m away');
+  const dBox = Math.hypot(bx.lp[0] - B.x, bx.lp[1] - B.y, bx.lp[2] - B.z);
+  ok(dBox > 50, 'the sample should be deep inside, but boxFace only moved it ' + dBox.toFixed(0) + ' m');
+
+  // and the disc has to be a real orthonormal frame or it draws skewed
+  const len = v => Math.hypot(v[0], v[1], v[2]);
+  const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+  for (const [nm, v] of [['u', fr.u], ['v', fr.v], ['n', fr.n]])
+    ok(Math.abs(len(v) - 1) < 1e-9, nm + ' must be unit, got ' + len(v));
+  ok(Math.abs(dot(fr.u, fr.v)) < 1e-9, 'u and v must be perpendicular');
+  ok(Math.abs(dot(fr.u, fr.n)) < 1e-9, 'u must be tangent to the surface');
+  ok(Math.abs(dot(fr.v, fr.n)) < 1e-9, 'v must be tangent to the surface');
+  eq(fr.curv, 0, 'curv must stay 0 so fx.js draws a flat disc, not the bulb cap');
 });
 
 check('the relay gets a curved cap, not a flat disc', () => {

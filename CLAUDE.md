@@ -341,6 +341,24 @@ Key chips in the HUD glow green when a toggle is active.
   common case. ⚠️ The mandelbox DE is NOT signed (it returns
   `length(q)/|dr|`, never negative inside), so the test is `< ε`, not `< 0`.
   Queued in ROADMAP; docs/RESEARCH.md §8 has the table.
+- 💥 **When collision moves, the EFFECT that marks it has to move too.**
+  `hullSolidAt` made a bomb detonate on the visible mandelbox — possibly deep
+  inside the box, on the far wall of a hole — but the burst ring was still
+  placed by `boxFace`, which snaps `lp` out to `half[ax] + 0.8`, the BOUNDING
+  BOX skin. So the explosion happened in one place and its ring was drawn on
+  the box, like a decal on glass. `fractalFace` puts it on the surface that
+  actually stopped the bomb, with the normal taken from the gradient of the
+  same `shipDEJ` the collision used, falling back to `boxFace` where the
+  gradient is degenerate (deep inside solid the DE goes flat and its gradient
+  is noise). Nico spotted this in flight one build after the collision change.
+- 🏃 **Flying INSIDE a hull is not slow.** Measured 19 Sept 2026 at a fixed
+  281x316 buffer: inside the mothership **14.9 ms**, looking out from the same
+  spot 23.2 ms, over open terrain 16.2 ms. Being inside is if anything cheaper,
+  because every ray hits nearby fractal instead of marching kilometres of
+  terrain. ⚠️ A 1 fps HUD reading during that session was **the measuring rig
+  itself** — repeated `readPixels` syncs stall the rAF loop, and `frame()`
+  clamps dt to 0.05 s, so the world also goes into slow motion and a dropped
+  bomb appears to hover. Do not read the fps counter while benchmarking.
 - 🧪 **`hullAlive()` is the liveness predicate; nothing may re-derive it.**
   Four sites had hand-rolled `!gone && !falling`, which omits the melt term —
   so harvesters went on shipping energy into a relay that was already a molten

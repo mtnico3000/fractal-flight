@@ -310,6 +310,24 @@ const MUTANTS = [
   ['the mirror stops squaring boxMinR', 'js/aliens.js',
    'const minR2 = TUNEA.boxMinR.v * TUNEA.boxMinR.v;',
    'const minR2 = TUNEA.boxMinR.v;', 'test_aliens.js'],
+
+  // --- v9.9c: the burst ring lands where the bomb actually stopped ---------
+  // NB two of these carry trailing context on purpose: the cross product and
+  // the normalise also appear verbatim in sphereFace, and an ambiguous anchor
+  // is SKIPPED rather than run.
+  ['the hull burst goes back to the bounding-box skin', 'js/aliens.js',
+   '  if (!(len > 1e-4)) return boxFace(B, hull, half, rot);',
+   '  return boxFace(B, hull, half, rot);', 'test_aliens.js'],
+  ['the burst disc frame stops being orthonormal', 'js/aliens.js',
+   `  const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+  // curv stays 0`,
+   `  const vx = ny, vy = nz, vz = nx;
+  // curv stays 0`, 'test_aliens.js'],
+  ['the burst normal is left unnormalised', 'js/aliens.js',
+   `  nx /= len; ny /= len; nz /= len;
+  // sit just proud`, '  // sit just proud', 'test_aliens.js'],
+  ['the hull burst is drawn as a bulb cap, not a flat disc', 'js/aliens.js',
+   'n: [nx, ny, nz], curv: 0,', 'n: [nx, ny, nz], curv: 9,', 'test_aliens.js'],
 ];
 
 function mutate(src, find, repl, all) {
