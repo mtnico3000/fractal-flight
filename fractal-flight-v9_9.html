@@ -4035,7 +4035,7 @@ function alienBombHits(bombs) {
     if (!B) continue;
     // mothership (axis-aligned)
     const m = alien.mother;
-    if (hullAlive(m) && hullDist(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf()) < 3) {
+    if (hullAlive(m) && hullSolidAt(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf(), 3)) {
       bombs[i] = null; m.hp--;
       hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
@@ -4056,7 +4056,7 @@ function alienBombHits(bombs) {
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = B.x - s.x, oz = B.z - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-      if (hullDist(lx, B.y - s.y, lz, shipHalf()) < 3) {
+      if (hullSolidAt(lx, B.y - s.y, lz, shipHalf(), 3)) {
         bombs[i] = null; s.hp--;
         hullHit(si + 1.0, B, boxFace(B, s, [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2], true), s, true);
         if (s.hp <= 0) s.falling = true;
@@ -4092,6 +4092,69 @@ function hullDist(lx, ly, lz, half) {
   return Math.max(Math.abs(lx) - (half[0] - r),
          Math.max(Math.abs(ly) - (half[1] - r), Math.abs(lz) - (half[2] - r))) - r;
 }
+// ---- the fractal NARROW PHASE (v9.9) --------------------------------------
+// hullDist above is the rounded BOX. The hull actually drawn is that box
+// INTERSECTED with a mandelbox (shipDE in the shader), so parts of the box are
+// genuinely empty: measured at the shipped tuning, 3.9% of the mothership and
+// 8.7% of a harvester (node test/hull_census.js). Colliding against the box
+// alone bounced the craft off holes it could see straight through.
+//
+// hullDist stays the BROAD phase and this runs only once the craft is already
+// inside the box, so the common case costs nothing -- a handful of these per
+// second, against 8 iterations of plain arithmetic each.
+//
+// ⚠️ THIRD copy of shaping maths, after the shader and terrain.js. It has to
+// track uBoxParam exactly or the craft collides with a different ship than the
+// one drawn; test_aliens.js pins every constant against the GLSL text.
+const MB_ITERS = 8;        // matches the shader's mandelboxDE loop
+const MB_FIXR2 = 1.0;      // the outer sphere-fold radius, squared
+const MB_STRETCH = 1.15;   // shipDE's conservative factor for the non-uniform squash
+
+// Mirrors mandelboxDE(p, minR2). Returns a distance ESTIMATE that is >= 0
+// everywhere and tends to 0 inside the solid -- it never goes negative.
+function mandelboxDEJ(px, py, pz) {
+  const S = TUNEA.boxScale.v, F = TUNEA.boxFold.v;
+  const minR2 = TUNEA.boxMinR.v * TUNEA.boxMinR.v;
+  let qx = px, qy = py, qz = pz, dr = 1.0;
+  for (let i = 0; i < MB_ITERS; i++) {
+    qx = Math.min(Math.max(qx, -F), F) * 2 - qx;        // box fold
+    qy = Math.min(Math.max(qy, -F), F) * 2 - qy;
+    qz = Math.min(Math.max(qz, -F), F) * 2 - qz;
+    const r2 = qx * qx + qy * qy + qz * qz;
+    if (r2 < minR2)      { const k = MB_FIXR2 / minR2; qx *= k; qy *= k; qz *= k; dr *= k; }
+    else if (r2 < MB_FIXR2) { const k = MB_FIXR2 / r2; qx *= k; qy *= k; qz *= k; dr *= k; }
+    qx = qx * S + px; qy = qy * S + py; qz = qz * S + pz;
+    dr = dr * Math.abs(S) + 1;
+  }
+  return Math.hypot(qx, qy, qz) / Math.abs(dr);
+}
+
+// Mirrors shipDE(l, h, minR2): the box and the fractal, intersected.
+function shipDEJ(lx, ly, lz, half) {
+  const hmin = Math.min(half[0], Math.min(half[1], half[2]));
+  const mb = mandelboxDEJ(lx / half[0] * MB_STRETCH,
+                          ly / half[1] * MB_STRETCH,
+                          lz / half[2] * MB_STRETCH) / MB_STRETCH * hmin;
+  return Math.max(hullDist(lx, ly, lz, half), mb);
+}
+
+// Metres of contact band. The DE is NOT signed (see above), so "in material"
+// cannot be `< 0`; it is `< HULL_SKIN`. Sized at roughly the craft's half-width
+// so the fuselage crashes when it touches solid, not when its centre does.
+const HULL_SKIN = 2.0;
+
+// THE collision predicate for a box hull.
+//
+// The hullDist line is a COST gate, not a correctness one: shipDEJ already
+// takes max() with the same box distance, so removing it changes no answer,
+// only how often the 8-iteration fractal runs. Said plainly because a mutation
+// of it escapes the suite, and the next person should know that is correct
+// rather than a hole in the tests.
+function hullSolidAt(lx, ly, lz, half, skin) {
+  if (hullDist(lx, ly, lz, half) > (skin === undefined ? HULL_SKIN : skin)) return false;
+  return shipDEJ(lx, ly, lz, half) < (skin === undefined ? HULL_SKIN : skin);
+}
+
 // half-extents in each hull's own axis order, so the two callers agree
 const motherHalf = () => [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
 const shipHalf   = () => [TUNEA.shLen.v / 2, TUNEA.shHei.v / 2, TUNEA.shWid.v / 2];
@@ -4263,14 +4326,14 @@ function updateAliens(dt, now) {
   // A hidden hull (Debug 'invasion') must not kill you either: what you
   // cannot see cannot be flown around.
   if (DBG.invasion > 0.5) {
-    if (hullAlive(m) && hullDist(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf()) < 0) doCrash('ALIEN HULL');
+    if (hullAlive(m) && hullSolidAt(cp[0] - m.x, cp[1] - m.y, cp[2] - m.z, motherHalf())) doCrash('ALIEN HULL');
     if (hullAlive(r) && Math.hypot(cp[0] - r.x, cp[1] - r.y, cp[2] - r.z) < r.r) doCrash('ALIEN HULL');
     for (const s of alien.ships) {
       if (!hullAlive(s)) continue;
       const ca = Math.cos(s.a), sa = Math.sin(s.a);
       const ox = cp[0] - s.x, oz = cp[2] - s.z;
       const lx = ox * ca - oz * sa, lz = ox * sa + oz * ca;
-      if (hullDist(lx, cp[1] - s.y, lz, shipHalf()) < 0) { doCrash('ALIEN HULL'); break; }
+      if (hullSolidAt(lx, cp[1] - s.y, lz, shipHalf())) { doCrash('ALIEN HULL'); break; }
     }
   }
 

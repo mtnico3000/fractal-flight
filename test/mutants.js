@@ -291,6 +291,25 @@ const MUTANTS = [
    'm.loot = (m.loot || 0) + RELAY_SHOTS * 3;', 'm.loot = (m.loot || 0) + 0;', 'test_aliens.js'],
   ['a harvester cannot count the trees it eats', 'js/aliens.js',
    'absorbed: 0, loot: 0,', 'absorbed: 0, loot: undefined,', 'test_aliens.js'],
+
+  // --- v9.9c: collision follows the visible fractal ------------------------
+  // The hull is a box INTERSECTED with a mandelbox, so parts of the box are
+  // empty (3.9% of the mothership, 8.7% of a harvester -- hull_census.js).
+  // Each of these either stops the carve happening or drifts the JS mirror
+  // away from the GLSL, and both look fine until you fly into a hole.
+  ['the fractal narrow phase is skipped, so holes are solid again', 'js/aliens.js',
+   'return shipDEJ(lx, ly, lz, half) < (skin === undefined ? HULL_SKIN : skin);',
+   'return true;', 'test_aliens.js'],
+  ['the narrow phase inverts: solid becomes hollow', 'js/aliens.js',
+   'return shipDEJ(lx, ly, lz, half) < (skin === undefined ? HULL_SKIN : skin);',
+   'return shipDEJ(lx, ly, lz, half) > (skin === undefined ? HULL_SKIN : skin);', 'test_aliens.js'],
+  ['the JS mandelbox mirror loses an iteration', 'js/aliens.js',
+   'const MB_ITERS = 8;', 'const MB_ITERS = 7;', 'test_aliens.js'],
+  ['the conservative stretch drifts from the shader', 'js/aliens.js',
+   'const MB_STRETCH = 1.15;', 'const MB_STRETCH = 1.30;', 'test_aliens.js'],
+  ['the mirror stops squaring boxMinR', 'js/aliens.js',
+   'const minR2 = TUNEA.boxMinR.v * TUNEA.boxMinR.v;',
+   'const minR2 = TUNEA.boxMinR.v;', 'test_aliens.js'],
 ];
 
 function mutate(src, find, repl, all) {

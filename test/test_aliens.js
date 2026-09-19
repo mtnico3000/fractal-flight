@@ -47,7 +47,8 @@ function fresh() {
     resetFleetCounts: () => {},
   }, ['HP_MOTHER', 'HP_SHIP', 'HP_RELAY', 'hullAlive', 'bombs', 'craft',
       'boxFace', 'sphereFace', 'HULL_BLAST_R', 'RELAY_GROW', 'RELAY_SHOTS',
-      'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE', 'spawnHarvester', 'SHIP_SEP']);
+      'RELAY_SHRINK_MS', 'hullDist', 'LASER_DAMAGE', 'spawnHarvester', 'SHIP_SEP',
+      'hullSolidAt', 'shipDEJ', 'mandelboxDEJ', 'HULL_SKIN']);
   aliens.initAliens();
   return { aliens, craft, crashes, blasts, counts, TUNEA, paid };
 }
@@ -468,6 +469,55 @@ check('an invader hands its gathered energy back when it starts melting', () => 
   const before = paid.length;
   for (let i = 0; i < 100; i++) aliens.updateAliens(0.05, 40000 + i * 50);
   eq(paid.length, before, 'melting must not keep paying every frame');
+});
+
+check('the JS mandelbox mirror shares every constant with the GLSL', () => {
+  // THIRD copy of shaping maths, after the shader and terrain.js. If it drifts,
+  // the craft collides with a different ship than the one drawn -- silently,
+  // and only in the holes. Same guard test_terrain.js puts on terrainShape.
+  const fs = require('fs'), path = require('path');
+  const glsl = fs.readFileSync(path.join(__dirname, '..', 'js', 'shaders.js'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '..', 'js', 'aliens.js'), 'utf8');
+
+  const it = /float mandelboxDE\(vec3 p, float minR2\) \{[\s\S]*?for \(int i = 0; i < (\d+); i\+\+\)/.exec(glsl);
+  ok(it, 'could not find the shader mandelboxDE loop');
+  const jsIt = /const MB_ITERS = (\d+);/.exec(js);
+  ok(jsIt, 'MB_ITERS must be declared');
+  eq(Number(jsIt[1]), Number(it[1]), 'iteration count');
+
+  ok(/float fixR2 = 1\.0;/.test(glsl), 'the shader fixR2 should be 1.0');
+  eq(Number(/const MB_FIXR2 = ([\d.]+);/.exec(js)[1]), 1.0, 'fixR2');
+
+  // the 1.15 conservative stretch appears in BOTH shipDE bodies
+  ok(/mandelboxDE\(l \/ h \* 1\.15, minR2\) \/ 1\.15 \* hmin/.test(glsl),
+     'the shader shipDE should stretch by 1.15');
+  eq(Number(/const MB_STRETCH = ([\d.]+);/.exec(js)[1]), 1.15, 'stretch');
+
+  // and minR2 must be the SQUARE of the knob in both places
+  ok(/TUNEA\.boxMinR\.v \* TUNEA\.boxMinR\.v/.test(js), 'packAlienUniforms squares boxMinR');
+  ok(/const minR2 = TUNEA\.boxMinR\.v \* TUNEA\.boxMinR\.v;/.test(js),
+     'the mirror must square boxMinR the same way the uniform does');
+});
+
+check('the craft flies through a hole and crashes on solid', () => {
+  // The whole point: 3.9% of the mothership and 8.7% of a harvester is empty
+  // (node test/hull_census.js). Sweep the hull volume and require BOTH answers
+  // to occur -- all-solid means the narrow phase is doing nothing, all-empty
+  // means it is inverted.
+  const { aliens, TUNEA } = fresh();
+  const half = [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2];
+  let solid = 0, hollow = 0, n = 0;
+  for (let i = -8; i <= 8; i++)
+    for (let j = -8; j <= 8; j++)
+      for (let k = -2; k <= 2; k++) {
+        const lx = i / 9 * half[0], ly = k / 3 * half[1], lz = j / 9 * half[2];
+        n++;
+        if (aliens.hullSolidAt(lx, ly, lz, half)) solid++; else hollow++;
+      }
+  ok(solid > 0, 'nothing inside the hull is solid — the narrow phase rejects everything');
+  ok(hollow > 0, 'nothing inside the hull is hollow — the narrow phase is not carving at all');
+  // and well OUTSIDE the box nothing is ever solid
+  ok(!aliens.hullSolidAt(half[0] * 4, 0, 0, half), 'a point far outside the box reported solid');
 });
 
 check('a MELTING relay stops being fed', () => {
