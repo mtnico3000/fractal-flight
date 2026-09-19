@@ -52,11 +52,15 @@ untouched by any A-commit). Re-test on real AC.
 
 ## ▶ NEXT SESSION — START HERE (work queue, in order)
 
-**Version is v9.9; the branch is still named `v9.5`.** (The branch name lags
-the version on purpose — PR #3's head branch on origin is named `v9.4`. See
-the push note at the bottom.) v9.7 is the last version of the pure
-raymarcher: **v10 is a renderer change**, and it was Nico's call after the
-marcher hunt proved the residual flutter is not a bug.
+**Version is v9.9, and `main` is at v9.9** (pushed 19 Sept 2026 — main was
+fast-forwarded from v9.7, 0 behind, 16 ahead). The working branch is still
+named `v9.5`; the name lags the version on purpose, because PR #3's head
+branch on origin is named `v9.4`.
+
+🏁 **v9.9 IS THE END OF THE 9.x LINE. The next session is v10 — see item 2.**
+Nico, 19 Sept: *"next run will be the v10"*. v9.x is the pure raymarcher and it
+is finished; everything below item 2 is either closed or explicitly parked
+because v10 makes it cheaper.
 
 📐 **Read `docs/MARCHING.md` before touching terrain, the march, or any SDF.**
 Six bugs over six weeks were one mechanism; that file is the law, eight rules
@@ -67,8 +71,13 @@ and two checklists, and it is what stops the seventh.
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.
+1b. ⚠️ `run_tests.js` now also runs `node --check test/mutants.js`. That file
+   has twice been committed in a state where it could not parse, and because
+   nothing in the fast suite loaded it, all sixteen suites stayed green over a
+   battery that could not start. If that line goes red, the battery is broken
+   even though every test passes.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **69 mutants as of v9.9b**). A green suite is not
+   (slow, opt-in, **78 mutants as of v9.9**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
@@ -210,7 +219,7 @@ The **Points debug panel** is specified in §7.4 and deferred with it — half i
 knobs (relays before mitosis, harvesters per relay) only exist once the
 mechanic does, and the rest need the economy constants made mutable first.
 
-### ▶ 1b-sexies. HULL COLLISION should follow the visible fractal (diagnosed)
+### ✅ 1b-sexies. HULL COLLISION follows the visible fractal (SHIPPED 19 Sept)
 
 Nico: *"can we fly 'through' the box in those 'invisible parts', and only have
 a collision when hitting a 'visible' part?"* **Diagnosed 19 Sept 2026 and the
@@ -230,10 +239,23 @@ only once inside the box (so the common case costs nothing), port
 **not signed** — the test is `< ε`, not `< 0`. Same narrow phase belongs on
 bomb hits and on `laser.js`'s `traceFleet`, which currently aims at holes.
 
-Not started. Sized at well under a day and low risk; gets easier still after
-v10, when a mesh makes rendering and collision the same answer.
+**Built and flown.** `hullSolidAt` in js/aliens.js: `hullDist` is the broad
+phase, a JS `shipDEJ` narrow phase runs only once inside the box. Wired into
+the craft crash AND bomb hits. Verified by locating real holes in Node with the
+shipped code and flying to them — three holes inside the mothership gave no
+crash, two solid spots gave ALIEN HULL, outside the box gave no crash.
 
-### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
+`fractalFace` followed one build later, because **the effect keyed to collision
+did not move by itself**: the burst ring was still framed by `boxFace`, which
+snaps it to the bounding-box skin, so a bomb that detonated deep in a hole drew
+its ring out on the box. Nico caught that in flight.
+
+⚠️ **Still box-shaped, deliberately:** the RELAY is a mandelbulb but collides
+as a plain sphere (a bulb has no big through-holes, so it was left), and
+`laser.js`'s `traceFleet` still aims with box gates, so the reticle can target
+a hole. Both are small follow-ups if they ever annoy anyone.
+
+### ⏸ 1c. The TREES — two named fixes, PARKED for v10
 
 Nico, 13 Sept: *"certain trees... a tree that should have a fixed contour,
 even with parallax, should not get a different form, but some do."* Both
@@ -259,6 +281,12 @@ needs an investigation — only the work and a GPU cost measurement.
 Hand Nico a build with `flora range` at its default and ask for the same
 one-tap-at-a-time series he flew for the peaks — the tell is identical: a
 contour that CYCLES rather than growing monotonically.
+
+⏸ **Parked 19 Sept 2026 for v10.** Both fixes are marcher-side LOD work, and
+v10 replaces the marcher for terrain; doing them now is work v10 would throw
+away. The same reasoning parks **1c-ter** (probe row into its own program) and
+**1d** (frame rate at the new `mtn relax` default). Re-read them AFTER the v10
+decision in item 2, not before — several may simply cease to exist.
 
 ### ✅ 1c-bis. The debug build is separate now (14 Sept 2026)
 
@@ -306,7 +334,7 @@ the other lever. Changing the default means editing `test/test_march.js`'s
 safety assertion and MARCHING.md §7 with the number it costs.
 
 ---
-### ▶ 2. v10 — the hybrid: fractal DEFINITION, rasterised GEOMETRY
+### ▶▶ 2. v10 — the hybrid: fractal DEFINITION, rasterised GEOMETRY  ←← START HERE
 
 **This is the next item, and it is a big one.** Nico, 12 Sept 2026, after the
 marcher hunt: *"I'd like to orient this game... towards a multiplayer
@@ -777,10 +805,10 @@ drafted:
    and skip themselves with a note without it, so a bare clone still runs
    the other seven. Flight modes and rings still have no coverage — see
    item 4 in the queue.
-3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **246 vec4
-   slots** as of v9.8 (242 at v9.4, 238 before the energy beams moved into the
-   shader), counted from the parsed GLSL by `test_glsl.js`, which fails above
-   a 260 ceiling. ⚠️ Read the number off the test, not off this page — it has
+3. **Uniform budget check (S).** ✅ now MEASURED, not estimated: **248 vec4
+   slots** as of v9.9 (246 at v9.8 before the laser beam's two, 242 at v9.4,
+   238 before the energy beams moved into the shader), counted from the parsed
+   GLSL by `test_glsl.js`, which fails above a 260 ceiling. ⚠️ Read the number off the test, not off this page — it has
    drifted three times already. The old "~260" was a guess. Still **above the 224 that GLSL
    ES 3.0 guarantees**, so the shader may fail to LINK on jul's phone while
    every desktop is fine — that half is untested and needs a real device.

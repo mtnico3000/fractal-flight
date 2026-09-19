@@ -1149,6 +1149,95 @@ caught immediately. The other two escapes were real gaps: nothing drove a
 `loot` is a number (`undefined++` is NaN, and a NaN payout is silently
 nothing). Both now covered; 6/6 caught, battery at 69.
 
+## v9.9c — collision learns the fractal (19 September 2026)
+
+The last piece of v9.x, and the one that needed a diagnosis before a line of
+code. Nico: *"the ships/boxes, when tweaked with the box sliders, can sometimes
+become transparent at places... Could it be possible to then fly 'through' the
+box in those 'invisible parts'?"*
+
+### First: are the holes real?
+
+Two possible causes wanting **opposite** responses — real mandelbox holes
+(collision should follow them) or budget exhaustion (a bug, and teaching
+collision to follow it would bake it into gameplay). `test/hull_census.js`
+replays the hull march in fp32 and classifies every ray entering a bounding
+box. **Budget exhaustion is 0.00% in every configuration, worst case 177 of
+384 iterations.** The transparency is real geometry: **3.9% of the mothership
+and 8.7% of a harvester** at the shipped tuning.
+
+⚠️ **`box fold` is the lever, not `box min r`.** The hypothesis was minR — the
+sphere fold inflates by `1/minR²` per iteration, 400x at the widened 0.05
+floor, and a huge running derivative starves the march. The census says minR
+moves see-through by **under a tenth of a percent**, while fold 1.4 → 1.0 takes
+a hull from 4% holes to **60%**. A plausible mechanism, measured and rejected.
+A raised-cap build was prepared in a worktree on its own port to A/B it and the
+measurement made it unnecessary.
+
+### Then the narrow phase
+
+`hullSolidAt`: `hullDist` stays the broad phase, a JS `shipDEJ` runs only once
+inside the box. Wired into the craft crash and bomb hits.
+
+Two things the next person needs. The mandelbox DE is **not signed** — it
+returns `length(q)/|dr|`, always ≥ 0, tending to 0 inside the solid rather than
+going negative — so the test is `< HULL_SKIN`, not `< 0`. And this is a **third
+copy of shaping maths** after the shader and terrain.js, so `test_aliens.js`
+pins every constant against the GLSL text.
+
+Verified in flight: Node located real holes with the shipped code, then the
+browser flew to them. Three hole positions inside the mothership → no crash;
+two solid positions → ALIEN HULL; outside the box → no crash.
+
+### The effect that marks the hit had to move too
+
+Nico, one build later: *"the bomb circles seem to still explode on the original
+'box' rather than on the 'visible' parts"*. Correct, and a good catch — the
+detonation had moved to the fractal but `boxFace` still snapped the ring out to
+`half[ax] + 0.8`, the bounding-box skin. The explosion happened deep in a hole
+and its ring was drawn on the box, like a decal on glass. `fractalFace` frames
+the burst on the surface that stopped the bomb, normal from the gradient of the
+same `shipDEJ`, falling back to `boxFace` where that gradient is degenerate.
+
+**Lesson worth keeping: when collision moves, the effects keyed to it do not
+follow by themselves.**
+
+### The hull hit gets twice as loud
+
+*"It's on purpose a lower, softer sound, which is what we want, but sound
+should just be louder."* Four layers each went straight to the destination, so
+they now share one bus — the balance is preserved by construction rather than
+by editing four numbers. They sum to ~1.76 at unity, so raw gain would clip and
+turn a soft boom into a crunch, which is the character being protected; a
+limiter takes the peaks instead.
+
+Tuned by rendering both mixes through an `OfflineAudioContext`: **3.6x with
+threshold −8 dB and ratio 8 is +5.8 dB RMS, peaking at 0.788 against the
+original's 0.765, zero clipped samples.** The first guess of 2.2x bought only
++3.3 dB and *lowered* the peak by 3 dB — the limiter was working harder than
+the loudness needed.
+
+### Two measurement traps, both self-inflicted
+
+- **A 1 fps reading inside the mothership was the measuring rig, not the
+  game.** Repeated `readPixels` syncs stall the rAF loop, and `frame()`'s dt
+  clamp then puts the world in slow motion — a dropped bomb appeared to hover.
+  Measured properly at a fixed buffer: inside the hull **14.9 ms**, looking out
+  from the same spot 23.2 ms, over terrain 16.2 ms. Flying inside a hull is if
+  anything *cheaper*.
+- **`gl.finish()` is a no-op in this browser** and reported 0.00 ms for every
+  configuration in the fleet benchmark. A 1-pixel `readPixels` forces the sync.
+
+### And the battery caught its own tooling, twice
+
+`test/mutants.js` was committed **unparseable** — an escaped newline that
+became a real one inside a string literal — and because nothing in
+`run_tests.js` loaded it, all sixteen suites stayed green over a battery that
+could not start. `run_tests.js` now runs `node --check` on it, verified red.
+Later, two new mutants went **SKIPPED** because their anchors also matched
+`sphereFace` verbatim; the battery prints skips rather than counting them
+green, which is the only reason that surfaced.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-
