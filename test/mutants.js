@@ -269,11 +269,11 @@ const MUTANTS = [
    'export const SPORE_ENERGY = 1;', 'export const SPORE_ENERGY = 25;', 'test_energy.js'],
   ['canFireLaser disagrees with spendEnergy', 'js/energy.js',
    'return energy >= LASER_COST;', 'return energy > 0;', 'test_energy.js'],
+  // single-line anchor on purpose: a multi-line one has to carry an escaped
+  // newline through this file, and that is how this entry got written with a
+  // RAW newline in a string literal and took the whole battery down.
   ['reset keeps whatever energy was left', 'js/energy.js',
-   'export function resetEnergy() {
-  energy = START_ENERGY;',
-   'export function resetEnergy() {
-  energy = energy;', 'test_energy.js'],
+   '  energy = START_ENERGY;', '  energy = energy;', 'test_energy.js'],
 ];
 
 function mutate(src, find, repl, all) {
