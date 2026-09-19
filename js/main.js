@@ -16,7 +16,7 @@ import { initCollectedTex } from './spores.js';
 import { bullets, bombs, impacts, bulletUniform, bulletProbePos, gpuBulletGround, gpuBulletPlant,
          bombUniform, gpuBombGround, activeBlast, blastUniform, gpuBlastPlant } from './weapons.js';
 import { clouds, cloudArr, genClouds } from './clouds.js';
-import { updateHUD } from './hud.js';
+import { updateHUD, applyCursor } from './hud.js';
 import { ensureAudio } from './audio.js';
 import { drawTrail, buildFxQueries, fxOcc } from './fx.js';
 import { updateLaser } from './laser.js';
@@ -28,21 +28,6 @@ const fxPosArr = new Float32Array(48 * 3); // overlay occlusion query positions
 const alienU = { shipPos: new Float32Array(24), shipLaser: new Float32Array(6), shipMelt: new Float32Array(6),
                  bolts: new Float32Array(24), boltN: 0 };
 
-// cursor visibility (v8.0): 100 = native crosshair, 0 = hidden; in between a
-// custom crosshair drawn at that alpha (a native cursor cannot be translucent)
-function applyCursor(v) {
-  if (v <= 0) { canvas.style.cursor = 'none'; return; }
-  if (v >= 100) { canvas.style.cursor = 'crosshair'; return; }
-  const cc = document.createElement('canvas');
-  cc.width = 25; cc.height = 25;
-  const g = cc.getContext('2d');
-  g.globalAlpha = v / 100;
-  g.strokeStyle = '#000'; g.lineWidth = 3;
-  g.beginPath(); g.moveTo(12.5, 1); g.lineTo(12.5, 24); g.moveTo(1, 12.5); g.lineTo(24, 12.5); g.stroke();
-  g.strokeStyle = '#fff'; g.lineWidth = 1;
-  g.beginPath(); g.moveTo(12.5, 2); g.lineTo(12.5, 23); g.moveTo(2, 12.5); g.lineTo(23, 12.5); g.stroke();
-  canvas.style.cursor = 'url(' + cc.toDataURL() + ') 12 12, crosshair';
-}
 let lastCursorA = -1;
 let wasManualRes = false;   // manual -> auto transition, see frame()
 

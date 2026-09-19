@@ -7,11 +7,9 @@ html, body {
 }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
 canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
-/* laser armed (js/laser.js adds .laser-armed to <body> once the charge
-   completes): the crosshair becomes a target reticle, so the 2 s charge has a
-   visible end and not just an audible one. Inlined as a data: URI because the
-   single-file artifact has to run from file://, where every fetch fails. */
-body.laser-armed canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23b4ff8c' stroke-width='2'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Ccircle cx='16' cy='16' r='1.5' fill='%23b4ff8c'/%3E%3Cpath d='M16 1v7M16 24v7M1 16h7M24 16h7'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair; }
+/* The charging reticle is NOT here: js/laser.js assigns it as an inline
+   cursor so its alpha can ramp with the charge, and an inline style outranks
+   any rule we could write. body.laser-armed is kept as a state marker only. */
 #hud {
   position: fixed; top: 18px; left: 18px;
   color: rgba(220, 230, 245, 0.85);

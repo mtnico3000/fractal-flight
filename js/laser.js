@@ -15,7 +15,9 @@
 
 import { TAN_HALF_FOV, WATER_LEVEL, BLAST_R } from './config.js';
 import { laser, craft, viewPos } from './state.js';
-import { TUNEA } from './tune.js';
+import { canvas } from './renderer.js';
+import { applyCursor } from './hud.js';
+import { TUNE, TUNEA } from './tune.js';
 import { terrainShapeJ } from './terrain.js';
 import { alien, alienLaserHit } from './aliens.js';
 import { harvestCircle } from './weapons.js';
@@ -28,6 +30,50 @@ export const LASER_BURN_R = BLAST_R * 3;   // the burn is 3x a bomb's circle
 // an ellipsoid with a 2.30 half-length, so this is just off the tip.
 const MUZZLE_Z = 2.4;
 const T_MAX = 9000;                        // give up past this: it is sky
+
+// ---- the charging cursor --------------------------------------------------
+// The reticle FADES UP as the weapon charges, so the cursor itself is the
+// progress bar: 15% at the press, 90% once armed, and it holds there until the
+// shot. A dud stops at DUD_PEAK and fades back down as its sound dies, so the
+// cursor never promises a shot the pool cannot pay for.
+//
+// Built in JS rather than as CSS classes because the whole point is a varying
+// alpha, and a cursor is an IMAGE -- there is no opacity property to animate.
+// Quantised to 20 steps and only reassigned when the step changes: every
+// assignment makes the browser re-decode the data URI, so writing it per frame
+// is real work for an invisible difference.
+const CURSOR_MAX = 0.90;
+const DUD_PEAK   = 0.45;
+let cursorStep = -1;
+
+function reticle(alpha) {
+  // circle with a full cross through it, plus a centre dot
+  const a = alpha.toFixed(2);
+  const svg =
+    "<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34' viewBox='0 0 34 34'>" +
+    "<g fill='none' stroke='rgba(180,255,140," + a + ")' stroke-width='2'>" +
+    "<circle cx='17' cy='17' r='10'/>" +
+    "<path d='M17 1v32M1 17h32'/>" +
+    "</g>" +
+    "<circle cx='17' cy='17' r='1.6' fill='rgba(180,255,140," + a + ")'/>" +
+    "</svg>";
+  return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '") 17 17, crosshair';
+}
+
+// The player's OWN cursor visibility, which the ramp starts from and returns
+// to. TUNE.cursorA has been the cursor's alpha since v8.0, so the charge is
+// really just a temporary override of a setting that already existed --
+// clearing canvas.style.cursor instead would silently drop their choice.
+const baseAlpha = () => Math.max(0, Math.min(1, TUNE.cursorA.v / 100));
+
+// alpha < 0 restores the player's cursor
+function setChargeCursor(alpha) {
+  const step = alpha < 0 ? -1 : Math.round(alpha * 20);
+  if (step === cursorStep) return;
+  cursorStep = step;
+  if (step < 0) applyCursor(TUNE.cursorA.v);
+  else canvas.style.cursor = reticle(step / 20);
+}
 
 let camRef = null;                         // latest camera basis, for the release
 
@@ -132,11 +178,30 @@ export function updateLaser(now, cam) {
   if (cam) camRef = cam;
   if (laser.holding && !laser.matured && now - laser.holdT0 >= LASER_CHARGE_MS) {
     laser.matured = true;
-    // the reticle appears only for a shot that can be taken; a dud charge
-    // stays a plain crosshair, so the cursor never promises a shot it owes
+    if (laser.armable) { laser.charged = true; document.body.classList.add('laser-armed'); }
+  }
+  // Drive the reticle's alpha from the hold. An armed charge sits at
+  // CURSOR_MAX until the shot; a dud tops out at DUD_PEAK and fades back down
+  // over the second half of its sound, which runs to 1.9x the charge window.
+  if (laser.holding) {
+    const base = baseAlpha();
+    const t = (now - laser.holdT0) / LASER_CHARGE_MS;
     if (laser.armable) {
-      laser.charged = true;
-      document.body.classList.add('laser-armed');
+      // climb from the player's own visibility to CURSOR_MAX and HOLD there
+      // until the shot. A base already above the cap simply stays put.
+      const k = Math.min(1, t);
+      setChargeCursor(Math.max(base, base + (CURSOR_MAX - base) * k));
+    } else {
+      // a dud tops out lower and fades back to the player's setting as its
+      // sound dies, which audio.js runs to 1.9x the charge window
+      const up = Math.min(1, t / 0.5);
+      const down = 1 - Math.min(1, Math.max(0, (t - 1.15) / 0.75));
+      const peak = Math.max(base, DUD_PEAK);
+      // Once it has fully faded, hand the cursor back rather than leaving a
+      // reticle sitting at the player's alpha: the ALPHA would be right but
+      // the SHAPE would not, and "back to normal" means both.
+      if (down <= 0) setChargeCursor(-1);
+      else setChargeCursor(base + (peak - base) * up * down);
     }
   }
   if (laser.shot && now - laser.shot.t0 > 420) laser.shot = null;
@@ -150,6 +215,7 @@ export function laserRelease(now, cx, cy) {
   laser.charged = false;
   laser.matured = false;
   laserChargeStop();
+  setChargeCursor(-1);
   document.body.classList.remove('laser-armed');
   // A long hold is a laser attempt whatever came of it -- returning false here
   // would drop a BOMB at the end of a two-second charge.
@@ -193,5 +259,6 @@ export function laserCancel() {
   laser.matured = false;
   laser.shot = null;
   laserChargeStop();
+  setChargeCursor(-1);
   document.body.classList.remove('laser-armed');
 }

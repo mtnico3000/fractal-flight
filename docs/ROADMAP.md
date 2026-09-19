@@ -63,7 +63,7 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**110 assertions, 16 files**; three skip without `npm install`, and one
+   (**112 assertions, 16 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.
@@ -191,6 +191,24 @@ harvester) but has NOT been aimed at a live hull in flight.
 
 ⚠️ Still outstanding from v9.8: the **ring-occlusion fix has never been
 flown** — staging a harvest behind a ridge needs a pilot.
+
+### ⏸ 1b-quinquies. The GROWING INVASION — measured, designed, deferred to post-v10
+
+Nico's spec (each downed relay replaced from the mothership, 6 harvesters per
+relay, a new relay when full, mothership mitosis at 3 relays) is **written up
+in docs/RESEARCH.md §7 with the measurements behind the decision.** In short:
+
+- the march is cheap — 6 harvesters are **0.9 ms of a 54 ms frame**, and cost
+  scales with screen coverage rather than hull count;
+- **the uniform budget is the wall** — 3 relays x 6 harvesters needs 262 slots
+  against a 260 ceiling, so the fleet has nowhere to live;
+- therefore it is **ROADMAP C3** (fleet into a texture), which the roadmap
+  already notes is nearly free once v10 rasterises.
+
+Nico's call, 19 Sept 2026: **keep the full invasion mechanics for post-v10.**
+The **Points debug panel** is specified in §7.4 and deferred with it — half its
+knobs (relays before mitosis, harvesters per relay) only exist once the
+mechanic does, and the rest need the economy constants made mutable first.
 
 ### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
 

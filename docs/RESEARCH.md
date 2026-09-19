@@ -1107,3 +1107,94 @@ is thicker along the ray, so it straddles less often.
 The floating pieces are the same straddle one row apart: a ray a little
 higher lands its sample *inside* the tip and draws it, the ray below it
 lands past the tip and draws the sky — a sliver of crest above a gap of sky.
+
+---
+
+## 7. What a BIGGER INVASION costs, measured (19 September 2026)
+
+Nico asked for a growing invasion — each downed relay replaced from the
+mothership, harvesters filling to 6 per relay, a new relay once they do, and
+the mothership splitting by mitosis at 3 relays — and asked how much GPU that
+would add. Measured before designing anything. **The march is not the problem.
+The uniform budget is.**
+
+### 7.1 The alien march is cheap, and scales with COVERAGE not COUNT
+
+Rig: place N harvesters in front of the camera, `drawArrays` in a tight loop,
+`readPixels(1,1)` to force a real GPU sync, median of repeated runs.
+⚠️ `gl.finish()` is a no-op in this browser and reported 0.00 ms for every
+configuration — the readPixels sync is what makes the numbers real.
+
+Intel Iris Xe, 597x671, hulls at 800–1800 m:
+
+| harvesters | ms/frame |
+|---|---|
+| 0 | 53.8 |
+| 6 | 54.7 |
+
+**0.9 ms for six hulls — 1.7% of the frame, ~0.15 ms each.** The reason is
+`boxGate`: every hull is behind a slab test, so a ray that misses pays a
+handful of arithmetic ops and never enters the 384-iteration march. Cost
+therefore tracks the SCREEN AREA the fleet covers, not how many hulls exist.
+Twenty distant harvesters are nearly free; one mothership filling the viewport
+is not. Tripling the fleet is a few percent as long as they stay spread out.
+
+### 7.2 The uniform budget is the wall
+
+The fleet lives in fixed-size uniform arrays: `uShipPos[6]`, one `uRelay`, one
+`uMotherPos`. Every extra hull is a slot, against a 260 test ceiling and the
+**224 that GLSL ES 3.0 actually guarantees**:
+
+| fleet | slots | |
+|---|---|---|
+| now — 6 ships, 1 relay, 1 mothership | 248 | measured |
+| 2 relays x 6 | 255 | fits, barely |
+| **3 relays x 6** | **262** | **over the ceiling** |
+| after one mitosis — 6 relays, 2 motherships | **286** | well over |
+
+So the invasion as described **cannot be expressed in uniforms at all.** It is
+not a tuning problem; the data has nowhere to live.
+
+There is a second cost: the hull loop bound is a compile-time constant, so
+raising 6 to 18 multiplies the inlined `shipDE` and lengthens a shader compile
+that is already ~50 s (~90 s on the iGPU).
+
+### 7.3 Conclusion — this is ROADMAP C3, and it is post-v10
+
+**The fleet has to move from uniforms into a texture (ROADMAP C3) before the
+invasion can grow.** The roadmap already notes C3 is *nearly free in v10*,
+because instanced meshes have no uniform limit — so building it against the
+marcher is work that v10 would throw away. Nico's call, 19 Sept 2026: keep the
+full invasion mechanics **for post-v10**.
+
+What the invasion needs when it is built, recorded now so the design is not
+re-derived:
+
+- each downed relay replaced by a drop from the mothership, flying to a random
+  mountain top;
+- harvesters filling to a cap (6) per relay; the next drop brings a NEW relay
+  plus its first harvester;
+- at 3 relays the mothership undergoes mitosis — a second, same-size
+  mothership drifts to another part of the island and starts its own cycle.
+
+### 7.4 The Points panel, specified but not built
+
+A debug panel listing and editing the economy, deferred with the invasion
+because half its knobs only exist once the mechanic does. What it should hold:
+
+| knob | today |
+|---|---|
+| spore / tree value | `SPORE_ENERGY` = 1 |
+| ring value | `RING_ENERGY` = 100 |
+| laser cost | `LASER_COST` = 100 |
+| starting energy | `START_ENERGY` = 200 |
+| laser damage | `LASER_DAMAGE` = 6 bomb hits |
+| hull hp | mothership 40, harvester 20, relay 6 |
+| loot per hull | harvester 1/tree, relay 3/arrival, mothership 150/discharge |
+| max harvesters per relay | `SHIP_MAX` (6) — *invasion* |
+| relays before mitosis | 3 — *invasion, does not exist yet* |
+
+⚠️ The blocker is that these are `export const`s read directly at their use
+sites. A panel needs them mutable and read live, which means a `DBG`-style
+object (see `js/dbg.js`) plus a drift guard like `test_dbg.js` — otherwise the
+game ships one value while the panel A/Bs against another.

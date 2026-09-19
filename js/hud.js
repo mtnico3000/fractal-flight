@@ -7,6 +7,7 @@ import { trail } from './fx.js';
 import { clearWeapons } from './weapons.js';
 import { getScore, resetScore } from './spores.js';
 import { resetEnergy } from './energy.js';
+import { canvas } from './renderer.js';
 
 const $alt = document.getElementById('alt');
 const $spd = document.getElementById('spd');
@@ -56,6 +57,25 @@ export function unCrash() {
   clearWeapons();
   resetScore();
   resetEnergy();   // R returns the pool to START, not to whatever was left
+}
+
+// cursor visibility (v8.0): 100 = native crosshair, 0 = hidden; in between a
+// custom crosshair drawn at that alpha (a native cursor cannot be translucent).
+// Lives here rather than in main.js because js/laser.js has to RESTORE it: the
+// charge reticle overwrites canvas.style.cursor, and clearing that would drop
+// the player's own TUNE.cursorA setting instead of putting it back.
+export function applyCursor(v) {
+  if (v <= 0) { canvas.style.cursor = 'none'; return; }
+  if (v >= 100) { canvas.style.cursor = 'crosshair'; return; }
+  const cc = document.createElement('canvas');
+  cc.width = 25; cc.height = 25;
+  const g = cc.getContext('2d');
+  g.globalAlpha = v / 100;
+  g.strokeStyle = '#000'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(12.5, 1); g.lineTo(12.5, 24); g.moveTo(1, 12.5); g.lineTo(24, 12.5); g.stroke();
+  g.strokeStyle = '#fff'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(12.5, 2); g.lineTo(12.5, 23); g.moveTo(2, 12.5); g.lineTo(23, 12.5); g.stroke();
+  canvas.style.cursor = 'url(' + cc.toDataURL() + ') 12 12, crosshair';
 }
 
 // toast: transient messages (gyro permission hints etc.)

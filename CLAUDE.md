@@ -311,6 +311,34 @@ Key chips in the HUD glow green when a toggle is active.
   back on his screen — *"Did you do a temp change for a test, and then
   reverted?"* Nothing in the code can guard this. **Say so before touching a
   served tree, or take the reading in a `git worktree` on its own port.**
+- 🛸 **The alien march is CHEAP, and the uniform budget is what caps the
+  fleet.** Measured 19 Sept 2026: six harvesters cost **0.9 ms of a 54 ms
+  frame** (1.7%, ~0.15 ms each), because `boxGate` rejects rays that miss a
+  hull before the 384-iteration march ever starts. Cost tracks the SCREEN AREA
+  the fleet covers, not the hull count. What actually stops the fleet growing
+  is that it lives in fixed uniform arrays: 6 ships + 1 relay + 1 mothership is
+  248 of a 260 ceiling, **3 relays x 6 harvesters is 262 and does not fit at
+  all**. Growing the invasion is ROADMAP C3 (fleet into a texture), deferred
+  to post-v10 by Nico on 19 Sept because C3 is nearly free once v10 rasterises.
+  Full numbers and the deferred design: docs/RESEARCH.md §7.
+  ⚠️ `gl.finish()` is a NO-OP in this browser and reported 0.00 ms for every
+  configuration — force the sync with a 1-pixel `readPixels` or the benchmark
+  measures nothing.
+- 🧪 **`hullAlive()` is the liveness predicate; nothing may re-derive it.**
+  Four sites had hand-rolled `!gone && !falling`, which omits the melt term —
+  so harvesters went on shipping energy into a relay that was already a molten
+  wreck, and a bolt still in flight banked into a hull that had just paid its
+  loot out. All four now call `hullAlive`. The pair looks complete, which is
+  exactly why it kept being written.
+- 🖱️ **The charge reticle is an inline cursor, and it must RESTORE the
+  player's own.** `TUNE.cursorA` has set the cursor's alpha since v8.0, so the
+  charge ramp (base → 90%, held until the shot; a dud tops out at 45% and fades
+  back) is a temporary override of a setting that already exists. Clearing
+  `canvas.style.cursor` drops their choice instead of restoring it —
+  `applyCursor` moved to hud.js so laser.js can put it back. Quantised to 20
+  steps because every assignment re-decodes the data URI. And a cursor is an
+  IMAGE: there is no opacity to animate, which is why the alpha is baked into
+  the SVG rather than done in CSS.
 - 🔬 **A null result from an unrepresentative sample is not a null result.**
   `terrainNormal`'s epsilon was cleared by measuring the shading swing at a
   *flat beach* point, where it is 0.0%. On a ridge it is 19.7%. Pick the sample

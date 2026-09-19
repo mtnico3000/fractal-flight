@@ -470,6 +470,37 @@ check('an invader hands its gathered energy back when it starts melting', () => 
   eq(paid.length, before, 'melting must not keep paying every frame');
 });
 
+check('a MELTING relay stops being fed', () => {
+  // The economy guards were hand-rolled `!gone && !falling`, which omits the
+  // melt term -- so harvesters went on shipping energy into a molten wreck,
+  // and a bolt still in flight when it died banked into a hull that had
+  // already paid its loot out. hullAlive is the predicate; nothing should
+  // re-derive it.
+  const { aliens } = fresh();
+  const r = aliens.alien.relay;
+  const s0 = aliens.alien.ships[0];
+  ok(s0, 'need a harvester');
+
+  // kill it and run until it is melting
+  aliens.alienLaserHit(7, r.x, r.y, r.z);
+  for (let i = 0; i < 400 && !r.melt; i++) aliens.updateAliens(0.05, 1000 + i * 50);
+  ok(r.melt > 0, 'the relay never reached the melt phase');
+
+  // a harvester with plenty banked must not fire at it any more
+  const shots = aliens.alien.bolts.length;
+  s0.absorbed = 30; s0.lastShot = 0;
+  for (let i = 0; i < 40; i++) aliens.updateAliens(0.05, 60000 + i * 2000);
+  eq(aliens.alien.bolts.length, shots, 'harvesters kept feeding a melting relay');
+  eq(s0.absorbed, 30, 'and they must not spend their own stock doing it');
+
+  // nor may a bolt already in the air bank into the wreck
+  const loot = r.loot;
+  aliens.alien.bolts.push({ x0: r.x, y0: r.y + 50, z0: r.z, x1: r.x, y1: r.y, z1: r.z,
+                            t0: 0, dur: 1, big: false, done: false, ship: null, src: 0 });
+  aliens.updateAliens(0.05, 200000);
+  eq(r.loot, loot, 'a bolt in flight banked into a melting relay');
+});
+
 check('the relay banks what a harvester ships it', () => {
   // The chain is trees -> harvester -> relay -> mothership, and each link has
   // to bank what the one below it spent, or killing the upper links pays out

@@ -239,7 +239,7 @@ function alienBombHits(bombs) {
     if (!B) continue;
     // mothership (axis-aligned)
     const m = alien.mother;
-    if (!m.gone && !m.falling && hullDist(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf()) < 3) {
+    if (hullAlive(m) && hullDist(B.x - m.x, B.y - m.y, B.z - m.z, motherHalf()) < 3) {
       bombs[i] = null; m.hp--;
       hullHit(0.0, B, boxFace(B, m, [TUNEA.moWid.v / 2, TUNEA.moHei.v / 2, TUNEA.moLen.v / 2], false), m, false);
       if (m.hp <= 0) { m.falling = true; }
@@ -247,7 +247,7 @@ function alienBombHits(bombs) {
     }
     // relay (sphere)
     const r = alien.relay;
-    if (!r.gone && !r.falling && Math.hypot(B.x - r.x, B.y - r.y, B.z - r.z) < r.r + 3) {
+    if (hullAlive(r) && Math.hypot(B.x - r.x, B.y - r.y, B.z - r.z) < r.r + 3) {
       bombs[i] = null; r.hp--;
       hullHit(7.0, B, sphereFace(B, r, r.r), r, false);
       if (r.hp <= 0) { r.falling = true; }
@@ -409,8 +409,12 @@ export function updateAliens(dt, now) {
       }
       if (cells.length) blastQueue.push({ cells: cells.slice(0, 64), y: s.y, uploaded: false, harvest: s });
     }
-    // energy shot to the relay: every 3 trees, at most one per ~1.5 s
-    if (!r.gone && !r.falling && s.absorbed >= 3 && now - s.lastShot > 1500) {
+    // Energy shot to the relay: every 3 trees, at most one per ~1.5 s.
+    // hullAlive, NOT a hand-rolled `!gone && !falling` -- that pair omits the
+    // melt term, so harvesters went on feeding a relay that was already a
+    // molten wreck, and the energy banked into a hull that had just paid its
+    // loot out. A dead relay is dead the moment it starts melting.
+    if (hullAlive(r) && s.absorbed >= 3 && now - s.lastShot > 1500) {
       s.absorbed -= 3; s.lastShot = now;
       // `ship` (not an index) survives another harvester being spliced out;
       // the shader resolves it back to a slot each frame and drops the beam
@@ -425,8 +429,8 @@ export function updateAliens(dt, now) {
     if (b.done || now < b.t0 + b.dur) continue;
     b.done = true;
     if (b.big) {
-      if (!m.gone && !m.falling) { m.loot = (m.loot || 0) + RELAY_SHOTS * 3; spawnHarvester(true); }   // mothership builds one more
-    } else if (!r.gone && !r.falling && r.shrinkT0 === undefined) {
+      if (hullAlive(m)) { m.loot = (m.loot || 0) + RELAY_SHOTS * 3; spawnHarvester(true); }   // mothership builds one more
+    } else if (hullAlive(r) && r.shrinkT0 === undefined) {   // a bolt in flight when it died banks nothing
       r.shots = (r.shots || 0) + 1;
       r.loot = (r.loot || 0) + 3;      // an energy shot is three trees' worth
       // swell, but never past the ceiling even if the knob is wound right up
