@@ -2687,9 +2687,9 @@ const HULL_GAIN = 3.6;
 function hullExplosionSound() {
   if (!AC || muted) return;
   const T = AC.currentTime, sr = AC.sampleRate;
-  // The four layers sum to ~1.76 at unity, so 2.2x would clip hard on the
-  // destination and turn a soft boom into a crunch -- which is exactly the
-  // character being protected. They go through a limiter instead: it only
+  // The four layers sum to ~1.76 at unity, so ANY gain above ~1.2 would clip
+  // on the destination and turn a soft boom into a crunch -- which is exactly
+  // the character being protected. They go through a limiter instead: it only
   // engages on the peaks, so the body gets louder and the edges stay smooth.
   const bus = AC.createGain();
   bus.gain.value = HULL_GAIN;
