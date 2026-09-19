@@ -373,14 +373,12 @@ Key chips in the HUD glow green when a toggle is active.
   hands over the URL and discards every flag. `test/test_gpu.js` pins the
   classifier against real renderer strings.
 - ☠️ **Escapes COLLAPSE when code is written through a patch script, and the
-  damage is invisible.** Writing `` into js/renderer.js produced a literal
-  **backspace byte (0x08)** inside a regex, so `/(rtx|geforce|...)/` demanded
+  damage is invisible.** Writing `\b` into js/renderer.js produced a literal
+  **backspace byte (0x08)** inside a regex, so `/\b(rtx|geforce|...)/` demanded
   a control character before the vendor name and classified every discrete GPU
   as "unknown". The same mechanism has produced a raw newline inside a JS
   string literal FOUR times in one session (twice in test/mutants.js, which
-  then could not parse at all). Python interprets known escapes — `` `
-`
-  `` `	` — and leaves unknown ones like `\d` `\s` `\(` alone, which is why
+  then could not parse at all). Python interprets known escapes — `\b` `\n` `\f` `\t` — and leaves unknown ones like `\d` `\s` `\(` alone, which is why
   some survive and some do not. ⚠️ **docs/ROADMAP.md carried a literal FORM
   FEED in its Chrome command from v9.2 until 13 Sept** for exactly this reason.
   Rules: prefer single-line anchors; use real newlines in template literals,
@@ -835,7 +833,7 @@ node test/run_tests.js        # everything
   9 Sept 2026 two assertions were passing for the wrong reason — one read
   past the end of the function it was checking and was answered by its
   neighbour, the other was satisfied by a melting hull sinking rather than by
-  the predicate it named. **78/78 mutants caught as of v9.9** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
+  the predicate it named. **83/83 mutants caught as of v9.9** (and one of them was found SKIPPED on the run before, its anchor having drifted when a default moved — the battery prints skips instead of counting them green, which is the only reason it surfaced). It earned its
   keep again immediately: `test_panels.js` was written, passed all six of
   its assertions on the first run, and the battery showed its HEADLINE
   mutant ESCAPING — the UI round-trip it drove could not reach the branch

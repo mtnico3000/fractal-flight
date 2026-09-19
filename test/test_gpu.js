@@ -71,6 +71,10 @@ check('the renderer name is shortened to something a human reads', () => {
      'NVIDIA GeForce RTX 4090 Laptop GPU'],
     ['ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)',
      'Microsoft Basic Render Driver'],
+    // A TWO-field ANGLE string is the case that needs the unwrap: with three
+    // fields the trailing ')' lands in the discarded backend field and the
+    // bug hides. Without this row, removing the unwrap escapes the suite.
+    ['ANGLE (Apple, Apple M1 Pro)', 'Apple M1 Pro'],
     ['Apple M2 Pro', 'Apple M2 Pro'],           // not ANGLE: passes through
     ['Google SwiftShader', 'Google SwiftShader'],
     ['', ''],

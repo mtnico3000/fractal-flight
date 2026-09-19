@@ -1238,6 +1238,72 @@ Later, two new mutants went **SKIPPED** because their anchors also matched
 `sphereFace` verbatim; the battery prints skips rather than counting them
 green, which is the only reason that surfaced.
 
+## v9.9d — telling the player which GPU they got (19 September 2026)
+
+Nico, after the registry explanation: *"imagine someone opens this standalone
+file on another machine, how could we 'on the fly' get Chrome to have the gpu
+preference setting, and drop that when the game (browser tab) is closed?"*
+
+**A page cannot do it, and that is the design rather than an oversight.** The
+browser picks its adapter when the GPU process starts — long before the page
+exists — from a per-app OS preference or a command-line flag. A page cannot
+write the registry, relaunch the browser, or restart the GPU process; anything
+that could would be a sandbox escape. `powerPreference: 'high-performance'`, in
+`renderer.js` since forever, is only a hint and a Windows hybrid laptop
+routinely ignores it.
+
+So the page does the one useful thing available: **it notices and says so.**
+`gpuRenderer()` / `gpuClass()` / `gpuShortName()` classify the renderer string,
+and the start page shows a dismissible line on `integrated` or `software`.
+Silent on `discrete`, on an unrecognised name, and when the extension is
+withheld for privacy. A machine with no discrete GPU cannot be told apart from
+one not using it, so the wording says *"if this machine has a discrete GPU"*
+rather than asserting.
+
+**`launch-rtx.ps1`** is the disposable half of the answer, and it was already
+hiding in Nico's own working command: `--user-data-dir` pointing at a temp
+directory. That flag is not a detail — Chrome is single-instance per profile,
+so with any Chrome already running a plain `chrome.exe <url>` hands the URL to
+the existing process and **discards every flag**. A throwaway profile is the
+only way to get a process that honours them, and deleting it afterwards leaves
+no registry write and no change to the real profile.
+
+### The test caught two bugs before Nico saw either
+
+`test/test_gpu.js` was written because string classification is exactly the
+code that looks right and is wrong. It was right twice over:
+
+- the regex shipped a **literal backspace byte (0x08)** where a word boundary
+  was meant, so it demanded a control character before the vendor name and
+  classified **every discrete GPU as "unknown"** — the warning would never have
+  fired for the case it exists to detect;
+- the display name was mangled to **"Intel, Intel(R)"**, because trimming
+  ANGLE's `ANGLE (VENDOR, RENDERER, BACKEND)` wrapper at the first parenthesis
+  yields the vendor twice and nothing useful.
+
+Then the mutation battery found a third thing: removing the ANGLE unwrap
+**escaped** the suite, because every test case was a THREE-field ANGLE string
+where the trailing `)` lands in the discarded backend field. A two-field case
+(`ANGLE (Apple, Apple M1 Pro)`) exposes it. Five GPU mutants now, battery at 83.
+
+### The escape-collapse trap, named at last
+
+The backspace was the fifth instance in one session of the same mechanism:
+`\b`, `\n` and `\f` written through a code-generating patch arrive as the
+control characters they denote. Python interprets known escapes and leaves
+unknown ones (`\d`, `\s`, `\(`) alone, which is why some survive and some do
+not. It had already bitten this repo historically — **docs/ROADMAP.md carried a
+literal FORM FEED in its Chrome command from v9.2 until 13 Sept 2026**. And
+while writing the mutant for it, the comment *describing* the backspace bug was
+itself written with a backspace in it.
+
+Rules now in CLAUDE.md: prefer single-line anchors, use real newlines in
+template literals rather than `
+`, avoid backslashes entirely where a forward
+slash works (Windows accepts them — the ROADMAP command now uses them), and
+grep the result for control bytes before believing a green run. `test_gpu.js`
+asserts renderer.js contains none.
+
 ## Lessons that shaped the tooling
 
 - Exact-string patching of two parallel builds repeatedly broke on VERSION-

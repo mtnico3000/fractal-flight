@@ -328,6 +328,30 @@ const MUTANTS = [
   // sit just proud`, '  // sit just proud', 'test_aliens.js'],
   ['the hull burst is drawn as a bulb cap, not a flat disc', 'js/aliens.js',
    'n: [nx, ny, nz], curv: 0,', 'n: [nx, ny, nz], curv: 9,', 'test_aliens.js'],
+
+  // --- v9.9d: the GPU-class hint ------------------------------------------
+  // The first entry is the REAL bug this suite was written after: a word
+  // boundary written through a patch script arrived as a literal backspace
+  // byte, so the regex demanded a control character before the vendor name
+  // and every discrete GPU classified as 'unknown' -- the hint never fired.
+  ['the GPU word boundary becomes a backspace byte', 'js/renderer.js',
+   '\\b(rtx|geforce', '\u0008(rtx|geforce', 'test_gpu.js'],
+  ['software renderers are called merely integrated', 'js/renderer.js',
+   "if (/swiftshader|llvmpipe|basic render|software|microsoft basic/.test(s)) return 'software';",
+   '', 'test_gpu.js'],
+  ['an unrecognised GPU is guessed at instead of left alone', 'js/renderer.js',
+   `  return null;
+}
+
+// A renderer string fit to show a human.`,
+   `  return 'integrated';
+}
+
+// A renderer string fit to show a human.`, 'test_gpu.js'],
+  ['the ANGLE wrapper is left on the displayed name', 'js/renderer.js',
+   "let s = name.replace(/^ANGLE \\((.*)\\)\\s*$/, '$1');", 'let s = name;', 'test_gpu.js'],
+  ['the vendor field leaks into the displayed name', 'js/renderer.js',
+   'if (parts.length >= 2) s = parts[1];', 'if (parts.length >= 2) s = parts[0];', 'test_gpu.js'],
 ];
 
 function mutate(src, find, repl, all) {

@@ -38,8 +38,16 @@ a literal FORM FEED byte (a `\f` that something interpreted), which broke it in
 every shell:
 
 ```sh
-chrome.exe --user-data-dir=$env:TEMP\ff-rtx-profile --force-high-performance-gpu http://127.0.0.1:8734/index.html
+chrome.exe --user-data-dir=$env:TEMP/ff-rtx-profile --force-high-performance-gpu http://127.0.0.1:8734/index.html
 ```
+
+✅ **Since v9.9 you do not have to remember any of this:** `launch-rtx.ps1`
+at the repo root does it, finds Chrome itself, and deletes the throwaway
+profile when the window closes. And the START PAGE now warns when the
+context landed on the integrated GPU or a software rasteriser, so the cliff
+is no longer invisible. Note the command above now uses FORWARD slashes —
+Windows accepts them, and a backslash here is what became a literal form
+feed the first time.
 
 **Still untested from v9.2:** the periodic hiccup. It appeared ONLY on the RTX
 (never the iGPU), on both A1 and v9.1, and went away after a reboot —
@@ -77,7 +85,7 @@ and two checklists, and it is what stops the seventh.
    battery that could not start. If that line goes red, the battery is broken
    even though every test passes.
 1. If you touch anything in `test/`, also run **`node test/mutants.js`**
-   (slow, opt-in, **78 mutants as of v9.9**). A green suite is not
+   (slow, opt-in, **83 mutants as of v9.9**). A green suite is not
    evidence. This is not a formality: the newest suite, `test_panels.js`,
    passed all six assertions on its first run and the battery caught its
    headline mutant ESCAPING. Read that file's header before trusting any test
