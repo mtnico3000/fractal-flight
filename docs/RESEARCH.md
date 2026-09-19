@@ -1198,3 +1198,66 @@ because half its knobs only exist once the mechanic does. What it should hold:
 sites. A panel needs them mutable and read live, which means a `DBG`-style
 object (see `js/dbg.js`) plus a drift guard like `test_dbg.js` — otherwise the
 game ships one value while the panel A/Bs against another.
+
+---
+
+## 8. Are the hulls see-through for real? (19 September 2026)
+
+Nico, flying with the widened fractal sliders: *"the ships/boxes, when tweaked
+with the box sliders, can sometimes become transparent at places (i.e. we can
+see the ground/terrain through it)"* — and asked whether collision could follow
+only the visible parts.
+
+Before answering, the transparency had to be classified, because the two
+possible causes want **opposite** responses:
+
+- **real holes** in the mandelbox carve → collision should follow them;
+- **marcher holes** from budget exhaustion → a bug, and teaching collision to
+  follow them would bake it into gameplay.
+
+`test/hull_census.js` replays `marchAliens`' hull march in fp32 and classifies
+every ray that enters a hull's bounding box. Six viewpoints, 46x46 rays each.
+
+| hull | scale | fold | minR | rays | see-through | budget | max iters |
+|---|---|---|---|---|---|---|---|
+| mothership | 3 | **1.4** | 0.10 | 2422 | **3.9%** | 0.00% | 32 |
+| mothership | 3 | 1.0 | 0.10 | 2422 | 60.2% | 0.00% | 164 |
+| harvester | 3 | **1.4** | 0.10 | 2944 | **8.7%** | 0.00% | 177 |
+| harvester | 3 | 1.0 | 0.10 | 2944 | 63.6% | 0.00% | 118 |
+
+**Budget exhaustion is 0.00% everywhere**, and the worst case used 177 of 384
+iterations — the cap is not close to binding. The transparency is **real
+geometry**. A raised-cap build was prepared in a worktree to A/B it and turned
+out to be unnecessary; the measurement made it moot.
+
+⚠️ **`box fold` is the lever, not `box min r`.** The first hypothesis was minR,
+because the sphere fold inflates by `1/minR²` per iteration — 400x at the
+widened 0.05 floor — and a huge running derivative makes the DE tiny and the
+march slow. The census says minR moves see-through by **under a tenth of a
+percent**, while dropping fold from 1.4 to 1.0 takes a hull from 4% holes to
+**60%**. A plausible mechanism, measured and rejected.
+
+### 8.1 What this licenses
+
+Collision today is `hullDist(...) < 0` — the rounded box — so the craft bounces
+off empty space, and at the shipped tuning that is 3.9% of the mothership's
+footprint and 8.7% of a harvester's. Making collision follow the visible hull
+is therefore **following real geometry, not encoding an artifact.**
+
+The shape of the fix, for whoever picks it up:
+
+- keep `hullDist` as the **broad phase**; evaluate a JS `shipDE` only once the
+  craft is already inside the bounding box, so the common case costs nothing;
+- port `mandelboxDE` to JS as a live mirror reading `TUNEA` — the established
+  `terrain.js` pattern, and a THIRD copy of shaping maths, so it needs a
+  constants test like `test_terrain.js`;
+- ⚠️ the mandelbox DE is **not signed**: it returns `length(q)/|dr|` and never
+  goes negative inside the solid, so the test is `< ε`, not `< 0`. Inside a
+  hole the DE is a real positive distance and the craft passes through;
+- the same narrow phase belongs on bomb hits and on `laser.js`'s `traceFleet`,
+  which currently aims the reticle at holes;
+- tunnelling risk: at 95 m/s the craft moves 1.6 m per frame, so a strut
+  thinner than that can be flown through. The MARCHING.md law, in time rather
+  than space. Coarse at hull scale, but worth a thought.
+- it gets much easier after v10: a mesh IS the geometry, so rendering and
+  collision stop being two different answers.

@@ -210,6 +210,29 @@ The **Points debug panel** is specified in §7.4 and deferred with it — half i
 knobs (relays before mitosis, harvesters per relay) only exist once the
 mechanic does, and the rest need the economy constants made mutable first.
 
+### ▶ 1b-sexies. HULL COLLISION should follow the visible fractal (diagnosed)
+
+Nico: *"can we fly 'through' the box in those 'invisible parts', and only have
+a collision when hitting a 'visible' part?"* **Diagnosed 19 Sept 2026 and the
+answer is yes — the holes are real.** `node test/hull_census.js`:
+
+- **budget exhaustion 0.00%** in every configuration, max 177 of 384
+  iterations, so this is NOT a marcher artifact;
+- at the shipped tuning **3.9% of the mothership and 8.7% of a harvester** is
+  genuinely empty space you currently bounce off;
+- **`box fold` is the lever, not `box min r`** — fold 1.0 makes a hull 57–64%
+  holes; minR changes it by under 0.1%.
+
+Full table and the implementation shape in **docs/RESEARCH.md §8**. Summary:
+keep `hullDist` as the broad phase, add a JS `shipDE` narrow phase evaluated
+only once inside the box (so the common case costs nothing), port
+`mandelboxDE` as a live mirror reading TUNEA, and remember the mandelbox DE is
+**not signed** — the test is `< ε`, not `< 0`. Same narrow phase belongs on
+bomb hits and on `laser.js`'s `traceFleet`, which currently aims at holes.
+
+Not started. Sized at well under a day and low risk; gets easier still after
+v10, when a mesh makes rendering and collision the same answer.
+
 ### ▶ 1c. The TREES — the same law, two named fixes (START HERE)
 
 Nico, 13 Sept: *"certain trees... a tree that should have a fixed contour,

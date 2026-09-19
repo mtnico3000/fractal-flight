@@ -324,6 +324,23 @@ Key chips in the HUD glow green when a toggle is active.
   ⚠️ `gl.finish()` is a NO-OP in this browser and reported 0.00 ms for every
   configuration — force the sync with a 1-pixel `readPixels` or the benchmark
   measures nothing.
+- 🕳️ **Hulls really ARE see-through in places, and collision does not know.**
+  Nico: *"we can see the ground/terrain through it."* Diagnosed 19 Sept 2026
+  with `node test/hull_census.js`, which replays the hull march in fp32 and
+  classifies every ray entering a bounding box. The answer is unambiguous:
+  **budget exhaustion is 0.00% in every configuration** (max 177 iterations
+  against the 384 cap), so this is NOT the "budget exhaustion must be a HIT"
+  class — it is **real fractal geometry**. At the shipped tuning **3.9% of the
+  mothership and 8.7% of a harvester** is genuinely empty.
+  ⚠️ **`box fold` is the lever, not `box min r`.** At fold 1.0 a hull becomes
+  **57–64% holes**; minR moves it by under a tenth of a percent. I had guessed
+  minR (it inflates by `1/minR²` per iteration) and the measurement said no.
+  Collision meanwhile is `hullDist(...) < 0` — a rounded BOX — so you bounce
+  off empty space. The fix is a narrow phase: keep the box as the broad phase
+  and evaluate a JS `shipDE` only once inside it, which costs nothing in the
+  common case. ⚠️ The mandelbox DE is NOT signed (it returns
+  `length(q)/|dr|`, never negative inside), so the test is `< ε`, not `< 0`.
+  Queued in ROADMAP; docs/RESEARCH.md §8 has the table.
 - 🧪 **`hullAlive()` is the liveness predicate; nothing may re-derive it.**
   Four sites had hand-rolled `!gone && !falling`, which omits the melt term —
   so harvesters went on shipping energy into a relay that was already a molten
