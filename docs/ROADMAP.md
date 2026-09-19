@@ -67,7 +67,7 @@ Six bugs over six weeks were one mechanism; that file is the law, eight rules
 and two checklists, and it is what stops the seventh.
 
 0. **Run the gates.** `node test/run_tests.js` must print "all suites passed"
-   (**112 assertions, 16 files**; three skip without `npm install`, and one
+   (**118 assertions, 17 files**; three skip without `npm install`, and one
    more without python). Then
    `python serve.py 8734`, press START, fly it once. Budget **~50 s for the
    driver compile** since the debug split — that is normal here, not a hang.

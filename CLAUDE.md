@@ -757,6 +757,14 @@ node test/run_tests.js        # everything
   that a never-answered ring is served first, that the map covers the row with
   no overlap or gap, and that the allocator and the draw loop share one
   lifetime table. Four mutants verified red.
+- `test/test_gpu.js` — the GPU-class hint. String classification is exactly
+  the code that looks right and is wrong: the first regex carried a literal
+  BACKSPACE byte where a word boundary was meant, so every discrete GPU
+  classified as "unknown" and the warning would never have fired for the case
+  it exists to detect. Pins real renderer strings for discrete / integrated /
+  software / withheld, checks WARP and SwiftShader are called software rather
+  than merely integrated, checks the ANGLE wrapper is unwrapped to a readable
+  name, and asserts renderer.js contains no control bytes at all.
 - `test/check_module_refs.py` — the modular/single-file divergence guard
   above. Verified to go RED on the real `camPos` bug before being called
   green. It earned its keep again on 9 Sept 2026, rejecting a local named
